@@ -19,11 +19,13 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Topic :: Software Development :: Libraries",
 ]
-dependencies = []
+dependencies = [
+    "pydantic>=2.9",
+    "pyyaml>=6.0",
+]
 
 [project.optional-dependencies]
 # Future extras will land here (e.g., "claude-code", "mcp", "llm").
-# Keeping core dependency-free until capabilities land.
 
 [project.scripts]
 # CLI wiring will arrive in a later milestone.
@@ -39,6 +41,7 @@ dev = [
     "hypothesis>=6.112",
     "mypy>=1.13",
     "ruff>=0.8",
+    "types-pyyaml>=6.0",
 ]
 
 [tool.hatch.build.targets.wheel]

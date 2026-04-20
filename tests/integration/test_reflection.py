@@ -18,7 +18,6 @@ from central_brain.reflection import (
 )
 from central_brain.storage import Database
 
-
 # ── gather_session_context ───────────────────────────────────────────────────
 
 

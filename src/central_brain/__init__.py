@@ -1,11 +1,13 @@
 """central-brain — cognitive primitives for AI agents.
 
-v0 scope: memory, decisions, reflection. See docs/architecture.md for design.
-
-Public API will land as capabilities ship. This module intentionally re-exports
-nothing yet — the chassis is a chassis.
+Public API:
+    Agent       — composed entry point over memory/decisions/reflection
+    BrainConfig — brain.yaml schema (pydantic v2)
 """
+
+from central_brain.agent import Agent
+from central_brain.config import BrainConfig
 
 __version__ = "0.0.1"
 
-__all__ = ["__version__"]
+__all__ = ["Agent", "BrainConfig", "__version__"]

@@ -64,7 +64,7 @@ Pre-commit hooks available via `pre-commit install`.
 | 2 | Memory capability (structured + episodic + HSAM) | ✅ |
 | 3 | Decisions capability | ✅ |
 | 4 | Reflection capability | ✅ |
-| 5 | Agent class + `brain.yaml` loader | — |
+| 5 | Agent class + `brain.yaml` loader | ✅ |
 | 6 | CLI (`init`, `doctor`, `export`) | — |
 | 7 | MCP server | — |
 | 8 | test-agent-1 end-to-end demo | — |
