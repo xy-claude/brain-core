@@ -67,7 +67,7 @@ Pre-commit hooks available via `pre-commit install`.
 | 5 | Agent class + `brain.yaml` loader | ✅ |
 | 6 | CLI (`init`, `doctor`, `export`) | ✅ |
 | 7 | MCP server | ✅ |
-| 8 | test-agent-1 end-to-end demo | — |
+| 8 | test-agent-1 end-to-end demo | ✅ |
 
 ## License
 
