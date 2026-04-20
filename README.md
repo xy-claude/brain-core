@@ -59,9 +59,9 @@ Pre-commit hooks available via `pre-commit install`.
 
 | # | Milestone | Status |
 |---|-----------|:------:|
-| 0 | Project chassis (tooling, CI, package skeleton) | **in progress** |
-| 1 | Storage layer (SQLite schema + migrations) | — |
-| 2 | Memory capability | — |
+| 0 | Project chassis (tooling, CI, package skeleton) | ✅ |
+| 1 | Storage layer (SQLite schema + migrations) | ✅ |
+| 2 | Memory capability (structured + episodic + HSAM) | ✅ |
 | 3 | Decisions capability | — |
 | 4 | Reflection capability | — |
 | 5 | Agent class + `brain.yaml` loader | — |
