@@ -74,7 +74,12 @@ with Agent.from_config("./brain.yaml") as agent:
 MCP_JSON = Template(
     """\
 {
-  "mcpServers": {}
+  "mcpServers": {
+    "central-brain": {
+      "command": "brain",
+      "args": ["serve", "."]
+    }
+  }
 }
 """
 )

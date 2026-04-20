@@ -72,6 +72,34 @@ def export_cmd(
     )
 
 
+@app.command("serve")
+def serve_cmd(
+    path: Annotated[
+        Path,
+        typer.Argument(help="Path to agent directory (contains brain.yaml)."),
+    ] = Path(),
+) -> None:
+    """Run the MCP server for the agent at ``path``.
+
+    Requires the ``mcp`` extra: ``pip install central-brain[mcp]``.
+    """
+    config_path = path / "brain.yaml"
+    if not config_path.exists():
+        typer.echo(f"ERROR: no brain.yaml at {config_path}", err=True)
+        raise typer.Exit(code=1)
+
+    try:
+        from central_brain.mcp.server import run_server
+    except ImportError as e:
+        typer.echo(
+            "ERROR: MCP extras not installed. Run: pip install 'central-brain[mcp]'",
+            err=True,
+        )
+        raise typer.Exit(code=1) from e
+
+    run_server(config_path)
+
+
 @app.command("version")
 def version_cmd() -> None:
     """Print the installed central-brain version."""
