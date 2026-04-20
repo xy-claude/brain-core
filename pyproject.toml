@@ -22,14 +22,14 @@ classifiers = [
 dependencies = [
     "pydantic>=2.9",
     "pyyaml>=6.0",
+    "typer>=0.15",
 ]
 
 [project.optional-dependencies]
 # Future extras will land here (e.g., "claude-code", "mcp", "llm").
 
 [project.scripts]
-# CLI wiring will arrive in a later milestone.
-# brain = "central_brain.cli.main:app"
+brain = "central_brain.cli.main:app"
 
 [project.urls]
 Repository = "https://github.com/xy-claude/central-brain"
