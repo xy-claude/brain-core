@@ -62,7 +62,7 @@ Pre-commit hooks available via `pre-commit install`.
 | 0 | Project chassis (tooling, CI, package skeleton) | ✅ |
 | 1 | Storage layer (SQLite schema + migrations) | ✅ |
 | 2 | Memory capability (structured + episodic + HSAM) | ✅ |
-| 3 | Decisions capability | — |
+| 3 | Decisions capability | ✅ |
 | 4 | Reflection capability | — |
 | 5 | Agent class + `brain.yaml` loader | — |
 | 6 | CLI (`init`, `doctor`, `export`) | — |
