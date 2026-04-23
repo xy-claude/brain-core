@@ -55,6 +55,10 @@ uv run pytest --cov           # tests with coverage
 
 Pre-commit hooks available via `pre-commit install`.
 
+## Security posture
+
+central-brain is RAG-shaped (memory + retrieval + LLM reasoning). That shape has a documented attack surface — see [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) for the PoisonedRAG threat class, the ingestion-time gates the library provides, and the questions consumers must answer before shipping.
+
 ## Milestones
 
 | # | Milestone | Status |
