@@ -23,7 +23,7 @@ def named(name: str, *, healthy: bool = True) -> MemoryStore:
 class GraphOnly(MemoryStore):
     name = "graph"
 
-    def write(self, kind: Kind, text: str, **kw: object) -> WriteResult:  # type: ignore[override]
+    def write(self, kind: Kind, text: str, **kw: object) -> WriteResult:
         if kind != "relation":
             return WriteResult(self.name, "", "refused", "relations only")
         return super().write(kind, text)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import textwrap
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
@@ -44,16 +45,16 @@ async def test_server_remember_then_recall_round_trip(agent: Agent) -> None:
         w = await server.call_tool(
             "brain_remember", {"text": "tested via MCP on port 8888", "kind": "fact"}
         )
-        structured = w[1] if isinstance(w, tuple) else w
+        structured = cast(dict[str, Any], w[1] if isinstance(w, tuple) else w)
         assert (
             structured["status"] == "written"
             and structured["layers"]["sqlite"]["status"] == "written"
         )
         r = await server.call_tool("brain_recall", {"query": "tested MCP 8888"})
-        structured = r[1] if isinstance(r, tuple) else r
+        structured = cast(dict[str, Any], r[1] if isinstance(r, tuple) else r)
         assert structured["results"][0]["text"] == "tested via MCP on port 8888"
         s = await server.call_tool("brain_status", {})
-        structured = s[1] if isinstance(s, tuple) else s
+        structured = cast(dict[str, Any], s[1] if isinstance(s, tuple) else s)
         assert structured["stores"]["sqlite"]["ok"] is True
         assert "mcp-test" in server.name
     finally:

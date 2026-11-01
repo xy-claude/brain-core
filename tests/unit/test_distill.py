@@ -76,7 +76,7 @@ def test_github_and_youtube_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
         )
 
     monkeypatch.setattr(d, "_http", fake_http)
-    monkeypatch.setattr(d.shutil, "which", lambda name: None)
+    monkeypatch.setattr("brain_core.distill.shutil.which", lambda name: None)
     with make(tmp_path) as a:
         out = a.brain_distill("https://github.com/NandhaKishorM/laya")
         assert out["status"] == "written" and out["title"] == "NandhaKishorM/laya README"
