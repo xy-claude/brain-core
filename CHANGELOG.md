@@ -4,7 +4,7 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
-## [0.2.1] - 2026-11-03
+## [0.2.1] - 2026-11-02
 
 ### Added
 - Linux support: `install.sh` runs on Linux (uv, systemd user unit for Hindsight, user crontab for `brain daily` / `brain weekly`).
