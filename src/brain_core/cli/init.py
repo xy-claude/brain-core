@@ -55,7 +55,8 @@ def init_agent(
     written: list[Path] = []
     for src in sorted(p for p in PACK.rglob("*") if p.is_file()):
         rel = src.relative_to(PACK)
-        dest = target / rel
+        # stored as _gitignore so the pack's own ignore rules do not apply inside this repo
+        dest = target / (rel.with_name(".gitignore") if rel.name == "_gitignore" else rel)
         dest.parent.mkdir(parents=True, exist_ok=True)
         if src.suffix in _TEXT:
             dest.write_text(
