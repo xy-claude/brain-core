@@ -161,6 +161,47 @@ def hindsight_cmd(
         raise typer.Exit(code=1)
 
 
+@app.command("graph")
+def graph_cmd(
+    action: Annotated[str, typer.Argument(help="import | stats")],
+    path: Annotated[Path, typer.Argument(help="Agent directory or brain.yaml.")] = Path(),
+    dump: Annotated[
+        Path | None, typer.Option("--dump", help="File in `S —[p]→ O  (YYYY-MM-DD)` format.")
+    ] = None,
+) -> None:
+    """Entity graph in brain.db. `import` loads a dump, or the legacy Kuzu graph from brain.yaml."""
+    import subprocess
+
+    from brain_core.stores.graph import GraphStore
+
+    with _open(path) as agent:
+        g = GraphStore(agent.db)
+        if action == "stats":
+            typer.echo(g.health()[1])
+            return
+        if action != "import":
+            typer.echo("action must be import | stats", err=True)
+            raise typer.Exit(code=1)
+        if dump is not None:
+            text = dump.read_text(encoding="utf-8")
+        elif agent.config.stores.graph is not None:
+            legacy = agent.config.stores.graph
+            cp = subprocess.run(
+                [str(Path(legacy.python).expanduser()), str(agent.resolve(legacy.script)), "all"],
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            if cp.returncode != 0:
+                typer.echo(f"ERROR: legacy graph dump failed: {cp.stderr[-200:]}", err=True)
+                raise typer.Exit(code=1)
+            text = cp.stdout
+        else:
+            typer.echo("ERROR: pass --dump FILE or set stores.graph in brain.yaml", err=True)
+            raise typer.Exit(code=1)
+        typer.echo(f"import: {g.import_dump(text)}")
+
+
 @app.command("doctor")
 def doctor_cmd(
     path: Annotated[

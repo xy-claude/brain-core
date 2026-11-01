@@ -54,7 +54,11 @@ _WORD = re.compile(r"[a-z0-9]+(?:[-_.][a-z0-9]+)*")
 
 def tokens(text: str) -> set[str]:
     """Lowercase words minus stopwords, plus a naive singular so "commits" meets "commit"."""
-    out = {w for w in _WORD.findall(text.lower()) if len(w) > 1 and w not in _STOP}
+    text = text.lower().replace("'s", "").replace("'", "")
+    out = {w for w in _WORD.findall(text) if len(w) > 1 and w not in _STOP}
+    # a compound like includes_merchant or co-authored-by also matches by its parts
+    parts = {p for w in out if "_" in w or "-" in w for p in re.split(r"[_-]", w) if len(p) > 2}
+    out |= parts - _STOP
     return out | {w[:-1] for w in out if w.endswith("s") and len(w) > 3}
 
 

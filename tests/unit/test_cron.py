@@ -87,12 +87,12 @@ def test_daily_writes_brief_health_and_skips_backup(
     assert "theme `verification` has 3 corrections → promote to a rule?" in brief
     assert "wait for CI before calling a push done" in brief
     assert "## Executive State" in brief and "## Primary Objective" in brief
-    assert "- Stores: sqlite OK, vault OK, hindsight OK" in brief
+    assert "- Stores: sqlite OK, vault OK, graph OK, hindsight OK" in brief
     assert "old-page.md (62d) → `/distill --refresh old-page`" in brief
     assert "### 2026-11-01\n#### Session Archive — 2026-11-01" in brief and "fresh topic" in brief
     assert out["backup"].startswith("skipped")
     log = (tmp_path / "atlas" / "vault" / "health_log.md").read_text()
-    assert "- 2026-11-02 ok=True stores=3/3 lint=0 context=" in log
+    assert "- 2026-11-02 ok=True stores=4/4 lint=0 context=" in log
 
 
 def test_weekly_archives_old_sessions_and_refreshes_models(tmp_path: Path) -> None:

@@ -88,6 +88,7 @@ brain-core is RAG-shaped (memory + retrieval + LLM reasoning). That shape has a 
 | 14 | Eval set: 20 tune + 10 held-out recall (live 100% / 100%), 10 write scenarios, 20-task fixture vault in CI | ✅ |
 | 15 | Dogfood on XYCLAUDE, Obsidian MCP retired | ⬜ (started 2026-11-02) |
 | 16 | Template pack: `brain init NAME --user --profile DIR` writes CLAUDE.md, 5 generic rules, 3 skills, bash guard hook, `.mcp.json`, vault skeleton | ✅ |
+| 17 | Entity graph moved from Kuzu into a `relations` table in brain.db; `brain graph import` loads the legacy dump | ✅ |
 | 18 | Cron engine: `brain daily` (brief, health line, Hindsight backup), `brain weekly` (archive sessions > 30d, refresh mental models), `brain cron install` (launchd) | ✅ |
 | 19 | Installer: `install.sh` one-liner, `brain hindsight install` (launchd service, claude-code or customer provider), `brain doctor` on `brain_status` | ✅ (export/import lands after M17) |
 

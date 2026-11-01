@@ -119,8 +119,7 @@ class Agent:
                 self._stores.append(VaultStore(self.resolve(s.vault), owner=self.name.lower()))
             if s.hindsight:
                 self._stores.append(HindsightStore(s.hindsight.url, s.hindsight.bank, self.name))
-            if s.graph:
-                self._stores.append(GraphStore(self.resolve(s.graph.script), s.graph.python))
+            self._stores.append(GraphStore(self._db))  # relations table in brain.db, always on
         return self._stores
 
     def brain_recall(

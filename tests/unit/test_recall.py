@@ -62,7 +62,7 @@ def test_merges_dedups_and_ranks_by_overlap() -> None:
     assert texts[0].startswith("Hindsight self-hosted: LaunchAgent")
     assert texts.count(texts[0]) == 1, "same record from two stores must appear once"
     assert "github" not in " ".join(texts).lower()
-    assert out["stores"] == {"vault": 2, "hindsight": 0}
+    assert out["stores"] == {"vault": 3, "hindsight": 0}  # "self-host" matches by part
     assert set(out["results"][0]) == {"name", "kind", "date", "source", "text"}
 
 

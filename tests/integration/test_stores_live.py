@@ -46,8 +46,17 @@ def test_hindsight_round_trip(hindsight: HindsightStore) -> None:
 @pytest.mark.skipif(
     not (GRAPH.exists() and PY.exists()), reason="AI-ORG entity graph not on this machine"
 )
-def test_graph_live_read() -> None:
-    g = GraphStore(GRAPH, PY)
-    ok, detail = g.health()
-    assert ok and "Relationships" in detail
-    assert any("XYCLAUDE" in r.text for r in g.read("relation", "XYCLAUDE"))
+def test_graph_import_from_legacy_kuzu_dump(tmp_path: Path) -> None:
+    import subprocess
+
+    from brain_core.storage.db import Database
+    from brain_core.storage.migrator import migrate
+
+    dump = subprocess.run([str(PY), str(GRAPH), "all"], capture_output=True, text=True, timeout=120)
+    with Database.connect(tmp_path / "g.db") as db:
+        migrate(db)
+        g = GraphStore(db)
+        counts = g.import_dump(dump.stdout)
+        assert counts["written"] > 50 and counts["exists"] == 0
+        assert any("XYCLAUDE" in r.text for r in g.read("relation", "XYCLAUDE"))
+        assert g.import_dump(dump.stdout)["written"] == 0, "second import is a no-op"

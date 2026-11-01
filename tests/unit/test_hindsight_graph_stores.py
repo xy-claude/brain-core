@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import subprocess
 from datetime import date
 from typing import Any
 
+from brain_core.storage.db import Database
 from brain_core.stores.graph import GraphStore
 from brain_core.stores.hindsight import HindsightStore
 
@@ -75,43 +75,17 @@ def test_hindsight_health_when_down() -> None:
     assert ok is False and "unreachable" in detail
 
 
-def _runner(stdout: str, rc: int = 0) -> Any:
-    def run(args: list[str]) -> subprocess.CompletedProcess[str]:
-        run.args = args  # type: ignore[attr-defined]
-        return subprocess.CompletedProcess(args, rc, stdout, "")
-
-    return run
-
-
-def test_graph_read_parses_cli_lines() -> None:
-    g = GraphStore(
-        "x.py",
-        runner=_runner("  XYCLAUDE —[uses]→ Hindsight  (2026-04-11)\n  A —[b]→ C  (2026-11-02)\n"),
-    )
-    rs = g.read("relation", "Hindsight")
-    assert [r.text for r in rs] == ["XYCLAUDE —[uses]→ Hindsight", "A —[b]→ C"]
-    assert rs[0].extra == {"subject": "XYCLAUDE", "predicate": "uses", "object": "Hindsight"}
-    assert rs[0].date == date(2026, 4, 11) and g.read("fact") == []
-
-
-def test_graph_write_uses_fields_or_arrow_text() -> None:
-    run = _runner("added: A —[b]→ C")
-    g = GraphStore("x.py", runner=run)
+def test_graph_write_read_import_in_sqlite(db: Database) -> None:
+    g = GraphStore(db)
     assert g.write("relation", "", subject="A", predicate="b", object="C").status == "written"
-    assert run.args == ["add", "A", "b", "C"]
-    assert (
-        g.write("relation", "A —[b]→ C").id
-        == g.write("relation", "", subject="A", predicate="b", object="C").id
-    )
+    assert g.write("relation", "A —[b]→ C").status == "exists"
     assert g.write("fact", "nope").status == "refused"
-    assert (
-        GraphStore("x.py", runner=_runner("boom", rc=1)).write("relation", "A —[b]→ C").status
-        == "failed"
+    assert g.write("relation", "no arrow here").status == "refused"
+    rs = g.read("relation", "C")
+    assert [r.text for r in rs] == ["A —[b]→ C"] and rs[0].extra["object"] == "C"
+    assert g.read("fact") == [] and g.health() == (True, "graph relations=1")
+    counts = g.import_dump(
+        "  XYCLAUDE —[uses]→ Hindsight  (2026-04-11)\n  A —[b]→ C  (2026-01-01)\n82 relationships\n"
     )
-
-
-def test_graph_health() -> None:
-    assert GraphStore("x.py", runner=_runner("Entities: 75\nRelationships: 81\n")).health() == (
-        True,
-        "Entities: 75 Relationships: 81",
-    )
+    assert counts == {"written": 1, "exists": 1, "skipped": 1}
+    assert g.read("relation", "hindsight")[0].date == date(2026, 4, 11)

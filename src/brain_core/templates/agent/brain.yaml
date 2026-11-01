@@ -6,9 +6,9 @@ stores:
   hindsight:                          # self-hosted Hindsight (episodic memory, vector recall)
     url: http://127.0.0.1:8888
     bank: $bank
-  # graph:                            # optional Kuzu entity graph via its CLI
-  #   script: /path/to/entity_graph.py
-  #   python: python3
+  # the entity graph is a table in data/brain.db; `graph:` only names a legacy Kuzu
+  # graph for a one-time `brain graph import`
+  # graph: {script: /path/to/entity_graph.py, python: python3}
 
 session:
   mental_models: [active-priorities]  # Hindsight mental models read at session start

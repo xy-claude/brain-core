@@ -23,10 +23,12 @@ tasks:
   - name: correction block
     call: {text: "Treated a value change as a duplicate", kind: correction, extra: {title: Dedup order, correction: value check first}}
     expect: {status: written, layers: {vault: written}}
-  - name: relation needs a graph or Hindsight; vault and sqlite refuse
+  - name: relation goes to the graph table; vault and sqlite refuse
     call: {text: "", kind: relation, extra: {subject: brain-core, predicate: bundles, object: Hindsight}}
-    requires: hindsight
-    expect: {status: written, layers: {vault: refused, sqlite: refused, hindsight: written}}
+    expect: {status: written, layers: {vault: refused, sqlite: refused, graph: written}}
+  - name: same relation again exists in the graph
+    call: {text: "brain-core —[bundles]→ Hindsight", kind: relation}
+    expect: {layers: {graph: exists}}
   - name: a secret never reaches any store
     call: {text: "token ghp_abcdefghijklmnopqrstuvwxyz0123456789 for CI", kind: fact}
     expect: {error: secret}
