@@ -36,10 +36,12 @@ from brain_core.memory import episodic, hsam, structured
 from brain_core.memory.episodic import Event
 from brain_core.memory.hsam import HSAMDay
 from brain_core.memory.structured import Fact, FactKind
+from brain_core.recall import brain_recall
 from brain_core.reflection import session as reflection_session
 from brain_core.reflection.session import SessionContext, SessionReflection
 from brain_core.storage.db import Database
 from brain_core.storage.migrator import migrate
+from brain_core.stores import GraphStore, HindsightStore, SqliteStore, Store, VaultStore
 
 
 class Agent:
@@ -50,6 +52,7 @@ class Agent:
         self._db = db
         self._data_dir = data_dir
         self._current_session: str | None = None
+        self._stores: list[Store] | None = None
 
     # ── construction ─────────────────────────────────────────────────────────
 
@@ -92,6 +95,27 @@ class Agent:
     @property
     def current_session(self) -> str | None:
         return self._current_session
+
+    @property
+    def stores(self) -> list[Store]:
+        """Every configured store (v0.2). SQLite first, then vault, Hindsight, graph as set."""
+        if self._stores is None:
+            s = self._config.stores
+            self._stores = [SqliteStore(self._db)]
+            if s.vault:
+                self._stores.append(VaultStore(s.vault, owner=self.name))
+            if s.hindsight:
+                self._stores.append(HindsightStore(s.hindsight.url, s.hindsight.bank, self.name))
+            if s.graph:
+                self._stores.append(GraphStore(s.graph.script, s.graph.python))
+        return self._stores
+
+    def brain_recall(
+        self, query: str, scope: str = "all", fmt: str = "concise", limit: int = 10
+    ) -> dict[str, Any]:
+        """One query across every store, deduplicated and ranked. See :mod:`brain_core.recall`."""
+        self._require_capability("memory")
+        return brain_recall(self.stores, query, scope=scope, fmt=fmt, limit=limit)
 
     # ── session lifecycle ────────────────────────────────────────────────────
 

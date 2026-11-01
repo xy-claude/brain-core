@@ -17,6 +17,7 @@ from brain_core import Agent
 from brain_core.mcp.server import build_server
 
 _EXPECTED_TOOLS = {
+    "brain_recall",
     "remember",
     "recall",
     "supersede",

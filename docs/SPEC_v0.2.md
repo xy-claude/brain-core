@@ -36,7 +36,9 @@ stores:
   hindsight:
     url: http://127.0.0.1:8888               # self-hosted; MCP path /mcp/<bank>/
     bank: xyclaude-brain
-  graph: ~/Projects/AI-ORG/data/entity_graph # Kuzu, via entity_graph.py
+  graph:
+    script: ~/Projects/AI-ORG/scripts/python/entity_graph.py   # Kuzu via its CLI
+    python: ~/Projects/AI-ORG/venv/bin/python3
 ```
 
 Hindsight is talked to over its MCP streamable-HTTP endpoint (the `Mcp` client in `AI-ORG/scripts/python/hindsight_export.py` already does initialize → tools/call; reuse it). No vectorize.io, no token. Customers install `hindsight-api` with their own Anthropic key for the LLM provider; the `claude-code` provider is personal-use only under Anthropic's terms and is not part of the install story.

@@ -53,3 +53,6 @@ coverage.xml
 # Env
 .env
 .env.local
+
+# Machine-specific eval configs
+local/

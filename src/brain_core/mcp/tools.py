@@ -56,6 +56,17 @@ def tool_recall(
     ]
 
 
+def tool_brain_recall(
+    agent: Agent,
+    query: str,
+    scope: str = "all",
+    format: str = "concise",
+    limit: int = 10,
+) -> dict[str, Any]:
+    """v0.2: one query across SQLite, vault, Hindsight and graph. Capped, deduplicated."""
+    return agent.brain_recall(query, scope=scope, fmt=format, limit=limit)
+
+
 def tool_supersede(
     agent: Agent,
     old_fact_id: int,

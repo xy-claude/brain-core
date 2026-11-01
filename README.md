@@ -73,7 +73,7 @@ brain-core is RAG-shaped (memory + retrieval + LLM reasoning). That shape has a 
 | 7 | MCP server | ✅ |
 | 8 | test-agent-1 end-to-end demo | ✅ |
 | 9 | v0.2 store adapters: vault (markdown by kind), Hindsight (MCP HTTP), graph (CLI) — `docs/VAULT_SCHEMA.md` | ✅ |
-| 10 | `brain_recall` merged across stores, concise/detailed, caps | ⬜ |
+| 10 | `brain_recall` merged across stores, concise/detailed, caps — 20/20 eval hits, ~1.7 s per query | ✅ |
 | 11 | `brain_remember` write-through with per-layer status | ⬜ |
 | 12 | `brain_session` start/end | ⬜ |
 | 13 | `brain_distill` capture + `brain_status` | ⬜ |

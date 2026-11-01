@@ -1,0 +1,45 @@
+# brain_recall eval (M10). Each task: a query an agent would ask, and substrings any one of
+# which must appear in the top-`limit` results. Pulled from XYCLAUDE's real vault on 2026-11-02.
+# Run: brain-core/.venv/bin/python tests/eval/run_recall.py --config local/xyclaude.brain.yaml
+limit: 10
+tasks:
+  - q: hindsight self-hosted launchagent port
+    expect: ["8888", "io.vectorize.hindsight"]
+  - q: github accounts isolation ssh alias
+    expect: ["github-xyclaude", "github-wheelup"]
+  - q: commit authorship co-authored-by rule
+    expect: ["sole author", "Co-Authored-By"]
+  - q: jev typesafe trial status
+    expect: ["retired", "parked"]
+  - q: laya mcp server tools
+    expect: ["laya-mcp-server", "10 tools"]
+  - q: knowledge lint command
+    expect: ["knowledge_tracker.py --lint", "--lint"]
+  - q: distill capture tools defuddle
+    expect: ["defuddle"]
+  - q: notebooklm removed from mcp.json
+    expect: ["notebooklm-py", "removed"]
+  - q: central-brain renamed brain-core
+    expect: ["brain-core"]
+  - q: wheel-up mvp payment rail
+    expect: ["GCash", "Cash"]
+  - q: karpathy llm wiki pattern raw wiki schema
+    expect: ["Karpathy"]
+  - q: context engineering attention budget altitude
+    expect: ["attention", "altitude"]
+  - q: desktop hands native app control script
+    expect: ["desktop.py", "cliclick"]
+  - q: aside cli account
+    expect: ["aside"]
+  - q: systems thinking leverage points
+    expect: ["Leverage points", "leverage"]
+  - q: secrets never touch a tracked file gitleaks
+    expect: ["gitleaks"]
+  - q: prior art before code directive
+    expect: ["Prior art", "prior art"]
+  - q: dashboard staleness rots silently
+    expect: ["dashboard_stale", "rots"]
+  - q: clark_ai created client-scoped agent
+    expect: ["CLARK_AI"]
+  - q: colima vm delete local supabase
+    expect: ["Colima"]

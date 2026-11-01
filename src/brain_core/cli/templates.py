@@ -30,6 +30,12 @@ capabilities:
 #   hsam:
 #     enabled: true
 #     subdir: hsam
+
+# v0.2 stores (optional). Absent stores are skipped, never faked.
+# stores:
+#   vault: ~/path/to/agents/$name
+#   hindsight: {url: http://127.0.0.1:8888, bank: $name-brain}
+#   graph: {script: ~/path/to/entity_graph.py, python: python3}
 """
 )
 

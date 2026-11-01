@@ -1,0 +1,155 @@
+"""``brain_recall``: one query across every store, deduplicated, ranked, capped.
+
+Stores that rank by query themselves (Hindsight, SQLite FTS) are asked once per kind with
+the query. Stores that only filter (vault markdown, graph) are read whole and scored here by
+token overlap. A store that raises is reported in ``stores`` and never aborts the call.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+from collections.abc import Sequence
+from datetime import date
+from typing import Any, get_args
+
+from brain_core.stores.base import Kind, Record, Store, normalize
+
+KINDS: tuple[Kind, ...] = get_args(Kind)
+DEFAULT_TOKENS = 6_000
+MAX_TOKENS = 25_000
+_CONCISE_CHARS = 600
+_STOP = frozenset(
+    [
+        "the",
+        "a",
+        "an",
+        "and",
+        "or",
+        "of",
+        "to",
+        "in",
+        "on",
+        "for",
+        "with",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "by",
+        "at",
+        "from",
+        "as",
+        "it",
+        "this",
+        "that",
+        "we",
+        "our",
+    ]
+)
+# separators only inside a token: "commit." -> commit, "co-authored-by" and "127.0.0.1" stay whole
+_WORD = re.compile(r"[a-z0-9]+(?:[-_.][a-z0-9]+)*")
+
+
+def tokens(text: str) -> set[str]:
+    """Lowercase words minus stopwords, plus a naive singular so "commits" meets "commit"."""
+    out = {w for w in _WORD.findall(text.lower()) if len(w) > 1 and w not in _STOP}
+    return out | {w[:-1] for w in out if w.endswith("s") and len(w) > 3}
+
+
+def recency(when: date, today: date) -> float:
+    return 1.0 / (1.0 + max((today - when).days, 0) / 90.0)
+
+
+def brain_recall(
+    stores: Sequence[Store],
+    query: str,
+    scope: str = "all",
+    fmt: str = "concise",
+    limit: int = 10,
+    max_tokens: int = DEFAULT_TOKENS,
+    today: date | None = None,
+) -> dict[str, Any]:
+    today = today or date.today()
+    names = [s.name for s in stores]
+    if scope == "all":
+        kinds, chosen = KINDS, list(stores)
+    elif scope in KINDS:
+        kinds, chosen = (scope,), list(stores)
+    elif scope in names:
+        kinds, chosen = KINDS, [s for s in stores if s.name == scope]
+    else:
+        raise ValueError(
+            f"scope must be 'all', a kind ({'|'.join(KINDS)}) or a store ({'|'.join(names)})"
+        )
+    if fmt not in ("concise", "detailed"):
+        raise ValueError("format must be 'concise' or 'detailed'")
+    if limit < 1:
+        raise ValueError("limit must be >= 1")
+    max_tokens = min(max_tokens, MAX_TOKENS)
+
+    q_norm, q_tok = normalize(query).lower(), tokens(query)
+    hits: dict[str, tuple[Record, str, float]] = {}
+    seen_text: set[str] = set()
+    report: dict[str, Any] = {}
+    for store in chosen:
+        ranked = bool(getattr(store, "ranked", False))
+        n = 0
+        try:
+            # a store that ranks the whole bank by query (Hindsight) is asked once, not per kind
+            whole = bool(getattr(store, "whole", False))
+            for kind in kinds[:1] if whole else kinds:
+                recs = store.read(kind, query if ranked else None, limit * 2 if ranked else 1000)
+                for i, r in enumerate(recs):
+                    if whole and r.kind not in kinds:
+                        continue
+                    overlap = len(q_tok & tokens(r.text)) / len(q_tok) if q_tok else 0.0
+                    phrase = 0.5 if q_norm and q_norm in r.text.lower() else 0.0
+                    rank = (1.0 - i / (len(recs) + 1)) * 0.6 if ranked else 0.0
+                    rel = max(overlap + phrase, rank)
+                    if rel <= 0:
+                        continue
+                    score = 0.75 * min(rel, 1.5) / 1.5 + 0.25 * recency(r.date, today)
+                    key = normalize(r.text).lower()[:80]
+                    if r.id in hits or key in seen_text:
+                        if r.id in hits and score > hits[r.id][2]:
+                            hits[r.id] = (r, store.name, score)
+                        continue
+                    hits[r.id], n = (r, store.name, score), n + 1
+                    seen_text.add(key)
+        except Exception as e:  # a dead store must not kill recall
+            report[store.name] = f"error: {type(e).__name__}: {str(e)[:120]}"
+            continue
+        report[store.name] = n
+
+    ordered = sorted(hits.values(), key=lambda h: (h[2], h[0].date), reverse=True)[:limit]
+    results = [_item(r, s, sc, fmt) for r, s, sc in ordered]
+    out: dict[str, Any] = {"query": query, "scope": scope, "stores": report, "results": results}
+    while results and len(json.dumps(out)) // 4 > max_tokens:
+        results.pop()
+        out["note"] = (
+            f"truncated to {len(results)} of {len(ordered)} results at {max_tokens} tokens; "
+            "narrow `scope`, lower `limit`, or use format='concise'"
+        )
+    if not results:
+        out["note"] = "no hits; try fewer or different words, or scope='all'"
+    return out
+
+
+def _item(r: Record, store: str, score: float, fmt: str) -> dict[str, Any]:
+    text = (
+        r.text
+        if fmt == "detailed" or len(r.text) <= _CONCISE_CHARS
+        else r.text[:_CONCISE_CHARS] + "…"
+    )
+    item: dict[str, Any] = {
+        "name": "-".join(_WORD.findall(r.text.lower())[:6]) or r.kind,
+        "kind": r.kind,
+        "date": r.date.isoformat(),
+        "source": f"{r.path}:{r.line}" if r.line else r.path or store,
+        "text": text,
+    }
+    if fmt == "detailed":
+        item.update(id=r.id, store=store, score=round(score, 3), domain=r.domain, extra=r.extra)
+    return item

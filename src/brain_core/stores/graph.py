@@ -24,7 +24,7 @@ class GraphStore:
     def __init__(
         self, script: Path | str, python: Path | str = "python3", runner: Runner | None = None
     ) -> None:
-        self.script, self.python = Path(script).expanduser(), str(python)
+        self.script, self.python = Path(script).expanduser(), str(Path(python).expanduser())
         self._run: Runner = runner or self._subprocess
 
     def read(self, kind: Kind, query: str | None = None, limit: int = 50) -> list[Record]:

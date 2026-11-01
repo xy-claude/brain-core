@@ -45,6 +45,23 @@ def build_server(agent: Agent) -> FastMCP:
     server = FastMCP(name=f"brain-core:{agent.name}")
 
     @server.tool()
+    def brain_recall(
+        query: str,
+        scope: str = "all",
+        format: str = "concise",
+        limit: int = 10,
+    ) -> dict[str, Any]:
+        """Search the agent's whole memory with one query: facts, patterns, decisions,
+        corrections, session notes, raw sources and entity relations across every store
+        (SQLite, markdown vault, Hindsight, graph). Results are deduplicated, ranked by
+        relevance and recency, and capped at ~6k tokens. `scope` narrows to one kind
+        (fact|pattern|decision|correction|note|raw|relation) or one store
+        (sqlite|vault|hindsight|graph). `format='detailed'` adds ids, scores and store names
+        for chained calls. `stores` in the reply shows hits per store or the error if one
+        was unreachable."""
+        return tools.tool_brain_recall(agent, query, scope, format, limit)
+
+    @server.tool()
     def remember(
         content: str,
         kind: FactKind = "fact",

@@ -57,6 +57,30 @@ class LoggingConfig(BaseModel):
     format: Literal["json", "plain"] = "json"
 
 
+class HindsightConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    url: str = "http://127.0.0.1:8888"
+    bank: str
+
+
+class GraphConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    script: Path
+    python: str = "python3"
+
+
+class StoresConfig(BaseModel):
+    """Where the agent's memory already lives (v0.2). SQLite is always on; the rest are optional."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    vault: Path | None = None
+    hindsight: HindsightConfig | None = None
+    graph: GraphConfig | None = None
+
+
 class BrainConfig(BaseModel):
     """Top-level ``brain.yaml`` schema.
 
@@ -73,6 +97,7 @@ class BrainConfig(BaseModel):
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
     reflection: ReflectionConfig = Field(default_factory=ReflectionConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
+    stores: StoresConfig = Field(default_factory=StoresConfig)
 
     @field_validator("name")
     @classmethod

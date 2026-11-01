@@ -29,6 +29,8 @@ CONTEXTS: dict[Kind, str] = {
 
 class HindsightStore:
     name = "hindsight"
+    ranked = True  # the server orders by query
+    whole = True  # one recall covers every kind; kind comes back in the tags
 
     def __init__(self, url: str, bank: str, agent: str = "agent", *, timeout: float = 30.0) -> None:
         self.base = url.rstrip("/")
