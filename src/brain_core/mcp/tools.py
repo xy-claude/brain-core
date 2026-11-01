@@ -10,7 +10,7 @@ All datetimes are serialized as ISO-8601 strings at the boundary.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from brain_core.agent import Agent
 from brain_core.decisions.classifier import (
@@ -65,6 +65,28 @@ def tool_brain_recall(
 ) -> dict[str, Any]:
     """v0.2: one query across SQLite, vault, Hindsight and graph. Capped, deduplicated."""
     return agent.brain_recall(query, scope=scope, fmt=format, limit=limit)
+
+
+def tool_brain_remember(
+    agent: Agent,
+    text: str,
+    kind: str,
+    domain: str = "",
+    source: str = "",
+    mission: str | None = None,
+    force: bool = False,
+    extra: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """v0.2: write-through vault → sqlite → Hindsight → graph with per-layer status."""
+    return agent.brain_remember(
+        text,
+        kind,
+        domain=domain,
+        source=source,
+        mission=mission,
+        force=force,
+        **cast(dict[str, Any], extra or {}),
+    )
 
 
 def tool_supersede(

@@ -70,6 +70,8 @@ class HindsightStore:
         tags = [f"agent:{self.agent}", f"type:{kind}", f"session:{when.isoformat()}"]
         if domain:
             tags.append(f"domain:{domain.lower()}")
+        if extra.get("mission"):
+            tags.append(f"mission:{extra['mission']}")
         try:
             res = self.call(
                 "retain",
@@ -79,7 +81,7 @@ class HindsightStore:
                 document_id=extra.get("document_id", f"session-{when.isoformat()}"),
                 metadata={
                     "record_id": rid,
-                    **{k: v for k, v in extra.items() if k in ("impact", "triggered_by")},
+                    **{k: v for k, v in extra.items() if k in ("impact", "triggered_by", "source")},
                 },
             )
         except (urllib.error.URLError, RuntimeError, TimeoutError) as e:

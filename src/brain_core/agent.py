@@ -27,7 +27,7 @@ from __future__ import annotations
 from datetime import date as Date
 from pathlib import Path
 from types import TracebackType
-from typing import Any, Self
+from typing import Any, Self, cast, get_args
 
 from brain_core.config import BrainConfig
 from brain_core.decisions import classifier
@@ -39,9 +39,11 @@ from brain_core.memory.structured import Fact, FactKind
 from brain_core.recall import brain_recall
 from brain_core.reflection import session as reflection_session
 from brain_core.reflection.session import SessionContext, SessionReflection
+from brain_core.remember import brain_remember
 from brain_core.storage.db import Database
 from brain_core.storage.migrator import migrate
 from brain_core.stores import GraphStore, HindsightStore, SqliteStore, Store, VaultStore
+from brain_core.stores.base import Kind
 
 
 class Agent:
@@ -215,6 +217,34 @@ class Agent:
             text=text,
             subdir=self._config.memory.hsam.subdir,
             today=today,
+        )
+
+    def brain_remember(
+        self,
+        text: str,
+        kind: str,
+        *,
+        domain: str = "",
+        source: str = "",
+        mission: str | None = None,
+        when: Date | None = None,
+        force: bool = False,
+        **extra: str,
+    ) -> dict[str, Any]:
+        """Write-through to every store with per-layer status. See :mod:`brain_core.remember`."""
+        self._require_capability("memory")
+        if kind not in get_args(Kind):
+            raise ValueError(f"kind must be one of {'|'.join(get_args(Kind))}")
+        return brain_remember(
+            self.stores,
+            text,
+            cast(Kind, kind),
+            domain=domain,
+            source=source,
+            mission=mission,
+            when=when,
+            force=force,
+            **cast(dict[str, Any], extra),
         )
 
     # ── decisions ────────────────────────────────────────────────────────────

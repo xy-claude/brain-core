@@ -62,6 +62,27 @@ def build_server(agent: Agent) -> FastMCP:
         return tools.tool_brain_recall(agent, query, scope, format, limit)
 
     @server.tool()
+    def brain_remember(
+        text: str,
+        kind: str,
+        domain: str = "",
+        source: str = "",
+        mission: str | None = None,
+        force: bool = False,
+        extra: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        """Remember one thing in every store at once, in order: markdown vault, SQLite,
+        Hindsight, and the entity graph (relations only). `kind` is one of
+        fact|pattern|decision|correction|note|raw|relation. A near-duplicate fact is skipped
+        (`status: duplicate`, with the existing one); a changed value is written with a
+        `⚠ Fact changed` banner and the old line kept (`contradiction` in the reply). `layers`
+        reports each store as written|exists|pending|failed|refused with detail, so a dead
+        store is never silent. `extra` carries kind-specific fields: decision → title, reason,
+        classification, confidence; correction → title, error, correction, rule, theme;
+        relation → subject, predicate, object (or text 'S —[p]→ O'); note → section."""
+        return tools.tool_brain_remember(agent, text, kind, domain, source, mission, force, extra)
+
+    @server.tool()
     def remember(
         content: str,
         kind: FactKind = "fact",

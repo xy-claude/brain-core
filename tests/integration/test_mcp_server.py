@@ -18,6 +18,7 @@ from brain_core.mcp.server import build_server
 
 _EXPECTED_TOOLS = {
     "brain_recall",
+    "brain_remember",
     "remember",
     "recall",
     "supersede",
