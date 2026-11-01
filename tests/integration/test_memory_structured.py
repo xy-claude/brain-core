@@ -9,9 +9,9 @@ from brain_core.storage import Database
 
 
 def test_remember_round_trip(db: Database) -> None:
-    fact = remember(db, "Sir prefers dark mode", kind="preference")
+    fact = remember(db, "Ada prefers dark mode", kind="preference")
     assert fact.id > 0
-    assert fact.content == "Sir prefers dark mode"
+    assert fact.content == "Ada prefers dark mode"
     assert fact.kind == "preference"
     assert fact.tags == []
     assert fact.metadata == {}

@@ -31,14 +31,14 @@ def test_dry_run_writes_the_service_plists_only(
     api = plistlib.loads(Path(out["plist"]).read_bytes())
     assert api["Label"] == "io.vectorize.hindsight" and api["KeepAlive"] is True
     env = api["EnvironmentVariables"]
-    assert (
-        env["HINDSIGHT_API_PORT"] == "8888" and env["HINDSIGHT_API_LLM_PROVIDER"] == "claude-code"
-    )
+    assert env["HINDSIGHT_API_PORT"] == "8888" and env["HINDSIGHT_API_LLM_PROVIDER"] == "anthropic"
     assert (
         env["HINDSIGHT_API_EMBEDDINGS_PROVIDER"] == "local"
         and env["HINDSIGHT_API_DATABASE_URL"] == "pg0://hindsight"
     )
-    assert "HINDSIGHT_API_LLM_API_KEY" not in env
+    assert env["HINDSIGHT_API_LLM_API_KEY"] == "${ANTHROPIC_API_KEY}", "default reads the env var"
+    personal = installer.hindsight_plist(home, "/x/hindsight-api", provider="claude-code")
+    assert "HINDSIGHT_API_LLM_API_KEY" not in personal["EnvironmentVariables"]
     assert api["ProgramArguments"] == [str(home / ".local" / "bin" / "hindsight-api")]
     cp = plistlib.loads(Path(out["dashboard_plist"]).read_bytes())
     assert cp["ProgramArguments"][1:] == ["--port", "9999", "--api-url", "http://127.0.0.1:8888"]

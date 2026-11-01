@@ -21,16 +21,16 @@ def make(tmp_path: Path) -> Agent:
 
 def test_text_and_file_capture_with_dedup(tmp_path: Path) -> None:
     with make(tmp_path) as a:
-        out = a.brain_distill("Sir's pasted notes", text="alpha beta " * 150, author="Sir")
+        out = a.brain_distill("Ada's pasted notes", text="alpha beta " * 150, author="Ada")
         assert out["status"] == "written" and out["path"].startswith("raw/") and out["words"] == 300
         raw = tmp_path / "vault" / out["path"]
         head = raw.read_text().split("---")[1]
         assert (
-            "source: Sir's pasted notes" in head
-            and "author: Sir" in head
+            "source: Ada's pasted notes" in head
+            and "author: Ada" in head
             and "compiled_into: []" in head
         )
-        again = a.brain_distill("Sir's pasted notes", text="alpha beta " * 150)
+        again = a.brain_distill("Ada's pasted notes", text="alpha beta " * 150)
         assert again["status"] == "exists" and "already captured" in again["note"]
         f = tmp_path / "paper.md"
         f.write_text("# Paper\n\nshort body")

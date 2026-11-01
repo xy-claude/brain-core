@@ -8,7 +8,7 @@ Lifecycle::
 
     agent = Agent.from_config("./brain.yaml")
     agent.start_session("sess-1")
-    agent.remember("Sir prefers dark mode", kind="preference")
+    agent.remember("Ada prefers dark mode", kind="preference")
     agent.decide(action="deploy", reversible=True, risk="medium")
     ctx = agent.gather_context()        # uses current session
     summary = agent.template_summary()  # zero-LLM fallback

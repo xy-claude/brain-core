@@ -10,7 +10,7 @@ updated: 2026-11-02
 
 ### [2026-11-01] Added Claude as commit co-author and wrote long commit messages
 - **Error:** commits carried a Co-Authored-By trailer and multi-paragraph bodies
-- **Correction:** Sir is the sole author; one short imperative subject line
+- **Correction:** the user is the sole author; one short imperative subject line
 - **Implied rule:** never add attribution trailers
 - **Theme:** execution
 - **Promoted:** Yes

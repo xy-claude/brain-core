@@ -115,7 +115,7 @@ def test_export_with_data(tmp_path: Path) -> None:
     from brain_core import Agent
 
     with Agent.from_config(tmp_path / "brain.yaml") as agent:
-        agent.remember("Sir prefers dark mode", kind="preference", tags=["ui"])
+        agent.remember("Ada prefers dark mode", kind="preference", tags=["ui"])
         agent.remember("deploys on Tuesday", kind="constraint")
         d = agent.decide(action="ship it", reversible=True, reasoning="tests green")
         agent.complete(d.id)
@@ -125,7 +125,7 @@ def test_export_with_data(tmp_path: Path) -> None:
     result = runner.invoke(app, ["export", str(tmp_path)])
     assert result.exit_code == 0, result.stdout
     out = result.stdout
-    assert "Sir prefers dark mode" in out
+    assert "Ada prefers dark mode" in out
     assert "ship it" in out
     assert "user_message" in out
     assert "[completed]" in out
@@ -150,7 +150,7 @@ def test_init_writes_the_whole_pack_with_user_and_profile(tmp_path: Path) -> Non
             "--path",
             str(out),
             "--user",
-            "Sir",
+            "Ada",
             "--profile",
             str(tmp_path / "profile"),
         ],
@@ -175,8 +175,8 @@ def test_init_writes_the_whole_pack_with_user_and_profile(tmp_path: Path) -> Non
     assert "$CMD" in hook.read_text(), "shell variables untouched by substitution"
     assert "bank: atlas-brain" in (out / "brain.yaml").read_text()
     md = (out / "CLAUDE.md").read_text()
-    assert md.startswith("# Atlas") and "Sir's operating intelligence" in md and "$" not in md
-    assert "Address the user as **Sir**" in (out / "vault" / "user_profile.md").read_text()
+    assert md.startswith("# Atlas") and "Ada's operating intelligence" in md and "$" not in md
+    assert "Address the user as **Ada**" in (out / "vault" / "user_profile.md").read_text()
     assert "atlas-brain" in (out / ".mcp.json").read_text()
     for f in (
         "executive_state.md",

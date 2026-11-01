@@ -49,7 +49,7 @@ def test_from_config_resolves_relative_paths(tmp_path: Path) -> None:
 def test_agent_memory_round_trip(tmp_path: Path) -> None:
     cfg = write_config(tmp_path, "name: x\n")
     with Agent.from_config(cfg) as agent:
-        fact = agent.remember("Sir prefers dark mode", kind="preference")
+        fact = agent.remember("Ada prefers dark mode", kind="preference")
         assert fact.id > 0
         [hit] = agent.recall(query="dark mode")
         assert hit.id == fact.id

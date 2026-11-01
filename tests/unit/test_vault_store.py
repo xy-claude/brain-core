@@ -12,14 +12,14 @@ from brain_core.stores.base import record_id
 
 LEGACY_FACTS = """---
 type: reference
-owner: xyclaude
+owner: atlas
 updated: 2026-10-01
 ---
 # Operational Facts
 
 ## System
-- XYCLAUDE brain initialized: 2026-04-03
-- Hindsight bank: xyclaude-brain self-hosted (2026-11-01)
+- ATLAS brain initialized: 2026-04-03
+- Hindsight bank: atlas-brain self-hosted (2026-11-01)
 
 ## Hardware
 - Mac mini M4 (2026-04-19)
@@ -27,7 +27,7 @@ updated: 2026-10-01
 
 LEGACY_DECISIONS = """---
 type: log
-owner: xyclaude
+owner: atlas
 updated: 2026-10-01
 ---
 # Decisions Log
@@ -44,7 +44,7 @@ updated: 2026-10-01
 
 LEGACY_CORRECTIONS = """---
 type: log
-owner: xyclaude
+owner: atlas
 updated: 2026-08-18
 ---
 # Corrections Log
@@ -63,13 +63,13 @@ def vault(tmp_path: Path) -> VaultStore:
     (tmp_path / "facts.md").write_text(LEGACY_FACTS)
     (tmp_path / "decisions_log.md").write_text(LEGACY_DECISIONS)
     (tmp_path / "corrections.md").write_text(LEGACY_CORRECTIONS)
-    return VaultStore(tmp_path, owner="xyclaude")
+    return VaultStore(tmp_path, owner="atlas")
 
 
 def test_reads_legacy_facts_with_and_without_dates(vault: VaultStore) -> None:
     facts = vault.read("fact")
-    assert [f.text for f in facts][:1] == ["Hindsight bank: xyclaude-brain self-hosted"]
-    undated = next(f for f in facts if f.text.startswith("XYCLAUDE brain initialized"))
+    assert [f.text for f in facts][:1] == ["Hindsight bank: atlas-brain self-hosted"]
+    undated = next(f for f in facts if f.text.startswith("ATLAS brain initialized"))
     assert undated.date == date(2026, 10, 1) and undated.extra == {"legacy": "undated"}
     assert undated.domain == "System" and undated.line == 9
 
@@ -128,7 +128,7 @@ def test_correction_goes_under_corrections_heading(vault: VaultStore) -> None:
         "correction",
         "Added co-author trailer",
         title="Co-author trailer",
-        correction="Sir sole author",
+        correction="Ada is the sole author",
         rule="no trailers",
         when=date(2026, 11, 1),
     )
@@ -141,14 +141,14 @@ def test_correction_goes_under_corrections_heading(vault: VaultStore) -> None:
 
 
 def test_note_creates_daily_file_with_section(vault: VaultStore) -> None:
-    r = vault.write("note", "Sir said go M9", when=date(2026, 11, 2), section="Decisions Made")
+    r = vault.write("note", "Ada said ship it", when=date(2026, 11, 2), section="Decisions Made")
     p = vault.root / "sessions" / "2026-11-02.md"
     assert r.status == "written" and p.exists()
     assert (
         "# Session Archive — 2026-11-02" in p.read_text()
-        and "## Decisions Made\n- Sir said go M9" in p.read_text()
+        and "## Decisions Made\n- Ada said ship it" in p.read_text()
     )
-    assert vault.read("note", "go M9")[0].domain == "Decisions Made"
+    assert vault.read("note", "ship it")[0].domain == "Decisions Made"
 
 
 def test_raw_write_is_immutable_and_deduped_by_source(vault: VaultStore) -> None:

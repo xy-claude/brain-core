@@ -40,7 +40,7 @@ def vault() -> MemoryStore:
     )
     v.write(
         "fact",
-        "Two GitHub accounts isolated via ssh aliases github-xyclaude and github-wheelup",
+        "Two GitHub accounts isolated via ssh aliases github-work and github-personal",
         when=date(2026, 11, 2),
     )
     v.write(

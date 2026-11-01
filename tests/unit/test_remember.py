@@ -41,7 +41,7 @@ def test_writes_in_order_with_per_layer_status() -> None:
 
 def test_dead_layer_is_reported_not_swallowed() -> None:
     down = named("hindsight", healthy=False)
-    out = brain_remember([named("vault"), down], "Sir prefers short commits", "pattern", when=TODAY)
+    out = brain_remember([named("vault"), down], "Ada prefers short commits", "pattern", when=TODAY)
     assert out["status"] == "partial"
     assert out["layers"]["hindsight"] == {"status": "failed", "detail": "store down"}
     assert out["layers"]["vault"]["status"] == "written"
@@ -90,8 +90,6 @@ def test_empty_text_rejected() -> None:
 
 def test_mission_and_source_reach_extra() -> None:
     v = named("vault")
-    brain_remember(
-        [v], "koopi parser uses laya", "fact", source="session", mission="M-7", when=TODAY
-    )
+    brain_remember([v], "the parser uses laya", "fact", source="session", mission="M-7", when=TODAY)
     r: Record = v.records[0]
     assert r.extra == {"source": "session", "mission": "M-7"}

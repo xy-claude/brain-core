@@ -1,6 +1,6 @@
 """Markdown vault adapter. Contract: docs/VAULT_SCHEMA.md.
 
-Reads the layout the XYCLAUDE vault already has (legacy-compatible), writes only the
+Reads the layout a hand-written vault already has (legacy-compatible), writes only the
 dated, idempotent, append-only forms the schema defines.
 """
 
@@ -37,10 +37,10 @@ HSAM_SECTIONS = (
     "Decisions Made",
     "Facts & Numbers",
     "Ideas & Possibilities",
-    "Sir's Questions",
+    "Questions",
     "Tools/Services/Products",
     "Files & Resources",
-    "Sir's Mood & Context",
+    "Mood & Context",
     "Corrections & Feedback",
     "Open loops",
 )

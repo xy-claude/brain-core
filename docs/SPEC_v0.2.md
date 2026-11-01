@@ -1,12 +1,12 @@
 # brain-core v0.2 — the local brain MCP
 
-**Status:** spec, approved by Sir 2026-11-02 ("go 1 and 2"). Build starts on M9.
-**Goal:** one local MCP that is the whole front door to an agent's memory, dogfooded by XYCLAUDE until it runs every session, then packaged the way Hindsight was self-hosted: local, no bill, no login.
+**Status:** approved 2026-11-02; M9–M19 shipped the same week.
+**Goal:** one local MCP that is the whole front door to an agent's memory, dogfooded on the reference agent (the author's own assistant) until it runs every session, then packaged the way Hindsight was self-hosted: local, no bill, no login.
 **Design constraints:** `AI-ORG` vault page `knowledge/tool-design-for-agents.md` (Anthropic, 2025-09). Few consolidated workflow tools, namespaced, concise by default, capped responses with steering text, names not UUIDs, descriptions written for a newcomer, an eval before v1.
 
 ## 1. What v0.1 has and what is wrong with it
 
-v0.1 (milestones 0–8, 155 tests) exposes 14 MCP tools that mirror the Python API one-to-one: `remember`, `recall`, `supersede`, `log_event`, `recent_events`, `append_today`, `decide`, `reverse`, `complete`, `list_decisions`, `gather_context`, `save_reflection`, `template_summary`, `current_session`. Storage is SQLite + FTS5 only. It knows nothing about the three stores a real agent already has (markdown vault, Hindsight, entity graph), so XYCLAUDE cannot use it without duplicating memory.
+v0.1 (milestones 0–8, 155 tests) exposes 14 MCP tools that mirror the Python API one-to-one: `remember`, `recall`, `supersede`, `log_event`, `recent_events`, `append_today`, `decide`, `reverse`, `complete`, `list_decisions`, `gather_context`, `save_reflection`, `template_summary`, `current_session`. Storage is SQLite + FTS5 only. It knows nothing about the three stores a real agent already has (markdown vault, Hindsight, entity graph), so the reference agent could not use it without duplicating memory.
 
 That is the "wrap every endpoint" shape. An agent facing 14 brain tools plus 15 Obsidian tools plus 36 Hindsight tools picks the wrong one, or picks three and merges by hand.
 
@@ -29,13 +29,13 @@ Every response is capped (default 6k tokens, hard max 25k) and, when truncated, 
 `brain.yaml` gains an optional `stores:` block. Absent stores are skipped, never faked.
 
 ```yaml
-name: XYCLAUDE
+name: ATLAS
 stores:
   sqlite: data/brain.db                      # always on (v0.1)
-  vault: ~/…/XYCLAUDE-Brain/agents/XYCLAUDE  # markdown folder; files by kind
+  vault: ./vault                             # markdown folder; files by kind
   hindsight:
     url: http://127.0.0.1:8888               # self-hosted; MCP path /mcp/<bank>/
-    bank: xyclaude-brain
+    bank: atlas-brain
   graph:
     script: ~/Projects/AI-ORG/scripts/python/entity_graph.py   # Kuzu via its CLI
     python: ~/Projects/AI-ORG/venv/bin/python3
@@ -45,13 +45,13 @@ Hindsight is talked to over its MCP streamable-HTTP endpoint (the `Mcp` client i
 
 ## 4. Eval before v1
 
-`tests/eval/` with 30 tasks pulled from XYCLAUDE session archives, each a prompt, the expected recall hits (by `source_path`), and the expected writes. A verifier that tolerates phrasing. Metrics per task: hits, tool calls, tokens returned, errors. Run on a held-out 10 after tuning on 20. Nothing ships to v1 below 90% on the held-out set.
+`tests/eval/` with 30 tasks pulled from the reference agent's session archives, each a prompt, the expected recall hits (by `source_path`), and the expected writes. A verifier that tolerates phrasing. Metrics per task: hits, tool calls, tokens returned, errors. Run on a held-out 10 after tuning on 20. Nothing ships to v1 below 90% on the held-out set.
 
 ## 5. Dogfood plan (the proof)
 
-1. Both MCPs loaded in XYCLAUDE's `.mcp.json` for two weeks (`brain` beside `obsidian-vault` and `hindsight`). Schemas are deferred, so the context cost is near zero.
-2. XYCLAUDE uses only `brain_*` for memory; the old tools stay as fallback. A fact written through `brain_remember` must appear in the vault file, the SQLite row, and Hindsight, and `brain_status` must say so.
-3. After a month of clean logs: `obsidian-vault` leaves XYCLAUDE's `.mcp.json`; the other 7 agents follow one at a time via `create_agent.sh`.
+1. Both MCPs loaded in the reference agent's `.mcp.json` for two weeks (`brain` beside `obsidian-vault` and `hindsight`). Schemas are deferred, so the context cost is near zero.
+2. The reference agent uses only `brain_*` for memory; the old tools stay as fallback. A fact written through `brain_remember` must appear in the vault file, the SQLite row, and Hindsight, and `brain_status` must say so.
+3. After a month of clean logs: `obsidian-vault` leaves the reference agent's `.mcp.json`; its sibling agents follow one at a time.
 4. Then package: `uv tool install brain-core`, `brain-core init` writes `brain.yaml` and registers the MCP, `brain-core doctor` is `brain_status` from the shell.
 
 ## 6. Milestones
@@ -61,13 +61,13 @@ Hindsight is talked to over its MCP streamable-HTTP endpoint (the `Mcp` client i
 | 9 | Store adapters: vault (markdown by kind), Hindsight (MCP HTTP client), graph (subprocess) | unit tests per adapter with a fake backend; `brain_status` reports each |
 | 10 | `brain_recall` merged + dedup + caps + concise/detailed | 20 eval tasks ≥ 90% hits |
 | 11 | `brain_remember` write-through with per-layer status, dedup, contradiction banner | a failed layer is reported, never swallowed; test with Hindsight down |
-| 12 | `brain_session` start/end | one call reproduces today's START block and END writes on a real XYCLAUDE session |
+| 12 | `brain_session` start/end | one call reproduces today's START block and END writes on a real session of the reference agent |
 | 13 | `brain_distill` capture + `brain_status` | `/distill` Step 1 calls it; `/agent-check` calls `brain_status` |
 | 14 | Eval set complete, held-out ≥ 90% | `tests/eval/` in CI |
-| 15 | Dogfood: 2 weeks side-by-side, then Obsidian MCP removed from XYCLAUDE | `.mcp.json` diff + a month of `brain_status` logs |
+| 15 | Dogfood: 2 weeks side-by-side, then Obsidian MCP removed from the reference agent | `.mcp.json` diff + a month of `brain_status` logs |
 
 Not in v0.2: multi-agent mesh, hosted mode, UI, knowledge compile (stays an LLM skill), anything that adds a server beyond Hindsight.
 
 ## 7. Lean guard
 
-v0.2 must *reduce* XYCLAUDE's tool surface (51 → 5 for memory) and leave always-loaded context unchanged (18.7k tokens on 2026-11-02; protocol text in `AGENTS/CLAUDE.md` shrinks once `brain_session` carries it). Any milestone that grows either number stops and reports.
+v0.2 must *reduce* the reference agent's tool surface (51 → 5 for memory) and leave always-loaded context unchanged (18.7k tokens on 2026-11-02; protocol text in `AGENTS/CLAUDE.md` shrinks once `brain_session` carries it). Any milestone that grows either number stops and reports.

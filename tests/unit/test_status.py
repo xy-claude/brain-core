@@ -20,7 +20,7 @@ def test_status_reports_everything(tmp_path: Path) -> None:
     (vault / "knowledge" / "orphan.md").write_text("# Orphan with no frontmatter\n")
     (vault / "raw" / "2026-11-02-x.md").write_text("---\ntype: raw\ncompiled_into: []\n---\nbody\n")
     (vault / "executive_state.md").write_text(
-        "# E\n\n## Pending Decisions (Sir)\n| Decision | Why |\n|---|---|\n"
+        "# E\n\n## Pending Decisions (Ada)\n| Decision | Why |\n|---|---|\n"
         "| Go public | cost |\n| Pick a name | taste |\n\n## Open Loops\n- x\n"
     )
     (tmp_path / "CLAUDE.md").write_text("x" * 400)

@@ -1,7 +1,7 @@
 """Run a brain_recall eval against a brain.yaml. Exit 1 below the threshold.
 
-    .venv/bin/python tests/eval/run_recall.py --config local/xyclaude.brain.yaml \
-        [--tasks tests/eval/recall_heldout.yaml] [--min 0.9]
+    .venv/bin/python tests/eval/run_recall.py --config path/to/brain.yaml \
+        [--tasks tests/eval/fixture/recall.yaml] [--min 0.9]
 
 Per task: hit, rank of the first hit, tool calls, latency, tokens returned, store errors.
 """
@@ -59,7 +59,7 @@ def run(
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", required=True)
-    ap.add_argument("--tasks", default=str(HERE / "recall_tasks.yaml"))
+    ap.add_argument("--tasks", default=str(HERE / "fixture" / "recall.yaml"))
     ap.add_argument("--min", type=float, default=0.9)
     ap.add_argument("--scope", default="all")
     a = ap.parse_args()

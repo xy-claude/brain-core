@@ -1,6 +1,6 @@
 # Vault schema (v0.2, M9)
 
-The markdown vault is the source of truth. `VaultStore` reads and writes it by **kind**. This page codifies the conventions the XYCLAUDE vault already uses (surveyed 2026-11-02), so legacy files are read as-is and no migration is required. Where a file deviates, the lint reports it; the adapter never rewrites history.
+The markdown vault is the source of truth. `VaultStore` reads and writes it by **kind**. This page codifies the conventions the the reference agent vault already uses (surveyed 2026-11-02), so legacy files are read as-is and no migration is required. Where a file deviates, the lint reports it; the adapter never rewrites history.
 
 Root: `agents/<NAME>/` (one folder per agent). All files have YAML frontmatter with at least `type`, `owner`, `updated` (YYYY-MM-DD). Every write bumps `updated`.
 
@@ -10,7 +10,7 @@ Root: `agents/<NAME>/` (one folder per agent). All files have YAML frontmatter w
 | `pattern` | `patterns.md` | `## <Domain>` | `- **<title>** — <text> (YYYY-MM-DD)` | append |
 | `decision` | `decisions_log.md` | top-level, after the template block | `## YYYY-MM-DD — <title>` then `**Decision:** … / **Reason:** … / **Classification:** [reversible\|irreversible] × [low-risk\|high-risk] / **Confidence:** high\|medium\|low` | newest first |
 | `correction` | `corrections.md` | under `## Corrections` | `### [YYYY-MM-DD] <title>` then `- **Error:** / - **Correction:** / - **Implied rule:** / - **Theme:** / - **Promoted:**` | newest first |
-| `note` | `sessions/YYYY-MM-DD.md` | `## <Section>` from the HSAM list (What We Discussed, URLs & Links Shared, Decisions Made, Facts & Numbers, Ideas & Possibilities, Sir's Questions, Tools/Services/Products, Files & Resources, Sir's Mood & Context, Corrections & Feedback, Open loops) | `- <text>` | append |
+| `note` | `sessions/YYYY-MM-DD.md` | `## <Section>` from the HSAM list (What We Discussed, URLs & Links Shared, Decisions Made, Facts & Numbers, Ideas & Possibilities, Questions, Tools/Services/Products, Files & Resources, Mood & Context, Corrections & Feedback, Open loops) | `- <text>` | append |
 | `raw` | `raw/YYYY-MM-DD-<slug>.md` | whole file | frontmatter `type: raw, source, title, author, published, fetched, sha256, words, compiled_into` + body | immutable |
 
 Not handled by `VaultStore`: `knowledge/` pages (compiled by the LLM through `/distill`), `executive_state.md`, `session_critique.md`, `intelligence_dashboard.md` (whole-file rewrites by the agent).

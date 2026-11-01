@@ -14,7 +14,7 @@ class FakeHindsight(HindsightStore):
     """Replace the HTTP layer with a scripted server."""
 
     def __init__(self, ops: list[str]) -> None:
-        super().__init__("http://127.0.0.1:1", "test-bank", "XYCLAUDE", timeout=2)
+        super().__init__("http://127.0.0.1:1", "test-bank", "ATLAS", timeout=2)
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self.ops = ops  # statuses returned by successive get_operation calls
 
@@ -29,7 +29,7 @@ class FakeHindsight(HindsightStore):
                 "results": [
                     {
                         "id": "m1",
-                        "text": "Sir prefers short commits",
+                        "text": "Ada prefers short commits",
                         "tags": ["type:pattern", "domain:system"],
                         "occurred_start": "2026-11-01T00:00:00+00:00",
                         "context": "user-feedback",
@@ -49,7 +49,7 @@ def test_hindsight_write_polls_until_completed() -> None:
     tool, args = h.calls[0]
     assert tool == "retain" and args["context"] == "session-decision"
     assert args["tags"] == [
-        "agent:xyclaude",
+        "agent:atlas",
         "type:decision",
         "session:2026-11-01",
         "domain:system",
@@ -85,7 +85,7 @@ def test_graph_write_read_import_in_sqlite(db: Database) -> None:
     assert [r.text for r in rs] == ["A —[b]→ C"] and rs[0].extra["object"] == "C"
     assert g.read("fact") == [] and g.health() == (True, "graph relations=1")
     counts = g.import_dump(
-        "  XYCLAUDE —[uses]→ Hindsight  (2026-04-11)\n  A —[b]→ C  (2026-01-01)\n82 relationships\n"
+        "  ATLAS —[uses]→ Hindsight  (2026-04-11)\n  A —[b]→ C  (2026-01-01)\n82 relationships\n"
     )
     assert counts == {"written": 1, "exists": 1, "skipped": 1}
     assert g.read("relation", "hindsight")[0].date == date(2026, 4, 11)

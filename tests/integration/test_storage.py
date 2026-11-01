@@ -22,7 +22,7 @@ def test_round_trip_persistence(tmp_path: Path) -> None:
         assert versions == [1, 2], "all migrations apply on first open"
         db.execute(
             "INSERT INTO facts (content, kind, content_hash) VALUES (?, ?, ?)",
-            ("Sir prefers dark mode", "preference", "hash-1"),
+            ("Ada prefers dark mode", "preference", "hash-1"),
         )
 
     with Database.connect(db_path) as db:
@@ -33,7 +33,7 @@ def test_round_trip_persistence(tmp_path: Path) -> None:
             ("hash-1",),
         )
         assert row is not None
-        assert row["content"] == "Sir prefers dark mode"
+        assert row["content"] == "Ada prefers dark mode"
         assert row["kind"] == "preference"
 
 

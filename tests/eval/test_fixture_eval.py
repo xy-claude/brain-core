@@ -1,6 +1,6 @@
 """The eval in CI: recall on a synthetic fixture vault and the write scenarios, no network.
 
-The live evals (XYCLAUDE's real vault + Hindsight) run from the CLI runners; this is the
+The live evals (the author's real vault + Hindsight) run from the CLI runners; this is the
 reproducible floor every commit must keep.
 """
 

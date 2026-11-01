@@ -1,97 +1,188 @@
 # brain-core
 
-Cognitive primitives for AI agents — memory, decisions, reflection — as an installable Python package. Any agent gets a working brain by depending on this library; identity, domain, and state live in the consuming agent.
+**A memory for your Claude Code agent that survives the session.** One local MCP server, five tools, a markdown vault you can read, an eval that proves recall. Installs with one command.
 
-> **Status:** v0.1 library + 14-tool MCP (M0–8). v0.2 in progress: five `brain_*` tools over the agent's real stores — see [`docs/SPEC_v0.2.md`](docs/SPEC_v0.2.md) and [milestones](#milestones).
+[![CI](https://github.com/xy-claude/brain-core/actions/workflows/test.yml/badge.svg)](https://github.com/xy-claude/brain-core/actions/workflows/test.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)](pyproject.toml)
+
+```
+curl -fsSL https://raw.githubusercontent.com/xy-claude/brain-core/main/install.sh | bash -s -- --agent Atlas --user Alex
+```
 
 ---
 
-## Install on a fresh Mac
+## The problem
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/xy-claude/brain-core/main/install.sh | bash -s -- --agent NAME --user Sir
+Every session with a coding agent starts from zero. You explain the project again, the decision you made last week again, the thing it got wrong on Tuesday again. Memory add-ons exist, but they put your notes in someone's cloud, expose 30 tools the agent cannot choose between, and nobody shows you an eval.
+
+brain-core is the opposite: local, five tools, markdown files you own, and a test suite that reports hit rates.
+
+## What you get
+
+```mermaid
+flowchart LR
+    CC[Claude Code] -->|MCP, 5 tools| B[brain serve]
+    B --> V[(vault/ markdown)]
+    B --> S[(brain.db SQLite + FTS)]
+    B --> H[(Hindsight vector memory)]
+    B --> G[(relations table)]
+    CRON[brain daily / weekly] --> V
+    CRON --> H
 ```
 
-One command: Xcode CLT, Homebrew, uv, gh, gitleaks, node, Claude Code, `brain-core`, `brain init NAME`, the self-hosted Hindsight server as a launchd service, `brain cron install`, `brain doctor`. Idempotent. Add `--profile DIR` to overlay your own rules, `--dashboard` for the Hindsight UI on :9999, `--ref v0.2.0` to pin. What stays yours: `claude` login, `gh auth login`, SSH keys.
+| Tool | One call does |
+|---|---|
+| `brain_session('start')` | the whole start block: daily brief, executive state, mental models, a recall per mission, inbox count, and a flag if the last session crashed |
+| `brain_recall(query)` | one query across every store, deduplicated, ranked by relevance and recency, capped at 6k tokens |
+| `brain_remember(text, kind)` | writes vault → SQLite → Hindsight → graph and reports each layer. Near-duplicates are skipped; a changed value gets a `⚠ Fact changed` banner and the old line stays |
+| `brain_distill(source)` | captures a URL, GitHub repo, YouTube video, PDF, file or pasted text into an immutable `raw/` folder for the agent to compile |
+| `brain_session('end')` | drains the queue, closes the day's session file, rewrites state and critique, writes the clean-close marker |
 
-## Why this exists
+Plus `brain_status()` for health in one call, and two cron jobs that write the next morning's brief, back up memory, and archive old sessions.
 
-Agent projects keep reinventing the same cognition layer — how do I remember things across sessions, how do I log decisions with reasoning, how do I reflect on what worked. `brain-core` extracts that substrate once and versions it, so new agents onboard by declaring a dependency instead of cloning a monorepo.
+## Install
 
-## Responsibility split
-
-| brain-core owns | Consuming agent owns |
-|--------------------|---------------------|
-| Memory schema + operations | Identity (`CLAUDE.md`) |
-| Decision classification + logging | Domain knowledge |
-| Reflection primitives | `brain.yaml` config |
-| Storage (SQLite) + migrations | `data/brain.db` (state) |
-| MCP server wrapping the API | Any extra MCPs / skills |
-| CLI (`init`, `serve`, `doctor`, `export`) | Custom domain logic |
-
-**Invariant:** `brain_core` never imports from a consumer. Consumers import from `brain_core`.
-
-## v0 capabilities (scope — not yet implemented)
-
-1. **Memory** — structured facts/patterns, episodic event log, HSAM daily archives (SQLite + FTS5).
-2. **Decisions** — classification (reversible × risk), confidence, reversal tracking.
-3. **Reflection** — end-of-session synthesis. Library assembles structured context; runtime (e.g., Claude Code) does LLM synthesis. Zero metered API calls by default.
-
-## Installation (preview)
-
-Once capabilities ship:
+### macOS, one line
 
 ```bash
-pip install git+ssh://git@github.com/xy-claude/brain-core.git
+curl -fsSL https://raw.githubusercontent.com/xy-claude/brain-core/main/install.sh | bash -s -- --agent Atlas --user Alex
 ```
 
-During development:
+What it does, in order (re-running skips what is already there):
+
+```
+== 1/8 Xcode command line tools      present
+== 2/8 Homebrew                      present
+== 3/8 uv, gh, gitleaks, node, Claude Code
+== 4/8 brain-core (v0.2.0)           installed with uv tool
+== 5/8 Agent Atlas at ~/Agents/Atlas  31 files written
+== 6/8 Hindsight (required store)    service: healthy
+== 7/8 Cron                          daily 06:07, weekly Sun 07:13
+== 8/8 Doctor                        Brain: OK
+```
+
+Then, once: `export ANTHROPIC_API_KEY=...` (Hindsight uses it to reason over memories), and `claude` to sign in to Claude Code.
+
+| Flag | Meaning |
+|---|---|
+| `--agent NAME` | the agent's name (required) |
+| `--user Alex` | how the agent addresses you |
+| `--dir PATH` | where the agent lives, default `~/Agents/NAME` |
+| `--provider` | `anthropic` (default), `openai`, or `claude-code` (uses your Claude Code login; personal use only) |
+| `--profile DIR` | a folder copied over the generic rules last, for your own doctrine |
+| `--dashboard` | the Hindsight web UI on http://localhost:9999 |
+| `--ref v0.2.0` | pin a release |
+
+### Manual, any platform
 
 ```bash
-uv sync --all-extras
+uv tool install git+https://github.com/xy-claude/brain-core@v0.2.0
+brain init Atlas --path ~/Agents/Atlas --user Alex
+brain hindsight install          # macOS launchd; on Linux run hindsight-api yourself
+brain cron install ~/Agents/Atlas
+brain doctor ~/Agents/Atlas
 ```
 
-## Development
+## First session
 
 ```bash
-uv sync --all-extras          # install deps into .venv
-uv run ruff check src tests   # lint
-uv run ruff format src tests  # format
-uv run mypy                   # type-check (strict)
-uv run pytest --cov           # tests with coverage
+cd ~/Agents/Atlas && claude
 ```
 
-Pre-commit hooks available via `pre-commit install`.
+The agent's `CLAUDE.md` tells it to open with `brain_session('start')`. What comes back:
 
-## Security posture
+```json
+{
+  "session_id": "s-20261102-a1b2c3",
+  "brief": "# Daily Brief — 2026-11-02 ...",
+  "executive_state": "## Primary Objective ... ## Top Missions ... ## Pending Decisions ...",
+  "mental_models": {"active-priorities": "..."},
+  "missions": {"M-001 first mission": [ ...3 recall hits... ]},
+  "inbox": 0,
+  "recovery": null
+}
+```
 
-brain-core is RAG-shaped (memory + retrieval + LLM reasoning). That shape has a documented attack surface — see [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) for the PoisonedRAG threat class, the ingestion-time gates the library provides, and the questions consumers must answer before shipping.
+Say something worth keeping and the agent calls `brain_remember`:
 
-## Milestones
+```json
+{"status": "written", "layers": {"vault": {"status": "written", "detail": "facts.md › System"},
+                                 "sqlite": {"status": "written"},
+                                 "hindsight": {"status": "written", "detail": "op 162bdbaa"}}}
+```
 
-| # | Milestone | Status |
-|---|-----------|:------:|
-| 0 | Project chassis (tooling, CI, package skeleton) | ✅ |
-| 1 | Storage layer (SQLite schema + migrations) | ✅ |
-| 2 | Memory capability (structured + episodic + HSAM) | ✅ |
-| 3 | Decisions capability | ✅ |
-| 4 | Reflection capability | ✅ |
-| 5 | Agent class + `brain.yaml` loader | ✅ |
-| 6 | CLI (`init`, `doctor`, `export`) | ✅ |
-| 7 | MCP server | ✅ |
-| 8 | test-agent-1 end-to-end demo | ✅ |
-| 9 | v0.2 store adapters: vault (markdown by kind), Hindsight (MCP HTTP), graph (CLI) — `docs/VAULT_SCHEMA.md` | ✅ |
-| 10 | `brain_recall` merged across stores, concise/detailed, caps — 20/20 eval hits, ~1.7 s per query | ✅ |
-| 11 | `brain_remember` write-through vault → sqlite → Hindsight → graph, per-layer status, dedup, `⚠ Fact changed` banner | ✅ |
-| 12 | `brain_session` start (brief, executive state, mental models, mission recall, inbox, recovery) / end (queue drain, HSAM close, critique, sync, marker) | ✅ |
-| 13 | `brain_distill` capture (web/GitHub/YouTube/PDF/file/text → raw/) + `brain_status`; MCP surface is now the five `brain_*` tools only | ✅ |
-| 14 | Eval set: 20 tune + 10 held-out recall (live 100% / 100%), 10 write scenarios, 20-task fixture vault in CI | ✅ |
-| 15 | Dogfood on XYCLAUDE, Obsidian MCP retired | ⬜ (started 2026-11-02) |
-| 16 | Template pack: `brain init NAME --user --profile DIR` writes CLAUDE.md, 5 generic rules, 3 skills, bash guard hook, `.mcp.json`, vault skeleton | ✅ |
-| 17 | Entity graph moved from Kuzu into a `relations` table in brain.db; `brain graph import` loads the legacy dump | ✅ |
-| 18 | Cron engine: `brain daily` (brief, health line, Hindsight backup), `brain weekly` (archive sessions > 30d, refresh mental models), `brain cron install` (launchd) | ✅ |
-| 19 | Installer: `install.sh` one-liner, `brain hindsight install` (launchd service, claude-code or customer provider), `brain doctor` on `brain_status` | ✅ (export/import lands after M17) |
+Say "thanks, we're done" and it runs `brain_session('end')`. Tomorrow at 06:07 `brain daily` writes the next brief from what you did today.
+
+## What is in the agent folder
+
+```
+~/Agents/Atlas
+├── CLAUDE.md                 identity and the five-tool protocol (3k tokens always loaded)
+├── .claude/
+│   ├── rules/                01-identity 02-doctrine 03-authority 04-memory 05-system
+│   ├── skills/               distill, session-end, brain-check
+│   └── hooks/                block-dangerous-bash.sh (rm -rf, force-push, curl|sh …)
+├── .mcp.json                 brain serve . + Hindsight
+├── brain.yaml                stores, session files, cron schedule
+├── vault/                    facts.md patterns.md decisions_log.md corrections.md
+│   ├── sessions/             one file per day (HSAM)
+│   ├── knowledge/ raw/       the LLM-wiki: immutable sources, compiled pages
+│   └── executive_state.md    objective, missions, pending decisions
+└── data/brain.db             SQLite + FTS5 + relations
+```
+
+Everything is markdown or SQLite. Open the vault in Obsidian, grep it, commit it, delete a line. The agent will not mind.
+
+## Does it work?
+
+The eval is part of the test suite and runs in CI.
+
+| Set | Hits |
+|---|---|
+| 20 recall tasks on a synthetic fixture vault (CI) | 20 / 20 |
+| 20 tune + 10 held-out recall tasks on the author's real vault, 7 months of sessions | 20 / 20 and 10 / 10 |
+| 11 write scenarios: dedup, value-change banner, relation routing, secret refusal | 11 / 11 |
+
+Recall takes about 1.7 s per query; Hindsight is the floor. A full start block is about 4 s and under 6k tokens.
+
+```bash
+python tests/eval/run_recall.py --config ~/Agents/Atlas/brain.yaml   # your own vault
+```
+
+## How memory is organised
+
+| Kind | Lives in | Written as |
+|---|---|---|
+| fact | `vault/facts.md` under `## Domain` | `- text (date)` |
+| pattern | `vault/patterns.md` | `- **title** — text (date)` |
+| decision | `vault/decisions_log.md` | `## date — title` + Decision / Reason / Classification / Confidence |
+| correction | `vault/corrections.md` | `### [date] title` + Error / Correction / Implied rule / Theme |
+| note | `vault/sessions/YYYY-MM-DD.md` | a bullet under an HSAM section |
+| relation | `data/brain.db` | subject —[predicate]→ object |
+| raw | `vault/raw/` | immutable source with sha256; the agent compiles `vault/knowledge/` |
+
+Rules: idempotent by content hash, append-only, nothing deleted, secrets refused before any store sees them. Details in [`docs/VAULT_SCHEMA.md`](docs/VAULT_SCHEMA.md).
+
+## Requirements
+
+- macOS for the installer (launchd); the library and MCP run anywhere Python 3.12 does
+- [Hindsight](https://github.com/vectorize-io/hindsight) (MIT) as the vector store, installed for you. Postgres is embedded; embeddings run on CPU
+- an LLM key for Hindsight's reasoning, or a Claude Code login for personal use
+
+## Roadmap
+
+- PyPI release so `uv tool install brain-core` needs no git URL
+- Linux installer (cron instead of launchd)
+- SQLite-only mode for a first run without Hindsight
+- an `import` for existing notes folders
+
+Shipped milestones: [`docs/MILESTONES.md`](docs/MILESTONES.md). Design: [`docs/SPEC_v0.2.md`](docs/SPEC_v0.2.md). Threat model for a memory that reads untrusted text: [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md).
+
+## Contributing
+
+Issues and pull requests welcome. `uv sync --all-extras --all-groups`, then `ruff check`, `mypy`, `pytest`. See [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## License
 
-MIT. See `LICENSE`.
+MIT.

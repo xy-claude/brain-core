@@ -35,7 +35,7 @@ def init_cmd(
         typer.Option("--force", "-f", help="Overwrite an existing agent in that directory."),
     ] = False,
     user: Annotated[
-        str, typer.Option("--user", help="How the agent addresses its user, e.g. 'Sir'.")
+        str, typer.Option("--user", help="How the agent addresses its user, e.g. 'Alex'.")
     ] = "the user",
     profile: Annotated[
         Path | None,
@@ -123,8 +123,12 @@ def hindsight_cmd(
         bool, typer.Option("--dashboard", help="Also install the control-plane UI on :9999.")
     ] = False,
     provider: Annotated[
-        str, typer.Option("--provider", help="LLM provider: claude-code (personal) | anthropic …")
-    ] = "claude-code",
+        str,
+        typer.Option(
+            "--provider",
+            help="LLM provider: anthropic (default) | openai | claude-code (personal use only)",
+        ),
+    ] = "anthropic",
     model: Annotated[str, typer.Option("--model")] = "claude-sonnet-5-5",
     api_key_env: Annotated[
         str | None, typer.Option("--api-key-env", help="Env var holding the provider key.")

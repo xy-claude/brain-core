@@ -34,7 +34,7 @@ class FakeHindsight(HindsightStore):
 
 
 def make(tmp_path: Path) -> Agent:
-    init_agent("Atlas", tmp_path / "atlas", False, user="Sir")
+    init_agent("Atlas", tmp_path / "atlas", False, user="Ada")
     vault = tmp_path / "atlas" / "vault"
     corr = "\n".join(
         f"### [{d}] {t}\n- **Error:** e\n- **Correction:** c\n- **Implied rule:** r\n"

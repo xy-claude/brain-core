@@ -5,12 +5,12 @@ tasks:
   - {q: entity graph database, expect: ["Kuzu"]}
   - {q: always loaded context baseline tokens, expect: ["18.7k"]}
   - {q: nightly backup archives kept, expect: ["14 archives", "hindsight_backup"]}
-  - {q: github account isolation ssh alias, expect: ["github-xyclaude"]}
+  - {q: github account isolation ssh alias, expect: ["github-work"]}
   - {q: parse a web page to markdown, expect: ["defuddle"]}
   - {q: youtube subtitles tool, expect: ["yt-dlp"]}
   - {q: laya mcp server tool count, expect: ["10 tools"]}
-  - {q: wheel-up payment rails, expect: ["GCash"]}
-  - {q: koopi parser stop loss inference, expect: ["stop loss"]}
+  - {q: rideapp payment rails, expect: ["GCash"]}
+  - {q: signal parser stop loss inference, expect: ["stop loss"]}
   - {q: north star monthly revenue goal, expect: ["30K"]}
   - {q: self-host before paying pattern, expect: ["Self-host before paying"]}
   - {q: verify before claim build output, expect: ["Verify before claim"]}

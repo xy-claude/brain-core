@@ -1,10 +1,10 @@
 """Machine setup pieces behind ``install.sh``: the Hindsight server as a launchd service.
 
 Hindsight (MIT, Vectorize) is a required store. ``brain hindsight install`` puts ``hindsight-api``
-in place with ``uv tool``, writes the LaunchAgent with the same environment XYCLAUDE runs
-(local embeddings on CPU, ``pg0`` embedded Postgres, LLM provider ``claude-code`` by default),
-bootstraps it and waits for ``/health``. ``--provider anthropic --api-key-env ANTHROPIC_API_KEY``
-is the customer path; ``claude-code`` is personal-use only under Anthropic's terms.
+in place with ``uv tool``, writes the LaunchAgent (local embeddings on CPU, ``pg0`` embedded
+Postgres, LLM provider ``anthropic`` by default reading ``ANTHROPIC_API_KEY``),
+bootstraps it and waits for ``/health``. ``--provider claude-code`` uses a Claude Code login
+instead of a key; Anthropic allows that for personal use only.
 """
 
 from __future__ import annotations
@@ -30,10 +30,14 @@ def hindsight_plist(
     api_bin: str,
     *,
     port: int = 8888,
-    provider: str = "claude-code",
+    provider: str = "anthropic",
     model: str = "claude-sonnet-5-5",
     api_key_env: str | None = None,
 ) -> dict[str, Any]:
+    if api_key_env is None and provider != "claude-code":
+        api_key_env = (
+            "ANTHROPIC_API_KEY" if provider == "anthropic" else f"{provider.upper()}_API_KEY"
+        )
     env = {
         "PATH": f"/opt/homebrew/bin:{home}/.local/bin:/usr/local/bin:/usr/bin:/bin",
         "HOME": str(home),
@@ -87,7 +91,7 @@ def install_hindsight(
     home: Path | None = None,
     launch_dir: Path | None = None,
     port: int = 8888,
-    provider: str = "claude-code",
+    provider: str = "anthropic",
     model: str = "claude-sonnet-5-5",
     api_key_env: str | None = None,
     dashboard: bool = False,

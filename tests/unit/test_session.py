@@ -32,9 +32,9 @@ def make(tmp_path: Path, *, queue: bool = True) -> tuple[Agent, Path, FakeHindsi
     vault.mkdir()
     (vault / "daily_brief.md").write_text("# Daily Brief — 2026-10-30\n\n## Hot Corrections\n- x\n")
     (vault / "executive_state.md").write_text(
-        "---\ntype: log\n---\n# Executive State\n\n## Primary Objective\nShip Wheel-Up V1\n\n"
-        "## Top Missions\n- **M-1** Wheel-Up V1 MVP iOS first\n- M-2 brain-core v0.2\n\n"
-        "## Pending Decisions (Sir)\n- none\n\n## Open Loops\n- lots\n"
+        "---\ntype: log\n---\n# Executive State\n\n## Primary Objective\nShip v1\n\n"
+        "## Top Missions\n- **M-1** v1 MVP iOS first\n- M-2 brain-core v0.2\n\n"
+        "## Pending Decisions (Ada)\n- none\n\n## Open Loops\n- lots\n"
     )
     (vault / "inbox_staged.md").write_text("# Inbox\n- item one\n- item two\n")
     q = tmp_path / "queue.jsonl"
@@ -51,7 +51,7 @@ def make(tmp_path: Path, *, queue: bool = True) -> tuple[Agent, Path, FakeHindsi
         stores:
           vault: {vault}
         session:
-          mental_models: [active-priorities, sir-working-style]
+          mental_models: [active-priorities, user-working-style]
           queue: {q if queue else "null"}
         """)
     )
@@ -74,9 +74,9 @@ def test_start_block_and_recovery_flag(tmp_path: Path) -> None:
         assert s["inbox"] == 2
         assert s["mental_models"] == {
             "active-priorities": "model active-priorities body",
-            "sir-working-style": "model sir-working-style body",
+            "user-working-style": "model user-working-style body",
         }
-        assert list(s["missions"]) == ["M-1 Wheel-Up V1 MVP iOS first", "M-2 brain-core v0.2"]
+        assert list(s["missions"]) == ["M-1 v1 MVP iOS first", "M-2 brain-core v0.2"]
         # a second start without an end → previous session flagged
         s2 = agent.brain_session("start", "s2")
         assert s2["recovery"] == {"unclosed": "s1", "started": s2["recovery"]["started"]}
