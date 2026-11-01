@@ -103,6 +103,23 @@ def tool_brain_session(
     )
 
 
+def tool_brain_distill(
+    agent: Agent,
+    source: str,
+    text: str | None = None,
+    title: str | None = None,
+    author: str | None = None,
+    published: str | None = None,
+) -> dict[str, Any]:
+    """v0.2: capture a URL / file / text into raw/."""
+    return agent.brain_distill(source, text=text, title=title, author=author, published=published)
+
+
+def tool_brain_status(agent: Agent) -> dict[str, Any]:
+    """v0.2: health in one call."""
+    return agent.brain_status()
+
+
 def tool_supersede(
     agent: Agent,
     old_fact_id: int,

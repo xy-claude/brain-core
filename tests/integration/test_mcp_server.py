@@ -1,10 +1,4 @@
-"""MCP server wiring tests.
-
-Verifies the FastMCP server registers every expected tool with the
-correct name and that call_tool works end-to-end for a representative
-sample. We don't spin up the stdio transport — that's for manual /
-Claude Code integration testing.
-"""
+"""MCP server wiring: exactly the five brain_* tools, and one round trip through FastMCP."""
 
 from __future__ import annotations
 
@@ -20,20 +14,8 @@ _EXPECTED_TOOLS = {
     "brain_recall",
     "brain_remember",
     "brain_session",
-    "remember",
-    "recall",
-    "supersede",
-    "log_event",
-    "recent_events",
-    "append_today",
-    "decide",
-    "reverse",
-    "complete",
-    "list_decisions",
-    "gather_context",
-    "save_reflection",
-    "template_summary",
-    "current_session",
+    "brain_distill",
+    "brain_status",
 }
 
 
@@ -45,41 +27,34 @@ def agent(tmp_path: Path) -> Agent:
 
 
 @pytest.mark.asyncio
-async def test_server_registers_all_expected_tools(agent: Agent) -> None:
+async def test_server_registers_only_the_five_brain_tools(agent: Agent) -> None:
     try:
-        server = build_server(agent)
-        registered = await server.list_tools()
-        names = {t.name for t in registered}
+        names = {t.name for t in await build_server(agent).list_tools()}
         assert names == _EXPECTED_TOOLS, (
-            f"missing: {_EXPECTED_TOOLS - names}, unexpected: {names - _EXPECTED_TOOLS}"
+            f"missing: {_EXPECTED_TOOLS - names}, extra: {names - _EXPECTED_TOOLS}"
         )
     finally:
         agent.close()
 
 
 @pytest.mark.asyncio
-async def test_server_tool_remember_round_trip(agent: Agent) -> None:
+async def test_server_remember_then_recall_round_trip(agent: Agent) -> None:
     try:
         server = build_server(agent)
-        result = await server.call_tool(
-            "remember",
-            {"content": "tested via MCP", "kind": "fact"},
+        w = await server.call_tool(
+            "brain_remember", {"text": "tested via MCP on port 8888", "kind": "fact"}
         )
-        # FastMCP returns a tuple: (content_parts, structured_output) on newer versions,
-        # or just content_parts on older. Unpack defensively.
-        structured = result[1] if isinstance(result, tuple) else result
-        assert isinstance(structured, dict)
-        assert structured["content"] == "tested via MCP"
-        assert structured["kind"] == "fact"
-        assert isinstance(structured["id"], int)
-    finally:
-        agent.close()
-
-
-@pytest.mark.asyncio
-async def test_server_name_includes_agent_name(agent: Agent) -> None:
-    try:
-        server = build_server(agent)
+        structured = w[1] if isinstance(w, tuple) else w
+        assert (
+            structured["status"] == "written"
+            and structured["layers"]["sqlite"]["status"] == "written"
+        )
+        r = await server.call_tool("brain_recall", {"query": "tested MCP 8888"})
+        structured = r[1] if isinstance(r, tuple) else r
+        assert structured["results"][0]["text"] == "tested via MCP on port 8888"
+        s = await server.call_tool("brain_status", {})
+        structured = s[1] if isinstance(s, tuple) else s
+        assert structured["stores"]["sqlite"]["ok"] is True
         assert "mcp-test" in server.name
     finally:
         agent.close()

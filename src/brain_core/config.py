@@ -96,6 +96,14 @@ class SessionConfig(BaseModel):
     marker: str | None = None  # clean-close marker; default data_dir/last_close.txt
 
 
+class StatusConfig(BaseModel):
+    """What ``brain_status`` measures as always-loaded context. Globs, relative to brain.yaml."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    context_files: list[str] = Field(default_factory=lambda: ["CLAUDE.md", ".claude/rules/*.md"])
+
+
 class BrainConfig(BaseModel):
     """Top-level ``brain.yaml`` schema.
 
@@ -114,6 +122,7 @@ class BrainConfig(BaseModel):
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     stores: StoresConfig = Field(default_factory=StoresConfig)
     session: SessionConfig = Field(default_factory=SessionConfig)
+    status: StatusConfig = Field(default_factory=StatusConfig)
 
     @field_validator("name")
     @classmethod

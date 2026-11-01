@@ -32,6 +32,7 @@ from typing import Any, Self, cast, get_args
 from brain_core.config import BrainConfig
 from brain_core.decisions import classifier
 from brain_core.decisions.classifier import Confidence, Decision, Risk, Status
+from brain_core.distill import brain_distill
 from brain_core.memory import episodic, hsam, structured
 from brain_core.memory.episodic import Event
 from brain_core.memory.hsam import HSAMDay
@@ -41,6 +42,7 @@ from brain_core.reflection import session as reflection_session
 from brain_core.reflection.session import SessionContext, SessionReflection
 from brain_core.remember import brain_remember
 from brain_core.session import session_end, session_start
+from brain_core.status import brain_status
 from brain_core.storage.db import Database
 from brain_core.storage.migrator import migrate
 from brain_core.stores import GraphStore, HindsightStore, SqliteStore, Store, VaultStore
@@ -50,10 +52,13 @@ from brain_core.stores.base import Kind
 class Agent:
     """Composed entry point over memory + decisions + reflection capabilities."""
 
-    def __init__(self, config: BrainConfig, db: Database, data_dir: Path) -> None:
+    def __init__(
+        self, config: BrainConfig, db: Database, data_dir: Path, config_path: Path | None = None
+    ) -> None:
         self._config = config
         self._db = db
         self._data_dir = data_dir
+        self.config_path = config_path
         self._current_session: str | None = None
         self._stores: list[Store] | None = None
 
@@ -74,7 +79,7 @@ class Agent:
 
         db = Database.connect(data_dir / "brain.db")
         migrate(db)
-        return cls(config=config, db=db, data_dir=data_dir)
+        return cls(config=config, db=db, data_dir=data_dir, config_path=cfg_path)
 
     # ── introspection ────────────────────────────────────────────────────────
 
@@ -280,6 +285,25 @@ class Agent:
                 self, session_id, executive_state=executive_state, critique=critique, sync=sync
             )
         raise ValueError("phase must be 'start' or 'end'")
+
+    def brain_distill(
+        self,
+        source: str,
+        *,
+        text: str | None = None,
+        title: str | None = None,
+        author: str | None = None,
+        published: str | None = None,
+    ) -> dict[str, Any]:
+        """Capture a source into ``raw/``. See :mod:`brain_core.distill`."""
+        self._require_capability("memory")
+        return brain_distill(
+            self, source, text=text, title=title, author=author, published=published
+        )
+
+    def brain_status(self) -> dict[str, Any]:
+        """Health in one call. See :mod:`brain_core.status`."""
+        return brain_status(self)
 
     # ── decisions ────────────────────────────────────────────────────────────
 
