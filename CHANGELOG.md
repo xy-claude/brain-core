@@ -4,6 +4,11 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-11-02
+
+### Changed
+- PyPI distribution name is `brain-core-mcp`; PyPI rejected `brain-core` as too similar to an existing project. Command `brain` and package `brain_core` unchanged.
+
 ## [0.2.1] - 2026-11-02
 
 ### Added

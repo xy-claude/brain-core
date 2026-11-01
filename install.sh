@@ -1,7 +1,7 @@
 #!/bin/bash
 # brain-core one-line installer (macOS and Linux).
 #
-#   curl -fsSL https://raw.githubusercontent.com/xy-claude/brain-core/main/install.sh | bash -s -- --agent NAME [--user Alex] [--dir ~/Agents/NAME] [--provider anthropic|openai|claude-code] [--profile DIR] [--dashboard] [--ref v0.2.1]
+#   curl -fsSL https://raw.githubusercontent.com/xy-claude/brain-core/main/install.sh | bash -s -- --agent NAME [--user Alex] [--dir ~/Agents/NAME] [--provider anthropic|openai|claude-code] [--profile DIR] [--dashboard] [--ref v0.2.2]
 #
 # Idempotent: re-running skips what is already in place. Every step prints what it did.
 # It never asks for secrets. Three things stay yours: `claude` login, `gh auth login`, SSH keys.
@@ -62,7 +62,7 @@ if [ -n "$REF" ]; then
 elif have brain; then
   echo "brain present ($(brain version))"
 else
-  uv tool install brain-core || uv tool install "git+https://github.com/xy-claude/brain-core@main"
+  uv tool install brain-core-mcp || uv tool install "git+https://github.com/xy-claude/brain-core@main"
 fi
 
 step "5/8 Agent $AGENT at $DIR"
