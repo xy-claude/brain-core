@@ -61,3 +61,12 @@ def test_install_sh_parses_and_refuses_without_agent() -> None:
     assert r.returncode == 2 and "usage:" in r.stderr
     if shutil.which("shellcheck"):
         assert subprocess.run(["shellcheck", "-S", "warning", str(script)]).returncode == 0
+
+
+def test_systemd_unit_carries_the_environment(tmp_path: Path) -> None:
+    plist = installer.hindsight_plist(tmp_path, "/x/hindsight-api")
+    unit = installer.hindsight_unit("/x/hindsight-api", plist["EnvironmentVariables"])
+    assert "ExecStart=/x/hindsight-api" in unit and "Restart=always" in unit
+    assert 'Environment="HINDSIGHT_API_DATABASE_URL=pg0://hindsight"' in unit
+    assert 'Environment="HINDSIGHT_API_LLM_API_KEY=${ANTHROPIC_API_KEY}"' in unit
+    assert unit.endswith("WantedBy=default.target\n")

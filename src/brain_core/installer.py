@@ -14,6 +14,7 @@ import os
 import plistlib
 import shutil
 import subprocess
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -86,6 +87,16 @@ def control_plane_plist(
     }
 
 
+def hindsight_unit(api_bin: str, env: dict[str, str]) -> str:
+    """systemd user unit text (Linux) with the same environment as the LaunchAgent."""
+    lines = "\n".join(f'Environment="{k}={v}"' for k, v in env.items())
+    return (
+        "[Unit]\nDescription=Hindsight memory server (brain-core)\nAfter=network.target\n\n"
+        f"[Service]\nExecStart={api_bin}\nRestart=always\nRestartSec=3\n{lines}\n\n"
+        "[Install]\nWantedBy=default.target\n"
+    )
+
+
 def install_hindsight(
     *,
     home: Path | None = None,
@@ -125,6 +136,29 @@ def install_hindsight(
         out["hindsight-api"] = "installed"
     else:
         out["hindsight-api"] = "present" if Path(api_bin).exists() else "not installed (dry run)"
+
+    if sys.platform != "darwin":
+        unit_dir = home / ".config" / "systemd" / "user"
+        unit_dir.mkdir(parents=True, exist_ok=True)
+        body = hindsight_plist(
+            home, api_bin, port=port, provider=provider, model=model, api_key_env=api_key_env
+        )
+        unit = unit_dir / "hindsight.service"
+        unit.write_text(hindsight_unit(api_bin, body["EnvironmentVariables"]), encoding="utf-8")
+        out["unit"] = str(unit)
+        if not run:
+            out["service"] = "not started (dry run)"
+            return out
+        subprocess.run(["systemctl", "--user", "daemon-reload"], capture_output=True)
+        subprocess.run(
+            ["systemctl", "--user", "enable", "--now", "hindsight.service"], capture_output=True
+        )
+        out["service"] = (
+            "healthy"
+            if wait_healthy(port, wait)
+            else f"not healthy after {wait:.0f}s; journalctl --user -u hindsight"
+        )
+        return out
 
     plist = launch_dir / f"{LABEL}.plist"
     plist.write_bytes(

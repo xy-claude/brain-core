@@ -1,0 +1,60 @@
+name: release
+
+# Tag v* → build sdist+wheel → publish to PyPI (trusted publishing, no token) → GitHub Release.
+# One-time setup on PyPI: add a "pending publisher" for xy-claude/brain-core, workflow
+# release.yml, environment pypi. See docs/RELEASING.md.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write     # create the GitHub Release
+  id-token: write     # OIDC for PyPI trusted publishing
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv python install 3.12
+      - run: uv sync --all-extras --all-groups
+      - name: Tests must pass before anything ships
+        run: uv run pytest -q
+      - name: Tag must match pyproject version
+        run: |
+          v="$(uv run brain version)"
+          [ "v$v" = "${GITHUB_REF_NAME}" ] || { echo "tag ${GITHUB_REF_NAME} != pyproject $v"; exit 1; }
+      - run: uv build
+      - uses: actions/upload-artifact@v4
+        with: {name: dist, path: dist/}
+
+  pypi:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    steps:
+      - uses: actions/download-artifact@v4
+        with: {name: dist, path: dist/}
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  github-release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: {name: dist, path: dist/}
+      - name: Release notes from CHANGELOG
+        run: |
+          awk -v tag="${GITHUB_REF_NAME#v}" '
+            $0 ~ "^## \\[" tag "\\]" {p=1; next}
+            p && /^## \[/ {exit}
+            p {print}
+          ' CHANGELOG.md > notes.md
+          [ -s notes.md ] || echo "See CHANGELOG.md" > notes.md
+      - uses: softprops/action-gh-release@v2
+        with:
+          body_path: notes.md
+          files: dist/*

@@ -265,6 +265,42 @@ def consolidate(sdir: Path, today: date) -> dict[str, int]:
     return dict(moved)
 
 
+# ── crontab (Linux) ───────────────────────────────────────────────────────────
+
+CRON_TAG = "# brain-core"
+
+
+def cron_lines(
+    agent_dir: Path, brain_bin: str, name: str, daily_at: str, weekly_at: str
+) -> list[str]:
+    """Two crontab lines, tagged so install/uninstall can find their own."""
+    dh, dm = (int(x) for x in daily_at.split(":"))
+    wday, wtime = weekly_at.split()
+    wh, wm = (int(x) for x in wtime.split(":"))
+    weekday = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"].index(wday[:3].lower())
+    log = agent_dir / "data" / "logs"
+    tag = f"{CRON_TAG} {name.lower()}"
+    daily = f"{dm} {dh} * * * {brain_bin} daily {agent_dir} >> {log}/daily.log 2>&1 {tag} daily"
+    weekly = f"{wm} {wh} * * {weekday} {brain_bin} weekly {agent_dir} >> {log}/weekly.log 2>&1"
+    return [daily, f"{weekly} {tag} weekly"]
+
+
+def _crontab_merge(current: str, name: str, new_lines: list[str]) -> str:
+    """Current crontab text minus this agent's tagged lines, plus ``new_lines``."""
+    tag = f"{CRON_TAG} {name.lower()} "
+    keep = [ln for ln in current.splitlines() if tag not in ln]
+    return "\n".join([*keep, *new_lines]).strip("\n") + ("\n" if keep or new_lines else "")
+
+
+def _install_crontab(agent: Agent, agent_dir: Path, brain_bin: str) -> list[str]:
+    c = agent.config.cron
+    lines = cron_lines(agent_dir, brain_bin, agent.name, c.daily, c.weekly)
+    cp = subprocess.run(["crontab", "-l"], capture_output=True, text=True)
+    merged = _crontab_merge(cp.stdout if cp.returncode == 0 else "", agent.name, lines)
+    subprocess.run(["crontab", "-"], input=merged, text=True, check=True)
+    return lines
+
+
 # ── launchd ───────────────────────────────────────────────────────────────────
 
 
@@ -302,9 +338,17 @@ def install(agent: Agent, launch_dir: Path | None = None, load: bool = True) -> 
     """Write the plists (and bootstrap them unless ``load=False``). Returns their paths."""
     agent_dir = agent.config_path.parent if agent.config_path else Path.cwd()
     brain_bin = shutil.which("brain") or str(Path(sys.executable).with_name("brain"))
+    (agent_dir / "data" / "logs").mkdir(parents=True, exist_ok=True)
+    if sys.platform != "darwin" and launch_dir is None:
+        return (
+            _install_crontab(agent, agent_dir, brain_bin)
+            if load
+            else cron_lines(
+                agent_dir, brain_bin, agent.name, agent.config.cron.daily, agent.config.cron.weekly
+            )
+        )
     launch_dir = launch_dir or Path("~/Library/LaunchAgents").expanduser()
     launch_dir.mkdir(parents=True, exist_ok=True)
-    (agent_dir / "data" / "logs").mkdir(parents=True, exist_ok=True)
     c = agent.config.cron
     written = []
     for label, body in plists(agent_dir, brain_bin, agent.name, c.daily, c.weekly).items():
@@ -322,6 +366,12 @@ def install(agent: Agent, launch_dir: Path | None = None, load: bool = True) -> 
 
 
 def uninstall(agent: Agent, launch_dir: Path | None = None) -> list[str]:
+    if sys.platform != "darwin" and launch_dir is None:
+        cp = subprocess.run(["crontab", "-l"], capture_output=True, text=True)
+        before = cp.stdout if cp.returncode == 0 else ""
+        after = _crontab_merge(before, agent.name, [])
+        subprocess.run(["crontab", "-"], input=after, text=True, check=True)
+        return [ln for ln in before.splitlines() if f"{CRON_TAG} {agent.name.lower()} " in ln]
     launch_dir = launch_dir or Path("~/Library/LaunchAgents").expanduser()
     removed = []
     for suffix in ("daily", "weekly"):

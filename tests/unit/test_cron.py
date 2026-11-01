@@ -126,3 +126,15 @@ def test_cron_install_writes_launchd_plists(tmp_path: Path) -> None:
     assert daily["StartCalendarInterval"] == {"Hour": 6, "Minute": 7}
     assert weekly["StartCalendarInterval"] == {"Weekday": 0, "Hour": 7, "Minute": 13}
     assert daily["StandardOutPath"].endswith("data/logs/daily.log")
+
+
+def test_cron_lines_and_crontab_merge(tmp_path: Path) -> None:
+    lines = cron.cron_lines(tmp_path / "a", "/usr/local/bin/brain", "Atlas", "06:07", "Sun 07:13")
+    assert lines[0].startswith(f"7 6 * * * /usr/local/bin/brain daily {tmp_path / 'a'}")
+    assert lines[1].startswith(f"13 7 * * 0 /usr/local/bin/brain weekly {tmp_path / 'a'}")
+    assert all("# brain-core atlas" in ln for ln in lines)
+    current = "0 3 * * * backup.sh\n7 6 * * * old brain daily x # brain-core atlas daily\n"
+    merged = cron._crontab_merge(current, "Atlas", lines)
+    assert merged.splitlines()[0] == "0 3 * * * backup.sh" and "old brain" not in merged
+    assert merged.count("# brain-core atlas") == 2
+    assert cron._crontab_merge(merged, "Atlas", []) == "0 3 * * * backup.sh\n"

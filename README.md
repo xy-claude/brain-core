@@ -74,14 +74,18 @@ Then, once: `export ANTHROPIC_API_KEY=...` (Hindsight uses it to reason over mem
 | `--provider` | `anthropic` (default), `openai`, or `claude-code` (uses your Claude Code login; personal use only) |
 | `--profile DIR` | a folder copied over the generic rules last, for your own doctrine |
 | `--dashboard` | the Hindsight web UI on http://localhost:9999 |
-| `--ref v0.2.0` | pin a release |
+| `--ref v0.2.1` | pin a git tag instead of the PyPI release |
+
+### Linux
+
+The same one line. On Linux it installs uv, Claude Code via npm when node is present, Hindsight as a systemd user service, and the two jobs in your user crontab.
 
 ### Manual, any platform
 
 ```bash
-uv tool install git+https://github.com/xy-claude/brain-core@v0.2.0
+uv tool install brain-core       # or: uv tool install git+https://github.com/xy-claude/brain-core@v0.2.1
 brain init Atlas --path ~/Agents/Atlas --user Alex
-brain hindsight install          # macOS launchd; on Linux run hindsight-api yourself
+brain hindsight install          # launchd on macOS, systemd --user on Linux
 brain cron install ~/Agents/Atlas
 brain doctor ~/Agents/Atlas
 ```
@@ -170,14 +174,12 @@ Rules: idempotent by content hash, append-only, nothing deleted, secrets refused
 
 ## Requirements
 
-- macOS for the installer (launchd); the library and MCP run anywhere Python 3.12 does
+- macOS or Linux for the installer; the library and MCP run anywhere Python 3.12 does
 - [Hindsight](https://github.com/vectorize-io/hindsight) (MIT) as the vector store, installed for you. Postgres is embedded; embeddings run on CPU
 - an LLM key for Hindsight's reasoning, or a Claude Code login for personal use
 
 ## Roadmap
 
-- PyPI release so `uv tool install brain-core` needs no git URL
-- Linux installer (cron instead of launchd)
 - SQLite-only mode for a first run without Hindsight
 - an `import` for existing notes folders
 
