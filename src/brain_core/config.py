@@ -81,6 +81,21 @@ class StoresConfig(BaseModel):
     graph: GraphConfig | None = None
 
 
+class SessionConfig(BaseModel):
+    """Files ``brain_session`` reads at start and writes at end. Paths are relative to the vault."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    brief: str = "daily_brief.md"
+    executive: str = "executive_state.md"
+    inbox: str = "inbox_staged.md"
+    critique: str = "session_critique.md"
+    sync: str = "last_standalone_session.md"
+    mental_models: list[str] = Field(default_factory=lambda: ["active-priorities"])
+    queue: str | None = None  # Hindsight amnesia queue (jsonl), drained at end
+    marker: str | None = None  # clean-close marker; default data_dir/last_close.txt
+
+
 class BrainConfig(BaseModel):
     """Top-level ``brain.yaml`` schema.
 
@@ -98,6 +113,7 @@ class BrainConfig(BaseModel):
     reflection: ReflectionConfig = Field(default_factory=ReflectionConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     stores: StoresConfig = Field(default_factory=StoresConfig)
+    session: SessionConfig = Field(default_factory=SessionConfig)
 
     @field_validator("name")
     @classmethod

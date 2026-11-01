@@ -83,6 +83,24 @@ def build_server(agent: Agent) -> FastMCP:
         return tools.tool_brain_remember(agent, text, kind, domain, source, mission, force, extra)
 
     @server.tool()
+    def brain_session(
+        phase: str,
+        session_id: str | None = None,
+        executive_state: str | None = None,
+        critique: str | None = None,
+        sync: str | None = None,
+    ) -> dict[str, Any]:
+        """Open or close a session in one call. `phase='start'` returns the whole start block:
+        the cron daily brief (with a stale flag), executive state (objective, missions, pending
+        decisions), the configured Hindsight mental models, a recall for each top mission, the
+        staged-inbox count, and `recovery` if the previous session never closed. `phase='end'`
+        drains the Hindsight queue, appends a close line to today's HSAM file, rewrites
+        executive_state / session_critique / cross-agent sync from the text you pass (or writes
+        a stub built from this session's brain_remember calls), and writes the clean-close
+        marker. Pass `executive_state`, `critique` and `sync` as full markdown bodies."""
+        return tools.tool_brain_session(agent, phase, session_id, executive_state, critique, sync)
+
+    @server.tool()
     def remember(
         content: str,
         kind: FactKind = "fact",

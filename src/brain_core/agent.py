@@ -40,6 +40,7 @@ from brain_core.recall import brain_recall
 from brain_core.reflection import session as reflection_session
 from brain_core.reflection.session import SessionContext, SessionReflection
 from brain_core.remember import brain_remember
+from brain_core.session import session_end, session_start
 from brain_core.storage.db import Database
 from brain_core.storage.migrator import migrate
 from brain_core.stores import GraphStore, HindsightStore, SqliteStore, Store, VaultStore
@@ -105,7 +106,7 @@ class Agent:
             s = self._config.stores
             self._stores = [SqliteStore(self._db)]
             if s.vault:
-                self._stores.append(VaultStore(s.vault, owner=self.name))
+                self._stores.append(VaultStore(s.vault, owner=self.name.lower()))
             if s.hindsight:
                 self._stores.append(HindsightStore(s.hindsight.url, s.hindsight.bank, self.name))
             if s.graph:
@@ -235,7 +236,7 @@ class Agent:
         self._require_capability("memory")
         if kind not in get_args(Kind):
             raise ValueError(f"kind must be one of {'|'.join(get_args(Kind))}")
-        return brain_remember(
+        out = brain_remember(
             self.stores,
             text,
             cast(Kind, kind),
@@ -246,6 +247,39 @@ class Agent:
             force=force,
             **cast(dict[str, Any], extra),
         )
+        # the session journal: brain_session('end') reports and summarises these
+        episodic.log_event(
+            self._db,
+            "brain_remember",
+            payload={
+                "kind": kind,
+                "id": out.get("id", ""),
+                "status": out["status"],
+                "text": out["text"][:200],
+                "contradiction": "contradiction" in out,
+            },
+            session_id=self._current_session,
+        )
+        return out
+
+    def brain_session(
+        self,
+        phase: str,
+        session_id: str | None = None,
+        *,
+        executive_state: str | None = None,
+        critique: str | None = None,
+        sync: str | None = None,
+    ) -> dict[str, Any]:
+        """START block or END writes. See :mod:`brain_core.session`."""
+        self._require_capability("memory")
+        if phase == "start":
+            return session_start(self, session_id)
+        if phase == "end":
+            return session_end(
+                self, session_id, executive_state=executive_state, critique=critique, sync=sync
+            )
+        raise ValueError("phase must be 'start' or 'end'")
 
     # ── decisions ────────────────────────────────────────────────────────────
 

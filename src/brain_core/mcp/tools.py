@@ -89,6 +89,20 @@ def tool_brain_remember(
     )
 
 
+def tool_brain_session(
+    agent: Agent,
+    phase: str,
+    session_id: str | None = None,
+    executive_state: str | None = None,
+    critique: str | None = None,
+    sync: str | None = None,
+) -> dict[str, Any]:
+    """v0.2: START block / END writes in one call."""
+    return agent.brain_session(
+        phase, session_id, executive_state=executive_state, critique=critique, sync=sync
+    )
+
+
 def tool_supersede(
     agent: Agent,
     old_fact_id: int,

@@ -75,7 +75,7 @@ brain-core is RAG-shaped (memory + retrieval + LLM reasoning). That shape has a 
 | 9 | v0.2 store adapters: vault (markdown by kind), Hindsight (MCP HTTP), graph (CLI) — `docs/VAULT_SCHEMA.md` | ✅ |
 | 10 | `brain_recall` merged across stores, concise/detailed, caps — 20/20 eval hits, ~1.7 s per query | ✅ |
 | 11 | `brain_remember` write-through vault → sqlite → Hindsight → graph, per-layer status, dedup, `⚠ Fact changed` banner | ✅ |
-| 12 | `brain_session` start/end | ⬜ |
+| 12 | `brain_session` start (brief, executive state, mental models, mission recall, inbox, recovery) / end (queue drain, HSAM close, critique, sync, marker) | ✅ |
 | 13 | `brain_distill` capture + `brain_status` | ⬜ |
 | 14 | Eval set (30 tasks), held-out ≥ 90% | ⬜ |
 | 15 | Dogfood on XYCLAUDE, Obsidian MCP retired | ⬜ |
