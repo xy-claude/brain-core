@@ -10,6 +10,8 @@
 curl -fsSL https://raw.githubusercontent.com/xy-claude/brain-core/main/install.sh | bash -s -- --agent Atlas --user Alex
 ```
 
+<img src="docs/img/demo.gif" alt="brain init, brain doctor, then a real session: remember, a changed fact with its banner, recall" width="900">
+
 ---
 
 ## The problem
