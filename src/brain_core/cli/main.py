@@ -116,6 +116,51 @@ def _open(path: Path) -> Agent:
     return Agent.from_config(cfg)
 
 
+@app.command("hindsight")
+def hindsight_cmd(
+    action: Annotated[str, typer.Argument(help="install | status")],
+    dashboard: Annotated[
+        bool, typer.Option("--dashboard", help="Also install the control-plane UI on :9999.")
+    ] = False,
+    provider: Annotated[
+        str, typer.Option("--provider", help="LLM provider: claude-code (personal) | anthropic …")
+    ] = "claude-code",
+    model: Annotated[str, typer.Option("--model")] = "claude-sonnet-5-5",
+    api_key_env: Annotated[
+        str | None, typer.Option("--api-key-env", help="Env var holding the provider key.")
+    ] = None,
+    port: Annotated[int, typer.Option("--port")] = 8888,
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Write plists only; no install, no launchctl.")
+    ] = False,
+    launch_dir: Annotated[
+        Path | None, typer.Option("--launch-dir", help="Default ~/Library/LaunchAgents.")
+    ] = None,
+) -> None:
+    """Install the self-hosted Hindsight server as a launchd service, or report its health."""
+    from brain_core import installer
+
+    if action == "status":
+        typer.echo(f"hindsight on :{port}: {'healthy' if installer.health(port) else 'DOWN'}")
+        return
+    if action != "install":
+        typer.echo("action must be install | status", err=True)
+        raise typer.Exit(code=1)
+    out = installer.install_hindsight(
+        port=port,
+        provider=provider,
+        model=model,
+        api_key_env=api_key_env,
+        dashboard=dashboard,
+        run=not dry_run,
+        launch_dir=launch_dir,
+    )
+    for k, v in out.items():
+        typer.echo(f"  {k}: {v}")
+    if out.get("service", "").startswith("not healthy"):
+        raise typer.Exit(code=1)
+
+
 @app.command("doctor")
 def doctor_cmd(
     path: Annotated[
@@ -123,8 +168,27 @@ def doctor_cmd(
         typer.Argument(help="Path to agent directory (contains brain.yaml)."),
     ] = Path(),
 ) -> None:
-    """Run a health check on an agent: config validates, DB reachable, row counts."""
+    """Health check: config, DB, then brain_status (stores, lint, context, session)."""
     doctor_agent(path=path)
+    cfg = path if path.is_file() else path / "brain.yaml"
+    with Agent.from_config(cfg) as agent:
+        st = agent.brain_status()
+    for name, s in st["stores"].items():
+        typer.echo(f"  store {name:9} {'OK  ' if s['ok'] else 'DOWN'} {s['detail'][:70]}")
+    k = st.get("knowledge", {})
+    typer.echo(
+        f"  knowledge  {k.get('pages', 0)} pages, {k.get('raw', 0)} raw, "
+        f"{k.get('issue_count', 0)} lint issue(s)"
+    )
+    typer.echo(f"  context    {st['context']['tokens']} always-loaded tokens")
+    ses = st["session"]
+    flag = "  UNCLOSED" if ses["unclosed"] else ""
+    typer.echo(
+        f"  session    last start {ses['last_start'] or '-'} · "
+        f"last close {ses['last_close'] or '-'}{flag}"
+    )
+    typer.echo(f"  pending    {st.get('pending_decisions', 0)} decision(s)")
+    typer.echo(f"Brain: {'OK' if st['ok'] else 'ATTENTION'}")
 
 
 @app.command("export")

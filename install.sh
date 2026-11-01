@@ -1,0 +1,73 @@
+#!/bin/bash
+# brain-core one-line installer for a fresh Mac.
+#
+#   curl -fsSL https://raw.githubusercontent.com/xy-claude/brain-core/main/install.sh | bash -s -- --agent NAME [--user Sir] [--dir ~/Agents/NAME] [--profile DIR] [--dashboard] [--ref v0.2.0]
+#
+# Idempotent: re-running skips what is already in place. Every step prints what it did.
+# It never asks for secrets. Three things stay yours: `claude` login, `gh auth login`, SSH keys.
+set -euo pipefail
+
+AGENT=""; USER_NAME="the user"; DIR=""; PROFILE=""; DASHBOARD=0; REF="main"
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --agent) AGENT="$2"; shift 2;;
+    --user) USER_NAME="$2"; shift 2;;
+    --dir) DIR="$2"; shift 2;;
+    --profile) PROFILE="$2"; shift 2;;
+    --dashboard) DASHBOARD=1; shift;;
+    --ref) REF="$2"; shift 2;;
+    -h|--help) sed -n '2,8p' "$0"; exit 0;;
+    *) echo "unknown option: $1" >&2; exit 2;;
+  esac
+done
+[ -n "$AGENT" ] || { echo "usage: install.sh --agent NAME [--user Sir] [--dir PATH] [--profile DIR] [--dashboard] [--ref TAG]" >&2; exit 2; }
+DIR="${DIR:-$HOME/Agents/$AGENT}"
+[ "$(uname -s)" = "Darwin" ] || { echo "brain-core install.sh targets macOS (launchd). On Linux: uv tool install, then brain init." >&2; exit 1; }
+
+step() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
+have() { command -v "$1" >/dev/null 2>&1; }
+
+step "1/8 Xcode command line tools (git)"
+if xcode-select -p >/dev/null 2>&1; then echo "present"; else xcode-select --install || true; echo "finish the macOS dialog, then re-run this script"; exit 1; fi
+
+step "2/8 Homebrew"
+if have brew; then echo "present"; else
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+fi
+[ -x /opt/homebrew/bin/brew ] && eval "$(/opt/homebrew/bin/brew shellenv)"
+
+step "3/8 uv, gh, gitleaks, node, Claude Code"
+for pkg in uv gh gitleaks node; do have "$pkg" && echo "$pkg present" || brew install "$pkg"; done
+if have claude; then echo "claude present ($(claude --version 2>/dev/null | head -1))"; else brew install --cask claude-code || npm install -g @anthropic-ai/claude-code; fi
+
+step "4/8 brain-core ($REF)"
+if have brain && [ "$REF" = "main" ]; then echo "brain present ($(brain version))"; else
+  uv tool install --force "git+https://github.com/xy-claude/brain-core@$REF"
+fi
+export PATH="$HOME/.local/bin:$PATH"
+
+step "5/8 Agent $AGENT at $DIR"
+if [ -f "$DIR/brain.yaml" ]; then echo "already initialised, leaving it"; else
+  ARGS=(init "$AGENT" --path "$DIR" --user "$USER_NAME"); [ -n "$PROFILE" ] && ARGS+=(--profile "$PROFILE")
+  brain "${ARGS[@]}"
+fi
+
+step "6/8 Hindsight (required store)"
+HS_ARGS=(hindsight install); [ "$DASHBOARD" = 1 ] && HS_ARGS+=(--dashboard)
+brain "${HS_ARGS[@]}"
+
+step "7/8 Cron (brain daily 06:07, brain weekly Sun 07:13)"
+brain cron install "$DIR"
+
+step "8/8 Doctor"
+brain doctor "$DIR" || true
+
+cat <<EOF
+
+Done. Still yours to do, once:
+  claude            # sign in to Claude Code (Hindsight's claude-code provider uses this login)
+  gh auth login     # GitHub, if the agent pushes
+  ssh-keygen ...    # keys for your GitHub accounts, if any
+
+Then: cd "$DIR" && claude
+EOF

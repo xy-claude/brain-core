@@ -26,7 +26,7 @@ def doctor_agent(path: Path) -> None:
 
     Exits non-zero on missing brain.yaml, invalid config, or DB access error.
     """
-    config_path = path / "brain.yaml"
+    config_path = path if path.is_file() else path / "brain.yaml"
     if not config_path.exists():
         typer.echo(f"ERROR: no brain.yaml at {config_path}", err=True)
         raise typer.Exit(code=1)

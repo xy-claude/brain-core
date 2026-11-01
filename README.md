@@ -6,6 +6,14 @@ Cognitive primitives for AI agents — memory, decisions, reflection — as an i
 
 ---
 
+## Install on a fresh Mac
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/xy-claude/brain-core/main/install.sh | bash -s -- --agent NAME --user Sir
+```
+
+One command: Xcode CLT, Homebrew, uv, gh, gitleaks, node, Claude Code, `brain-core`, `brain init NAME`, the self-hosted Hindsight server as a launchd service, `brain cron install`, `brain doctor`. Idempotent. Add `--profile DIR` to overlay your own rules, `--dashboard` for the Hindsight UI on :9999, `--ref v0.2.0` to pin. What stays yours: `claude` login, `gh auth login`, SSH keys.
+
 ## Why this exists
 
 Agent projects keep reinventing the same cognition layer — how do I remember things across sessions, how do I log decisions with reasoning, how do I reflect on what worked. `brain-core` extracts that substrate once and versions it, so new agents onboard by declaring a dependency instead of cloning a monorepo.
@@ -81,6 +89,7 @@ brain-core is RAG-shaped (memory + retrieval + LLM reasoning). That shape has a 
 | 15 | Dogfood on XYCLAUDE, Obsidian MCP retired | ⬜ (started 2026-11-02) |
 | 16 | Template pack: `brain init NAME --user --profile DIR` writes CLAUDE.md, 5 generic rules, 3 skills, bash guard hook, `.mcp.json`, vault skeleton | ✅ |
 | 18 | Cron engine: `brain daily` (brief, health line, Hindsight backup), `brain weekly` (archive sessions > 30d, refresh mental models), `brain cron install` (launchd) | ✅ |
+| 19 | Installer: `install.sh` one-liner, `brain hindsight install` (launchd service, claude-code or customer provider), `brain doctor` on `brain_status` | ✅ (export/import lands after M17) |
 
 ## License
 
