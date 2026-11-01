@@ -45,6 +45,8 @@ Plus `brain_status()` for health in one call, and two cron jobs that write the n
 
 ### macOS, one line
 
+<img src="docs/img/install.svg" alt="install.sh transcript" width="820">
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/xy-claude/brain-core/main/install.sh | bash -s -- --agent Atlas --user Alex
 ```
@@ -85,6 +87,8 @@ brain doctor ~/Agents/Atlas
 ```
 
 ## First session
+
+<img src="docs/img/session.svg" alt="first session transcript" width="820">
 
 ```bash
 cd ~/Agents/Atlas && claude

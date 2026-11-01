@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="700" viewBox="0 0 820 700" font-family="SFMono-Regular, Menlo, Consolas, monospace" font-size="14">
+<rect width="820" height="700" rx="10" fill="#0f172a"/>
+<circle cx="22" cy="20" r="6" fill="#ff5f57"/><circle cx="42" cy="20" r="6" fill="#febc2e"/><circle cx="62" cy="20" r="6" fill="#28c840"/>
+<text x="410" y="25" text-anchor="middle" fill="#94a3b8" font-size="12">install.sh — one command on a fresh Mac</text>
+<text x="24" y="56" fill="#7dd3fc" xml:space="preserve">$ curl -fsSL https://raw.githubusercontent.com/xy-claude/brain-core/main/install.sh \</text>
+<text x="24" y="78" fill="#7dd3fc" xml:space="preserve">    | bash -s -- --agent Atlas --user Alex</text>
+<text x="24" y="100" fill="#e2e8f0" xml:space="preserve"></text>
+<text x="24" y="122" fill="#fbbf24" xml:space="preserve">== 1/8 Xcode command line tools</text>
+<text x="24" y="144" fill="#4ade80" xml:space="preserve">present</text>
+<text x="24" y="166" fill="#fbbf24" xml:space="preserve">== 2/8 Homebrew</text>
+<text x="24" y="188" fill="#4ade80" xml:space="preserve">present</text>
+<text x="24" y="210" fill="#fbbf24" xml:space="preserve">== 3/8 uv, gh, gitleaks, node, Claude Code</text>
+<text x="24" y="232" fill="#4ade80" xml:space="preserve">uv present · gh present · gitleaks present · node present · claude present</text>
+<text x="24" y="254" fill="#fbbf24" xml:space="preserve">== 4/8 brain-core (v0.2.0)</text>
+<text x="24" y="276" fill="#4ade80" xml:space="preserve">Installed 1 executable: brain</text>
+<text x="24" y="298" fill="#fbbf24" xml:space="preserve">== 5/8 Agent Atlas at ~/Agents/Atlas</text>
+<text x="24" y="320" fill="#4ade80" xml:space="preserve">Agent &#x27;Atlas&#x27; written to ~/Agents/Atlas: 31 files</text>
+<text x="24" y="342" fill="#94a3b8" xml:space="preserve">  memory: vault/ · data/brain.db · Hindsight bank atlas-brain</text>
+<text x="24" y="364" fill="#fbbf24" xml:space="preserve">== 6/8 Hindsight (required store)</text>
+<text x="24" y="386" fill="#4ade80" xml:space="preserve">hindsight-api: installed · plist: ~/Library/LaunchAgents/io.vectorize.hindsight.plist · service: healthy</text>
+<text x="24" y="408" fill="#fbbf24" xml:space="preserve">== 7/8 Cron (brain daily 06:07, brain weekly Sun 07:13)</text>
+<text x="24" y="430" fill="#4ade80" xml:space="preserve">wrote io.brain-core.atlas.daily.plist · io.brain-core.atlas.weekly.plist</text>
+<text x="24" y="452" fill="#fbbf24" xml:space="preserve">== 8/8 Doctor</text>
+<text x="24" y="474" fill="#e2e8f0" xml:space="preserve">  store sqlite    OK   sqlite facts=0</text>
+<text x="24" y="496" fill="#e2e8f0" xml:space="preserve">  store vault     OK   ~/Agents/Atlas/vault</text>
+<text x="24" y="518" fill="#e2e8f0" xml:space="preserve">  store hindsight OK   http://127.0.0.1:8888 bank=atlas-brain status=healthy</text>
+<text x="24" y="540" fill="#e2e8f0" xml:space="preserve">  store graph     OK   graph relations=0</text>
+<text x="24" y="562" fill="#e2e8f0" xml:space="preserve">  context    3014 always-loaded tokens</text>
+<text x="24" y="584" fill="#4ade80" xml:space="preserve">Brain: OK</text>
+<text x="24" y="606" fill="#e2e8f0" xml:space="preserve"></text>
+<text x="24" y="628" fill="#94a3b8" xml:space="preserve">Done. Still yours to do, once:  export ANTHROPIC_API_KEY=...   claude</text>
+<text x="24" y="650" fill="#7dd3fc" xml:space="preserve">$ cd ~/Agents/Atlas &amp;&amp; claude</text>
+</svg>
