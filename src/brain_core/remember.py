@@ -14,6 +14,7 @@ from typing import Any
 
 from brain_core.recall import tokens
 from brain_core.stores.base import Kind, Record, Store, WriteResult, record_id
+from brain_core.stores.vault import _SECRET
 
 ORDER = ("vault", "sqlite", "hindsight", "graph")
 DUPLICATE = 0.8  # Jaccard at or above: same fact, skip
@@ -44,6 +45,8 @@ def brain_remember(
         text = f"{extra['subject']} —[{extra['predicate']}]→ {extra['object']}"
     if not text:
         raise ValueError("text must not be empty")
+    if _SECRET.search(text):
+        raise ValueError("text looks like it contains a secret; nothing was written to any store")
     when = when or date.today()
     ordered = sorted(stores, key=lambda s: ORDER.index(s.name) if s.name in ORDER else len(ORDER))
     if kind != "relation":

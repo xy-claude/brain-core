@@ -22,6 +22,7 @@ _DECISION = re.compile(r"^## (\d{4}-\d{2}-\d{2}) — (.+?)\s*$")
 _CORRECTION = re.compile(r"^### \[(\d{4}-\d{2}-\d{2})\] (.+?)\s*$")
 _SECRET = re.compile(
     r"hsk_[A-Za-z0-9]{8,}|(?i:bearer)\s+[A-Za-z0-9._-]{16,}|sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}"
+    r"|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}"
 )
 
 FILES: dict[Kind, str] = {
@@ -59,6 +60,10 @@ class VaultStore:
             paths = sorted((self.root / "sessions").glob("????-??-??.md"), reverse=True)
         elif kind == "raw":
             paths = sorted((self.root / "raw").glob("*.md"), reverse=True)
+        elif kind == "knowledge":
+            paths = sorted(
+                p for p in (self.root / "knowledge").glob("*.md") if not p.name.startswith("_")
+            )
         elif kind in FILES:
             paths = [self.root / FILES[kind]]
         else:
@@ -92,6 +97,8 @@ class VaultStore:
                     fm,
                 )
             ]
+        if kind == "knowledge":
+            return self._parse_knowledge(text, rel, fallback)
         if kind == "note":
             fallback = _parse_date(path.stem) or fallback
         records: list[Record] = []
@@ -307,6 +314,30 @@ class VaultStore:
         with self._locked(path):
             self._save(path, head + body, when, bump=False)
         return WriteResult(self.name, sha, "written", str(path.relative_to(self.root)))
+
+    def _parse_knowledge(self, text: str, rel: str, when: date) -> list[Record]:
+        """One record per `## section` of a compiled page: title › heading: body. Read-only kind."""
+        title = next((ln[2:].strip() for ln in text.splitlines() if ln.startswith("# ")), rel)
+        records: list[Record] = []
+        heading, start = "", 0
+        body: list[str] = []
+        for n, line in enumerate(text.splitlines(), 1):
+            if line.startswith("## "):
+                if heading:
+                    records.append(self._knowledge_record(title, heading, body, rel, start, when))
+                heading, body, start = line[3:].strip(), [], n
+            elif heading and line.strip() and not line.startswith("---"):
+                body.append(line.strip())
+        if heading:
+            records.append(self._knowledge_record(title, heading, body, rel, start, when))
+        return records
+
+    def _knowledge_record(
+        self, title: str, heading: str, body: list[str], rel: str, line: int, when: date
+    ) -> Record:
+        joined = " ".join(body)
+        text = f"{title} › {heading}: {joined[:600]}"
+        return Record(record_id(f"{rel}#{heading}"), "knowledge", text, when, "", rel, line, {})
 
     # ── helpers ─────────────────────────────────────────────────────────────
 

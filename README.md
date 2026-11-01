@@ -77,7 +77,7 @@ brain-core is RAG-shaped (memory + retrieval + LLM reasoning). That shape has a 
 | 11 | `brain_remember` write-through vault → sqlite → Hindsight → graph, per-layer status, dedup, `⚠ Fact changed` banner | ✅ |
 | 12 | `brain_session` start (brief, executive state, mental models, mission recall, inbox, recovery) / end (queue drain, HSAM close, critique, sync, marker) | ✅ |
 | 13 | `brain_distill` capture (web/GitHub/YouTube/PDF/file/text → raw/) + `brain_status`; MCP surface is now the five `brain_*` tools only | ✅ |
-| 14 | Eval set (30 tasks), held-out ≥ 90% | ⬜ |
+| 14 | Eval set: 20 tune + 10 held-out recall (live 100% / 100%), 10 write scenarios, 20-task fixture vault in CI | ✅ |
 | 15 | Dogfood on XYCLAUDE, Obsidian MCP retired | ⬜ |
 
 ## License

@@ -1,0 +1,23 @@
+# Fixture recall set (CI). Synthetic vault under tests/eval/fixture/vault.
+limit: 5
+tasks:
+  - {q: hindsight self-hosted launchagent port, expect: ["8888"]}
+  - {q: entity graph database, expect: ["Kuzu"]}
+  - {q: always loaded context baseline tokens, expect: ["18.7k"]}
+  - {q: nightly backup archives kept, expect: ["14 archives", "hindsight_backup"]}
+  - {q: github account isolation ssh alias, expect: ["github-xyclaude"]}
+  - {q: parse a web page to markdown, expect: ["defuddle"]}
+  - {q: youtube subtitles tool, expect: ["yt-dlp"]}
+  - {q: laya mcp server tool count, expect: ["10 tools"]}
+  - {q: wheel-up payment rails, expect: ["GCash"]}
+  - {q: koopi parser stop loss inference, expect: ["stop loss"]}
+  - {q: north star monthly revenue goal, expect: ["30K"]}
+  - {q: self-host before paying pattern, expect: ["Self-host before paying"]}
+  - {q: verify before claim build output, expect: ["Verify before claim"]}
+  - {q: public repo hindsight required decision, expect: ["public repository"]}
+  - {q: colima vm deleted why, expect: ["Colima"]}
+  - {q: commit co-author trailer correction, expect: ["Co-Authored-By"]}
+  - {q: pdf reproduction eyeballing correction, expect: ["eyeballing"]}
+  - {q: vectorize account cancel, expect: ["vectorize.io"]}
+  - {q: control plane dashboard port, expect: ["9999"]}
+  - {q: llm wiki raw immutable compiled, expect: ["immutable"]}

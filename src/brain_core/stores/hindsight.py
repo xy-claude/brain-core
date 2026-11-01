@@ -24,6 +24,7 @@ CONTEXTS: dict[Kind, str] = {
     "note": "hsam-conversation",
     "raw": "knowledge-distillation",
     "relation": "system-architecture",
+    "knowledge": "knowledge-distillation",
 }
 
 

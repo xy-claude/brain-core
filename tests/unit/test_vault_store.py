@@ -188,3 +188,24 @@ def test_memory_store_same_contract() -> None:
     assert m.write("fact", "a").status == "written" and m.write("fact", "a").status == "exists"
     assert MemoryStore(healthy=False).write("fact", "a").status == "failed"
     assert m.read("fact", "A")[0].text == "a"
+
+
+def test_knowledge_pages_are_read_per_section_and_never_written(tmp_path: Path) -> None:
+    (tmp_path / "knowledge").mkdir()
+    (tmp_path / "knowledge" / "_index.md").write_text("| [[wiki]] | | | |\n")
+    (tmp_path / "knowledge" / "wiki.md").write_text(
+        "---\nupdated: 2026-11-02\n---\n# LLM Wiki\n\n## Core Concepts\n- raw is immutable\n"
+        "- the agent owns the wiki\n\n## Rules\n- cite or omit\n"
+    )
+    v = VaultStore(tmp_path, "t")
+    recs = v.read("knowledge")
+    assert [r.text for r in recs] == [
+        "LLM Wiki › Core Concepts: - raw is immutable - the agent owns the wiki",
+        "LLM Wiki › Rules: - cite or omit",
+    ]
+    assert (
+        recs[0].path == "knowledge/wiki.md"
+        and recs[0].line == 6
+        and recs[0].date == date(2026, 11, 2)
+    )
+    assert v.write("knowledge", "nope").status == "refused"

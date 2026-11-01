@@ -1,0 +1,24 @@
+# Held-out recall set (M14). Written 2026-11-02 BEFORE running, from vault areas the tune set
+# (recall_tasks.yaml) never touched. Run once; the number is the number. Do not tune on these.
+limit: 10
+tasks:
+  - q: sir wants pros and cons before architectural decisions
+    expect: ["PROS/CONS", "pros/cons"]
+  - q: scalper bot development decision
+    expect: ["Scalper Bot", "scalper"]
+  - q: bundled logo size change with title size change without authorization
+    expect: ["logo", "authorization"]
+  - q: jumped to editing committing pushing a bug fix when sir only asked
+    expect: ["Jumped to editing", "only ask"]
+  - q: pdf reproduction claimed done by eyeballing instead of measuring
+    expect: ["eyeballing", "measuring"]
+  - q: food delivery merchants mcdonalds kfc
+    expect: ["McDonald", "KFC"]
+  - q: sessionstart staleness detection jarvis voice alert
+    expect: ["Staleness Detection", "staleness"]
+  - q: consolidation over accumulation merge not multiply
+    expect: ["merge > multiply", "Consolidation over accumulation"]
+  - q: telegram bot
+    expect: ["Telegram"]
+  - q: north star goals monthly revenue target
+    expect: ["30K", "North Star"]

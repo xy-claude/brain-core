@@ -104,8 +104,9 @@ def brain_recall(
                 for i, r in enumerate(recs):
                     if whole and r.kind not in kinds:
                         continue
-                    overlap = len(q_tok & tokens(r.text)) / len(q_tok) if q_tok else 0.0
-                    phrase = 0.5 if q_norm and q_norm in r.text.lower() else 0.0
+                    full = _full_text(r)
+                    overlap = len(q_tok & tokens(full)) / len(q_tok) if q_tok else 0.0
+                    phrase = 0.5 if q_norm and q_norm in full.lower() else 0.0
                     rank = (1.0 - i / (len(recs) + 1)) * 0.6 if ranked else 0.0
                     rel = max(overlap + phrase, rank)
                     if rel <= 0:
@@ -137,7 +138,16 @@ def brain_recall(
     return out
 
 
+def _full_text(r: Record) -> str:
+    """Title plus the body fields a decision or correction carries in `extra`."""
+    body = " ".join(
+        v for k, v in r.extra.items() if k in ("decision", "reason", "error", "correction")
+    )
+    return f"{r.text} — {body}" if body else r.text
+
+
 def _item(r: Record, store: str, score: float, fmt: str) -> dict[str, Any]:
+    r = Record(r.id, r.kind, _full_text(r), r.date, r.domain, r.path, r.line, r.extra)
     text = (
         r.text
         if fmt == "detailed" or len(r.text) <= _CONCISE_CHARS

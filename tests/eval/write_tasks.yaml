@@ -1,0 +1,35 @@
+# brain_remember eval (M14): ordered scenarios against a FRESH temp vault + SQLite (+ Hindsight when
+# the config has one). Each step: the call, and what the reply must contain. `requires: hindsight`
+# steps are skipped when no Hindsight store is configured (CI).
+tasks:
+  - name: new fact is written to every layer
+    call: {text: "Hindsight API listens on port 8887 on this Mac", kind: fact, domain: system}
+    expect: {status: written, layers: {vault: written, sqlite: written}}
+  - name: same fact again is a duplicate
+    call: {text: "Hindsight API listens on port 8887 on this Mac", kind: fact, domain: system}
+    expect: {status: duplicate}
+  - name: changed number is a contradiction with banner, not a duplicate
+    call: {text: "Hindsight API listens on port 8888 on this Mac", kind: fact, domain: system}
+    expect: {status: written, contradiction: true, text_prefix: "**⚠ Fact changed"}
+  - name: restating the new value is a duplicate of the banner line
+    call: {text: "Hindsight API listens on port 8888 on this Mac", kind: fact, domain: system}
+    expect: {status: duplicate}
+  - name: pattern with a title
+    call: {text: "merge before multiplying skills", kind: pattern, extra: {title: Consolidation}}
+    expect: {status: written, layers: {vault: written}}
+  - name: decision goes to the vault log, sqlite refuses it
+    call: {text: "Make brain-core public", kind: decision, extra: {title: Public repo, reason: installer URL}}
+    expect: {status: written, layers: {vault: written, sqlite: refused}}
+  - name: correction block
+    call: {text: "Treated a value change as a duplicate", kind: correction, extra: {title: Dedup order, correction: value check first}}
+    expect: {status: written, layers: {vault: written}}
+  - name: relation needs a graph or Hindsight; vault and sqlite refuse
+    call: {text: "", kind: relation, extra: {subject: brain-core, predicate: bundles, object: Hindsight}}
+    requires: hindsight
+    expect: {status: written, layers: {vault: refused, sqlite: refused, hindsight: written}}
+  - name: a secret never reaches any store
+    call: {text: "token ghp_abcdefghijklmnopqrstuvwxyz0123456789 for CI", kind: fact}
+    expect: {error: secret}
+  - name: empty text is rejected
+    call: {text: "   ", kind: fact}
+    expect: {error: empty}
