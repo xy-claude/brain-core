@@ -8,6 +8,7 @@ from typing import Annotated
 import typer
 
 from brain_core import __version__
+from brain_core.agent import Agent
 from brain_core.cli.doctor import doctor_agent
 from brain_core.cli.export import export_agent
 from brain_core.cli.init import init_agent
@@ -43,6 +44,76 @@ def init_cmd(
 ) -> None:
     """Write a whole agent: brain.yaml, CLAUDE.md, rules, skills, hooks, .mcp.json, vault."""
     init_agent(name=name, path=path, force=force, user=user, profile=profile)
+
+
+@app.command("daily")
+def daily_cmd(
+    path: Annotated[Path, typer.Argument(help="Agent directory or brain.yaml.")] = Path(),
+) -> None:
+    """Tier 1 cron: write the daily brief, a health line, and back up Hindsight."""
+    from brain_core.cron import daily
+
+    with _open(path) as agent:
+        out = daily(agent)
+    typer.echo(f"brief: {out['brief']} (~{out['brief_tokens']} tokens)")
+    typer.echo(f"health: {out['health']}")
+    typer.echo(f"backup: {out['backup']}")
+
+
+@app.command("weekly")
+def weekly_cmd(
+    path: Annotated[Path, typer.Argument(help="Agent directory or brain.yaml.")] = Path(),
+) -> None:
+    """Tier 2 cron: archive sessions older than 30 days, refresh Hindsight mental models."""
+    from brain_core.cron import weekly
+
+    with _open(path) as agent:
+        out = weekly(agent)
+    typer.echo(f"archived: {out['archived'] or 'nothing'}")
+    typer.echo(f"mental models: {out['mental_models']}")
+
+
+@app.command("cron")
+def cron_cmd(
+    action: Annotated[str, typer.Argument(help="install | uninstall | status")],
+    path: Annotated[Path, typer.Argument(help="Agent directory or brain.yaml.")] = Path(),
+    launch_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--launch-dir", help="Where to write plists (default ~/Library/LaunchAgents)."
+        ),
+    ] = None,
+    no_load: Annotated[
+        bool, typer.Option("--no-load", help="Write plists without launchctl.")
+    ] = False,
+) -> None:
+    """Register `brain daily` and `brain weekly` with launchd (macOS)."""
+    from brain_core import cron
+
+    with _open(path) as agent:
+        if action == "install":
+            for p in cron.install(agent, launch_dir, load=not no_load):
+                typer.echo(f"  wrote {p}")
+        elif action == "uninstall":
+            for p in cron.uninstall(agent, launch_dir):
+                typer.echo(f"  removed {p}")
+        elif action == "status":
+            base = launch_dir or Path("~/Library/LaunchAgents").expanduser()
+            for suffix in ("daily", "weekly"):
+                plist = base / f"io.brain-core.{agent.name.lower()}.{suffix}.plist"
+                state = "installed" if plist.exists() else "not installed"
+                typer.echo(f"  {suffix}: {state} ({plist})")
+        else:
+            typer.echo("action must be install | uninstall | status", err=True)
+            raise typer.Exit(code=1)
+
+
+def _open(path: Path) -> Agent:
+    cfg = path if path.is_file() else path / "brain.yaml"
+    if not cfg.exists():
+        typer.echo(f"ERROR: no brain.yaml at {cfg}", err=True)
+        raise typer.Exit(code=1)
+    return Agent.from_config(cfg)
 
 
 @app.command("doctor")

@@ -16,3 +16,8 @@ session:
 
 status:
   context_files: [CLAUDE.md, .claude/rules/*.md]   # what counts as always-loaded context
+
+cron:                                 # `brain cron install` registers these with launchd
+  daily: "06:07"                      # brain daily: daily brief, health line, Hindsight backup
+  weekly: "Sun 07:13"                 # brain weekly: archive old sessions, refresh mental models
+  backup: {dir: ~/Backups/hindsight, keep: 14}

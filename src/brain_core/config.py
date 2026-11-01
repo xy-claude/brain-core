@@ -104,6 +104,25 @@ class StatusConfig(BaseModel):
     context_files: list[str] = Field(default_factory=lambda: ["CLAUDE.md", ".claude/rules/*.md"])
 
 
+class BackupConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+    dir: str = "~/Backups/hindsight"
+    keep: int = 14
+    database_url: str = "pg0://hindsight"
+
+
+class CronConfig(BaseModel):
+    """``brain daily`` / ``brain weekly`` schedule (launchd) and the Hindsight backup."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    daily: str = "06:07"
+    weekly: str = "Sun 07:13"
+    backup: BackupConfig = Field(default_factory=BackupConfig)
+
+
 class BrainConfig(BaseModel):
     """Top-level ``brain.yaml`` schema.
 
@@ -123,6 +142,7 @@ class BrainConfig(BaseModel):
     stores: StoresConfig = Field(default_factory=StoresConfig)
     session: SessionConfig = Field(default_factory=SessionConfig)
     status: StatusConfig = Field(default_factory=StatusConfig)
+    cron: CronConfig = Field(default_factory=CronConfig)
 
     @field_validator("name")
     @classmethod
