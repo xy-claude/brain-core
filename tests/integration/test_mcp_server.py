@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from central_brain import Agent
-from central_brain.mcp.server import build_server
+from brain_core import Agent
+from brain_core.mcp.server import build_server
 
 _EXPECTED_TOOLS = {
     "remember",

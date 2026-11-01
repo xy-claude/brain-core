@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from central_brain.memory import Fact, recall, remember, supersede
-from central_brain.storage import Database
+from brain_core.memory import Fact, recall, remember, supersede
+from brain_core.storage import Database
 
 
 def test_remember_round_trip(db: Database) -> None:

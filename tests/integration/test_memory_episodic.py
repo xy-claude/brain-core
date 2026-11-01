@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from central_brain.memory import Event, log_event, recent_events
-from central_brain.storage import Database
+from brain_core.memory import Event, log_event, recent_events
+from brain_core.storage import Database
 
 
 def test_log_event_round_trip(db: Database) -> None:

@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from central_brain.storage import Database, migrate
+from brain_core.storage import Database, migrate
 
 
 def test_round_trip_persistence(tmp_path: Path) -> None:

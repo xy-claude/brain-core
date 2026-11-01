@@ -11,8 +11,8 @@ from pathlib import Path
 
 import pytest
 
-from central_brain import Agent
-from central_brain.mcp import tools
+from brain_core import Agent
+from brain_core.mcp import tools
 
 
 def make_agent(tmp_path: Path) -> Agent:

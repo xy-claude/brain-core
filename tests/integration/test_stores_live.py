@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from central_brain.stores.graph import GraphStore
-from central_brain.stores.hindsight import HindsightStore
+from brain_core.stores.graph import GraphStore
+from brain_core.stores.hindsight import HindsightStore
 
 HS_URL = os.environ.get("HINDSIGHT_URL", "http://127.0.0.1:8888")
 GRAPH = Path("~/Projects/AI-ORG/scripts/python/entity_graph.py").expanduser()

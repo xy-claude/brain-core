@@ -6,9 +6,9 @@ from datetime import datetime
 
 import pytest
 
-from central_brain.decisions import complete, decide, reverse
-from central_brain.memory import log_event
-from central_brain.reflection import (
+from brain_core.decisions import complete, decide, reverse
+from brain_core.memory import log_event
+from brain_core.reflection import (
     SessionContext,
     SessionReflection,
     gather_session_context,
@@ -16,7 +16,7 @@ from central_brain.reflection import (
     save_reflection,
     template_summary,
 )
-from central_brain.storage import Database
+from brain_core.storage import Database
 
 # ── gather_session_context ───────────────────────────────────────────────────
 

@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from central_brain.stores import MemoryStore, VaultStore
-from central_brain.stores.base import record_id
+from brain_core.stores import MemoryStore, VaultStore
+from brain_core.stores.base import record_id
 
 LEGACY_FACTS = """---
 type: reference

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from central_brain.storage.migrator import discover_migrations
+from brain_core.storage.migrator import discover_migrations
 
 
 def test_discover_returns_at_least_initial() -> None:

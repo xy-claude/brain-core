@@ -6,8 +6,8 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from central_brain import __version__
-from central_brain.cli.main import app
+from brain_core import __version__
+from brain_core.cli.main import app
 
 runner = CliRunner()
 
@@ -112,7 +112,7 @@ def test_export_with_data(tmp_path: Path) -> None:
     runner.invoke(app, ["init", "my-bot", "--path", str(tmp_path)])
 
     # Write some state directly via Agent API (faster than running a full flow)
-    from central_brain import Agent
+    from brain_core import Agent
 
     with Agent.from_config(tmp_path / "brain.yaml") as agent:
         agent.remember("Sir prefers dark mode", kind="preference", tags=["ui"])

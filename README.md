@@ -21,7 +21,7 @@ Agent projects keep reinventing the same cognition layer — how do I remember t
 | MCP server wrapping the API | Any extra MCPs / skills |
 | CLI (`init`, `serve`, `doctor`, `export`) | Custom domain logic |
 
-**Invariant:** `central_brain` never imports from a consumer. Consumers import from `central_brain`.
+**Invariant:** `brain_core` never imports from a consumer. Consumers import from `brain_core`.
 
 ## v0 capabilities (scope — not yet implemented)
 

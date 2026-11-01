@@ -31,7 +31,7 @@ mcp = [
 ]
 
 [project.scripts]
-brain = "central_brain.cli.main:app"
+brain = "brain_core.cli.main:app"
 
 [project.urls]
 Repository = "https://github.com/xy-claude/brain-core"
@@ -48,7 +48,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/central_brain"]
+packages = ["src/brain_core"]
 
 [tool.ruff]
 line-length = 100
@@ -78,7 +78,7 @@ strict = true
 warn_unused_configs = true
 warn_unused_ignores = true
 mypy_path = "src"
-packages = ["central_brain", "tests"]
+packages = ["brain_core", "tests"]
 explicit_package_bases = true
 
 [[tool.mypy.overrides]]
@@ -93,7 +93,7 @@ pythonpath = ["src"]
 asyncio_mode = "auto"
 
 [tool.coverage.run]
-source = ["src/central_brain"]
+source = ["src/brain_core"]
 branch = true
 
 [tool.coverage.report]

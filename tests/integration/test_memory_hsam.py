@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from central_brain.memory import append_today
-from central_brain.storage import Database
+from brain_core.memory import append_today
+from brain_core.storage import Database
 
 
 def test_append_today_creates_file_and_index_row(db: Database, workspace: Path) -> None:

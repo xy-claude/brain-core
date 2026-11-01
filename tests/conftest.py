@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from central_brain.storage import Database, migrate
+from brain_core.storage import Database, migrate
 
 
 @pytest.fixture

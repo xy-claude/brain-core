@@ -6,7 +6,7 @@ from datetime import datetime
 
 import pytest
 
-from central_brain.decisions import (
+from brain_core.decisions import (
     Decision,
     complete,
     decide,
@@ -14,7 +14,7 @@ from central_brain.decisions import (
     list_decisions,
     reverse,
 )
-from central_brain.storage import Database
+from brain_core.storage import Database
 
 
 def test_decide_round_trip(db: Database) -> None:

@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from central_brain import Agent, BrainConfig
-from central_brain.storage import Database, migrate
+from brain_core import Agent, BrainConfig
+from brain_core.storage import Database, migrate
 
 
 def write_config(tmp_path: Path, body: str) -> Path:

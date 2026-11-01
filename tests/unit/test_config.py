@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from central_brain.config import BrainConfig
+from brain_core.config import BrainConfig
 
 
 def write_yaml(tmp_path: Path, body: str) -> Path:

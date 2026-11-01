@@ -6,8 +6,8 @@ import subprocess
 from datetime import date
 from typing import Any
 
-from central_brain.stores.graph import GraphStore
-from central_brain.stores.hindsight import HindsightStore
+from brain_core.stores.graph import GraphStore
+from brain_core.stores.hindsight import HindsightStore
 
 
 class FakeHindsight(HindsightStore):
