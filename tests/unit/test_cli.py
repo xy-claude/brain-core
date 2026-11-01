@@ -135,3 +135,55 @@ def test_export_with_data(tmp_path: Path) -> None:
 def test_export_missing_config(tmp_path: Path) -> None:
     result = runner.invoke(app, ["export", str(tmp_path)])
     assert result.exit_code == 1
+
+
+def test_init_writes_the_whole_pack_with_user_and_profile(tmp_path: Path) -> None:
+    prof = tmp_path / "profile" / ".claude" / "rules"
+    prof.mkdir(parents=True)
+    (prof / "06-mine.md").write_text("# my doctrine\n")
+    out = tmp_path / "agent"
+    result = runner.invoke(
+        app,
+        [
+            "init",
+            "Atlas",
+            "--path",
+            str(out),
+            "--user",
+            "Sir",
+            "--profile",
+            str(tmp_path / "profile"),
+        ],
+    )
+    assert result.exit_code == 0, result.stdout
+    rules = sorted(p.name for p in (out / ".claude" / "rules").iterdir())
+    assert rules == [
+        "01-identity.md",
+        "02-doctrine.md",
+        "03-authority.md",
+        "04-memory.md",
+        "05-system.md",
+        "06-mine.md",
+    ]
+    assert sorted(p.name for p in (out / ".claude" / "skills").iterdir()) == [
+        "brain-check",
+        "distill",
+        "session-end",
+    ]
+    hook = out / ".claude" / "hooks" / "block-dangerous-bash.sh"
+    assert hook.stat().st_mode & 0o111, "hook must be executable"
+    assert "$CMD" in hook.read_text(), "shell variables untouched by substitution"
+    assert "bank: atlas-brain" in (out / "brain.yaml").read_text()
+    md = (out / "CLAUDE.md").read_text()
+    assert md.startswith("# Atlas") and "Sir's operating intelligence" in md and "$" not in md
+    assert "Address the user as **Sir**" in (out / "vault" / "user_profile.md").read_text()
+    assert "atlas-brain" in (out / ".mcp.json").read_text()
+    for f in (
+        "executive_state.md",
+        "facts.md",
+        "patterns.md",
+        "decisions_log.md",
+        "knowledge/_index.md",
+    ):
+        assert (out / "vault" / f).exists(), f
+    assert (out / "data" / ".gitkeep").exists()

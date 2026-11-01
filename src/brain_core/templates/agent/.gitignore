@@ -1,0 +1,10 @@
+# brain-core live state, never source
+data/
+logs/
+vault/daily_brief.md
+
+# Python / OS
+__pycache__/
+*.py[cod]
+.venv/
+.DS_Store

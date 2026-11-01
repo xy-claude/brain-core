@@ -133,7 +133,7 @@ def _hindsight(agent: Agent) -> HindsightStore | None:
 
 def _marker(agent: Agent) -> Path:
     m = agent.config.session.marker
-    return Path(m).expanduser() if m else agent.data_dir / "last_close.txt"
+    return agent.resolve(m) if m else agent.data_dir / "last_close.txt"
 
 
 def _read(path: Path) -> str:
@@ -191,7 +191,7 @@ def _cap(out: dict[str, Any], max_tokens: int) -> None:
 def _drain_queue(agent: Agent, queue: str | None) -> int:
     if not queue:
         return 0
-    path = Path(queue).expanduser()
+    path = agent.resolve(queue)
     if not path.exists():
         return 0
     h = _hindsight(agent)

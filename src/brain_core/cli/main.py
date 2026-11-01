@@ -31,11 +31,18 @@ def init_cmd(
     ] = Path(),
     force: Annotated[
         bool,
-        typer.Option("--force", "-f", help="Overwrite existing scaffold files."),
+        typer.Option("--force", "-f", help="Overwrite an existing agent in that directory."),
     ] = False,
+    user: Annotated[
+        str, typer.Option("--user", help="How the agent addresses its user, e.g. 'Sir'.")
+    ] = "the user",
+    profile: Annotated[
+        Path | None,
+        typer.Option("--profile", help="Directory copied over the generic pack (your own rules)."),
+    ] = None,
 ) -> None:
-    """Scaffold a new agent repo (brain.yaml + CLAUDE.md + .mcp.json + data/)."""
-    init_agent(name=name, path=path, force=force)
+    """Write a whole agent: brain.yaml, CLAUDE.md, rules, skills, hooks, .mcp.json, vault."""
+    init_agent(name=name, path=path, force=force, user=user, profile=profile)
 
 
 @app.command("doctor")

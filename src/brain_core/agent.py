@@ -104,6 +104,11 @@ class Agent:
     def current_session(self) -> str | None:
         return self._current_session
 
+    def resolve(self, p: Path | str) -> Path:
+        """A path from brain.yaml: ``~`` expanded, relative ones anchored at the yaml's folder."""
+        base = self.config_path.parent if self.config_path else Path.cwd()
+        return _resolve_dir(base, Path(p).expanduser())
+
     @property
     def stores(self) -> list[Store]:
         """Every configured store (v0.2). SQLite first, then vault, Hindsight, graph as set."""
@@ -111,11 +116,11 @@ class Agent:
             s = self._config.stores
             self._stores = [SqliteStore(self._db)]
             if s.vault:
-                self._stores.append(VaultStore(s.vault, owner=self.name.lower()))
+                self._stores.append(VaultStore(self.resolve(s.vault), owner=self.name.lower()))
             if s.hindsight:
                 self._stores.append(HindsightStore(s.hindsight.url, s.hindsight.bank, self.name))
             if s.graph:
-                self._stores.append(GraphStore(s.graph.script, s.graph.python))
+                self._stores.append(GraphStore(self.resolve(s.graph.script), s.graph.python))
         return self._stores
 
     def brain_recall(
