@@ -13,7 +13,7 @@ from central_brain.cli.export import export_agent
 from central_brain.cli.init import init_agent
 
 app = typer.Typer(
-    help="central-brain — cognitive primitives for AI agents.",
+    help="brain-core — cognitive primitives for AI agents.",
     no_args_is_help=True,
 )
 
@@ -81,7 +81,7 @@ def serve_cmd(
 ) -> None:
     """Run the MCP server for the agent at ``path``.
 
-    Requires the ``mcp`` extra: ``pip install central-brain[mcp]``.
+    Requires the ``mcp`` extra: ``pip install brain-core[mcp]``.
     """
     config_path = path / "brain.yaml"
     if not config_path.exists():
@@ -92,7 +92,7 @@ def serve_cmd(
         from central_brain.mcp.server import run_server
     except ImportError as e:
         typer.echo(
-            "ERROR: MCP extras not installed. Run: pip install 'central-brain[mcp]'",
+            "ERROR: MCP extras not installed. Run: pip install 'brain-core[mcp]'",
             err=True,
         )
         raise typer.Exit(code=1) from e
@@ -102,7 +102,7 @@ def serve_cmd(
 
 @app.command("version")
 def version_cmd() -> None:
-    """Print the installed central-brain version."""
+    """Print the installed brain-core version."""
     typer.echo(__version__)
 
 

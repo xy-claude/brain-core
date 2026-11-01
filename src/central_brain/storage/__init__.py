@@ -1,4 +1,4 @@
-"""SQLite storage layer for central-brain.
+"""SQLite storage layer for brain-core.
 
 Public API:
     Database — connection + transaction primitive

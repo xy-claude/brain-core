@@ -1,4 +1,4 @@
-"""Agent class — high-level API composing all central-brain capabilities.
+"""Agent class — high-level API composing all brain-core capabilities.
 
 Consumers touch this one object. Each method is a thin, typed pass-through
 to a capability module; capability checks are enforced at the Agent

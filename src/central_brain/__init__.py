@@ -1,4 +1,4 @@
-"""central-brain — cognitive primitives for AI agents.
+"""brain-core — cognitive primitives for AI agents.
 
 Public API:
     Agent       — composed entry point over memory/decisions/reflection

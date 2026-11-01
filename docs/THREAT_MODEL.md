@@ -1,6 +1,6 @@
 # Threat Model — Corpus Poisoning
 
-`central-brain` ships a memory + retrieval layer. That layer is RAG-shaped: facts and episodic events go into a knowledge base; an LLM reads retrieved context to reason and answer. This document names the attack surface that comes with that shape and the ingestion-time gates that keep a consumer safe.
+`brain-core` ships a memory + retrieval layer. That layer is RAG-shaped: facts and episodic events go into a knowledge base; an LLM reads retrieved context to reason and answer. This document names the attack surface that comes with that shape and the ingestion-time gates that keep a consumer safe.
 
 ## The attack
 
@@ -17,9 +17,9 @@ OWASP 2025 LLM08 (*Vector and Embedding Weaknesses*) recognizes the class. The r
 
 From the strongest critique of the paper's framing (accepted widely in the security community): **"Grounding is not a security boundary if your corpus isn't trustworthy."** RAG ingestion needs to behave like a software supply chain, not like input validation.
 
-## How it maps onto `central-brain`
+## How it maps onto `brain-core`
 
-central-brain is a library. It does not own a public ingestion endpoint. The attack surface belongs to the **consuming agent** — whoever writes to the brain. The threats are all internal:
+brain-core is a library. It does not own a public ingestion endpoint. The attack surface belongs to the **consuming agent** — whoever writes to the brain. The threats are all internal:
 
 | Writer | Poisoning risk |
 |---|---|
@@ -29,7 +29,7 @@ central-brain is a library. It does not own a public ingestion endpoint. The att
 | Cross-agent shared writes | Medium — trust varies by agent |
 | Reflection synthesis writes | **Highest leverage** — synthesized writes get laundered into "trusted" artifacts and become ground truth for future recall |
 
-## Gates that `central-brain` provides (or will)
+## Gates that `brain-core` provides (or will)
 
 These are ingestion-time gates — the paper shows downstream defenses fail, so the library builds them in at the write path.
 
@@ -41,15 +41,15 @@ These are ingestion-time gates — the paper shows downstream defenses fail, so 
 
 4. **Contradiction flagging** — updating a fact with a different value emits a contradiction event the consumer can inspect. Silent overwrite is not allowed.
 
-5. **No external retrievers by default** — `central-brain` does not pull from Wikipedia, web, or third-party knowledge bases. If a consumer wires one in, they own the corpus-trust assessment and must document the ingestion gate in their `brain.yaml`.
+5. **No external retrievers by default** — `brain-core` does not pull from Wikipedia, web, or third-party knowledge bases. If a consumer wires one in, they own the corpus-trust assessment and must document the ingestion gate in their `brain.yaml`.
 
-6. **Consumer-owned trust policy** — `brain.yaml` defines which sources are trusted for which operations (e.g., "auto-captured entries may feed recall but may not feed reflection synthesis"). central-brain enforces the policy at the retrieval/synthesis boundary.
+6. **Consumer-owned trust policy** — `brain.yaml` defines which sources are trusted for which operations (e.g., "auto-captured entries may feed recall but may not feed reflection synthesis"). brain-core enforces the policy at the retrieval/synthesis boundary.
 
 ## What this is *not*
 
-- Not a claim that central-brain is poison-proof. A determined, authorized writer can still lie to their own brain.
+- Not a claim that brain-core is poison-proof. A determined, authorized writer can still lie to their own brain.
 - Not a replacement for the consumer's own threat model. If a consumer ships a public ingestion endpoint, that's their attack surface to document.
-- Not a solved problem. The state of the art has not solved corpus poisoning — central-brain's posture is *raise the cost of the attack, expose every poisoned entry's lineage, refuse the highest-leverage poisoning paths by construction*.
+- Not a solved problem. The state of the art has not solved corpus poisoning — brain-core's posture is *raise the cost of the attack, expose every poisoned entry's lineage, refuse the highest-leverage poisoning paths by construction*.
 
 ## Consumers: questions to answer before shipping
 

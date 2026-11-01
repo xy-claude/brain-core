@@ -37,7 +37,7 @@ CLAUDE_MD = Template(
     """\
 # $name
 
-An AI agent built on [central-brain](https://github.com/xy-claude/central-brain).
+An AI agent built on [brain-core](https://github.com/xy-claude/brain-core).
 
 ## Role
 
@@ -75,7 +75,7 @@ MCP_JSON = Template(
     """\
 {
   "mcpServers": {
-    "central-brain": {
+    "brain-core": {
       "command": "brain",
       "args": ["serve", "."]
     }
@@ -86,7 +86,7 @@ MCP_JSON = Template(
 
 GITIGNORE = Template(
     """\
-# central-brain state (live data, not source)
+# brain-core state (live data, not source)
 data/
 logs/
 

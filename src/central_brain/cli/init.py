@@ -14,7 +14,7 @@ from central_brain.cli.templates import BRAIN_YAML, CLAUDE_MD, GITIGNORE, MCP_JS
 
 
 def init_agent(name: str, path: Path, force: bool) -> None:
-    """Scaffold a new central-brain agent repo.
+    """Scaffold a new brain-core agent repo.
 
     Writes brain.yaml, CLAUDE.md, .mcp.json, .gitignore and creates data/.
     Raises :class:`typer.Exit` with non-zero code on any failure.
@@ -53,5 +53,5 @@ def init_agent(name: str, path: Path, force: bool) -> None:
     typer.echo("")
     typer.echo("Next steps:")
     typer.echo("  1. Review brain.yaml and CLAUDE.md")
-    typer.echo("  2. pip install central-brain")
+    typer.echo("  2. pip install brain-core")
     typer.echo("  3. Start building — see CLAUDE.md for the Agent API")

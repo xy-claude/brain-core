@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "central-brain"
+name = "brain-core"
 version = "0.0.1"
 description = "Cognitive primitives for AI agents — memory, decisions, reflection."
 readme = "README.md"
@@ -34,7 +34,7 @@ mcp = [
 brain = "central_brain.cli.main:app"
 
 [project.urls]
-Repository = "https://github.com/xy-claude/central-brain"
+Repository = "https://github.com/xy-claude/brain-core"
 
 [dependency-groups]
 dev = [

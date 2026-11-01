@@ -119,7 +119,7 @@ class HindsightStore:
                 {
                     "protocolVersion": "2025-03-26",
                     "capabilities": {},
-                    "clientInfo": {"name": "central-brain", "version": "0.2"},
+                    "clientInfo": {"name": "brain-core", "version": "0.2"},
                 },
             )
             self._post("notifications/initialized", {}, notify=True)

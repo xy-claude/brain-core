@@ -1,4 +1,4 @@
-# central-brain
+# brain-core
 
 Cognitive primitives for AI agents — memory, decisions, reflection — as an installable Python package. Any agent gets a working brain by depending on this library; identity, domain, and state live in the consuming agent.
 
@@ -8,11 +8,11 @@ Cognitive primitives for AI agents — memory, decisions, reflection — as an i
 
 ## Why this exists
 
-Agent projects keep reinventing the same cognition layer — how do I remember things across sessions, how do I log decisions with reasoning, how do I reflect on what worked. `central-brain` extracts that substrate once and versions it, so new agents onboard by declaring a dependency instead of cloning a monorepo.
+Agent projects keep reinventing the same cognition layer — how do I remember things across sessions, how do I log decisions with reasoning, how do I reflect on what worked. `brain-core` extracts that substrate once and versions it, so new agents onboard by declaring a dependency instead of cloning a monorepo.
 
 ## Responsibility split
 
-| central-brain owns | Consuming agent owns |
+| brain-core owns | Consuming agent owns |
 |--------------------|---------------------|
 | Memory schema + operations | Identity (`CLAUDE.md`) |
 | Decision classification + logging | Domain knowledge |
@@ -34,7 +34,7 @@ Agent projects keep reinventing the same cognition layer — how do I remember t
 Once capabilities ship:
 
 ```bash
-pip install git+ssh://git@github.com/xy-claude/central-brain.git
+pip install git+ssh://git@github.com/xy-claude/brain-core.git
 ```
 
 During development:
@@ -57,7 +57,7 @@ Pre-commit hooks available via `pre-commit install`.
 
 ## Security posture
 
-central-brain is RAG-shaped (memory + retrieval + LLM reasoning). That shape has a documented attack surface — see [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) for the PoisonedRAG threat class, the ingestion-time gates the library provides, and the questions consumers must answer before shipping.
+brain-core is RAG-shaped (memory + retrieval + LLM reasoning). That shape has a documented attack surface — see [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) for the PoisonedRAG threat class, the ingestion-time gates the library provides, and the questions consumers must answer before shipping.
 
 ## Milestones
 

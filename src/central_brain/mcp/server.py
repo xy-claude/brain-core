@@ -4,7 +4,7 @@ The server is one process per agent, spawned by Claude Code via .mcp.json::
 
     {
       "mcpServers": {
-        "central-brain": {
+        "brain-core": {
           "command": "brain",
           "args": ["serve", "."]
         }
@@ -38,11 +38,11 @@ _SESSION_PREFIX = "mcp-"
 
 
 def build_server(agent: Agent) -> FastMCP:
-    """Register all central-brain tools on a FastMCP instance.
+    """Register all brain-core tools on a FastMCP instance.
 
     The returned server is ready to ``.run()``. Exposed for testing.
     """
-    server = FastMCP(name=f"central-brain:{agent.name}")
+    server = FastMCP(name=f"brain-core:{agent.name}")
 
     @server.tool()
     def remember(

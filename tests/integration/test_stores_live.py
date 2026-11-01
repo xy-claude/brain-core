@@ -23,7 +23,7 @@ PY = Path("~/Projects/AI-ORG/venv/bin/python3").expanduser()
 
 @pytest.fixture
 def hindsight() -> HindsightStore:
-    h = HindsightStore(HS_URL, "brain-test", "central-brain", timeout=40)
+    h = HindsightStore(HS_URL, "brain-test", "brain-core", timeout=40)
     if not h.health()[0]:
         pytest.skip("local Hindsight not running")
     return h
@@ -33,7 +33,7 @@ def test_hindsight_round_trip(hindsight: HindsightStore) -> None:
     stamp = f"{time.time():.0f}"
     r = hindsight.write(
         "fact",
-        f"On 2026-11-02 central-brain M9 live test {stamp}: the Hindsight adapter "
+        f"On 2026-11-02 brain-core M9 live test {stamp}: the Hindsight adapter "
         "retained a fact and polled the operation to completion.",
         domain="system",
         when=date(2026, 11, 2),

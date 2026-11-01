@@ -1,4 +1,4 @@
-# central-brain v0.2 — the local brain MCP
+# brain-core v0.2 — the local brain MCP
 
 **Status:** spec, approved by Sir 2026-11-02 ("go 1 and 2"). Build starts on M9.
 **Goal:** one local MCP that is the whole front door to an agent's memory, dogfooded by XYCLAUDE until it runs every session, then packaged the way Hindsight was self-hosted: local, no bill, no login.
@@ -50,7 +50,7 @@ Hindsight is talked to over its MCP streamable-HTTP endpoint (the `Mcp` client i
 1. Both MCPs loaded in XYCLAUDE's `.mcp.json` for two weeks (`brain` beside `obsidian-vault` and `hindsight`). Schemas are deferred, so the context cost is near zero.
 2. XYCLAUDE uses only `brain_*` for memory; the old tools stay as fallback. A fact written through `brain_remember` must appear in the vault file, the SQLite row, and Hindsight, and `brain_status` must say so.
 3. After a month of clean logs: `obsidian-vault` leaves XYCLAUDE's `.mcp.json`; the other 7 agents follow one at a time via `create_agent.sh`.
-4. Then package: `uv tool install central-brain`, `central-brain init` writes `brain.yaml` and registers the MCP, `central-brain doctor` is `brain_status` from the shell.
+4. Then package: `uv tool install brain-core`, `brain-core init` writes `brain.yaml` and registers the MCP, `brain-core doctor` is `brain_status` from the shell.
 
 ## 6. Milestones
 
