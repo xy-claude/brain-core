@@ -1,10 +1,11 @@
-# brain-core
-
-**A memory for your Claude Code agent that survives the session.** One local MCP server, five tools, a markdown vault you can read, an eval that proves recall. Installs with one command.
-
 [![CI](https://github.com/xy-claude/brain-core/actions/workflows/test.yml/badge.svg)](https://github.com/xy-claude/brain-core/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)](pyproject.toml)
+
+
+# brain-core
+
+**A memory for your Claude Code agent that survives the session.** One local MCP server, five tools, a markdown vault you can read, an eval that proves recall. Installs with one command.
 
 brain-core gives a Claude Code agent a long-term memory that lives on your disk. You name the agent, you tell it who you are, and from then on every session opens with yesterday's brief, the decisions you made, the facts that changed and the corrections you gave. It remembers by writing markdown files you can open in any editor, and it finds things again through a local SQLite index plus [Hindsight](https://github.com/vectorize-io/hindsight), a self-hosted vector memory. Nothing leaves your machine except the LLM calls you already make.
 
