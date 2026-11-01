@@ -18,6 +18,7 @@ def test_dry_run_writes_the_service_plists_only(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr("brain_core.installer.shutil.which", lambda name: None)
+    monkeypatch.setattr("brain_core.installer.sys.platform", "darwin")  # CI runs on Linux
     calls: list[list[str]] = []
     monkeypatch.setattr("brain_core.installer.subprocess.run", lambda *a, **k: calls.append(a[0]))
     home = tmp_path / "home"
@@ -70,3 +71,18 @@ def test_systemd_unit_carries_the_environment(tmp_path: Path) -> None:
     assert 'Environment="HINDSIGHT_API_DATABASE_URL=pg0://hindsight"' in unit
     assert 'Environment="HINDSIGHT_API_LLM_API_KEY=${ANTHROPIC_API_KEY}"' in unit
     assert unit.endswith("WantedBy=default.target\n")
+
+
+def test_linux_dry_run_writes_a_systemd_unit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("brain_core.installer.shutil.which", lambda name: None)
+    monkeypatch.setattr("brain_core.installer.sys.platform", "linux")
+    calls: list[list[str]] = []
+    monkeypatch.setattr("brain_core.installer.subprocess.run", lambda *a, **k: calls.append(a[0]))
+    home = tmp_path / "home"
+    out = installer.install_hindsight(home=home, run=False)
+    assert calls == [] and out["service"].startswith("not started")
+    unit = Path(out["unit"])
+    assert unit == home / ".config" / "systemd" / "user" / "hindsight.service"
+    assert "ExecStart=" in unit.read_text() and "plist" not in out
