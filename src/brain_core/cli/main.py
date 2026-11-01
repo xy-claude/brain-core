@@ -83,7 +83,7 @@ def serve_cmd(
 
     Requires the ``mcp`` extra: ``pip install brain-core[mcp]``.
     """
-    config_path = path / "brain.yaml"
+    config_path = path if path.is_file() else path / "brain.yaml"  # a dir, or a yaml file
     if not config_path.exists():
         typer.echo(f"ERROR: no brain.yaml at {config_path}", err=True)
         raise typer.Exit(code=1)
