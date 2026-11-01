@@ -10,6 +10,18 @@ brain-core gives a Claude Code agent a long-term memory that lives on your disk.
 
 It is for one person running one or more agents on their own computer: a solo developer, a founder, anyone tired of re-explaining their project every morning. It is not a hosted service and not a team product.
 
+### Is it an MCP server or a tool?
+
+Both. One Python package, three ways in:
+
+| Piece | What it is | Who uses it |
+|---|---|---|
+| `brain serve` | an MCP server that Claude Code starts from the agent's `.mcp.json` and that exposes five tools | the agent, every session, without you touching it |
+| `brain` command | a CLI: `brain init`, `brain doctor`, `brain hindsight install`, `brain cron install`, `brain daily`, `brain weekly` | you, once at setup, then cron |
+| `brain_core.Agent` | the Python library both of the above sit on | the eval runner, the demo script, your own scripts |
+
+To a Claude Code user: an MCP server with five memory tools and a one-line installer. To a Python developer: a memory library with an MCP front end.
+
 ```
 curl -fsSL https://raw.githubusercontent.com/xy-claude/brain-core/main/install.sh | bash -s -- --agent Atlas --user Alex
 ```
