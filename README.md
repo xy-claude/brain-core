@@ -2,7 +2,7 @@
 
 Cognitive primitives for AI agents — memory, decisions, reflection — as an installable Python package. Any agent gets a working brain by depending on this library; identity, domain, and state live in the consuming agent.
 
-> **Status:** v0.0.1 chassis. No public API yet. See [milestones](#milestones) for what's landing in v0.1.
+> **Status:** v0.1 library + 14-tool MCP (M0–8). v0.2 in progress: five `brain_*` tools over the agent's real stores — see [`docs/SPEC_v0.2.md`](docs/SPEC_v0.2.md) and [milestones](#milestones).
 
 ---
 
@@ -72,6 +72,13 @@ central-brain is RAG-shaped (memory + retrieval + LLM reasoning). That shape has
 | 6 | CLI (`init`, `doctor`, `export`) | ✅ |
 | 7 | MCP server | ✅ |
 | 8 | test-agent-1 end-to-end demo | ✅ |
+| 9 | v0.2 store adapters: vault (markdown by kind), Hindsight (MCP HTTP), graph (CLI) — `docs/VAULT_SCHEMA.md` | ✅ |
+| 10 | `brain_recall` merged across stores, concise/detailed, caps | ⬜ |
+| 11 | `brain_remember` write-through with per-layer status | ⬜ |
+| 12 | `brain_session` start/end | ⬜ |
+| 13 | `brain_distill` capture + `brain_status` | ⬜ |
+| 14 | Eval set (30 tasks), held-out ≥ 90% | ⬜ |
+| 15 | Dogfood on XYCLAUDE, Obsidian MCP retired | ⬜ |
 
 ## License
 
