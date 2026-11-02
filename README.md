@@ -1,6 +1,7 @@
 [![CI](https://github.com/xy-claude/brain-core/actions/workflows/test.yml/badge.svg)](https://github.com/xy-claude/brain-core/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)](pyproject.toml)
+[![Glama score](https://glama.ai/mcp/servers/xy-claude/brain-core/badges/score.svg)](https://glama.ai/mcp/servers/xy-claude/brain-core)
 
 
 # brain-core
