@@ -134,10 +134,15 @@ class Agent:
         return self._stores
 
     def brain_recall(
-        self, query: str, scope: str = "all", fmt: str = "concise", limit: int = 10
+        self,
+        query: str,
+        scope: str = "all",
+        fmt: str = "concise",
+        limit: int = 10,
+        offset: int = 0,
     ) -> dict[str, Any]:
         """One query across every store, deduplicated and ranked. See :mod:`brain_core.recall`."""
-        return brain_recall(self.stores, query, scope=scope, fmt=fmt, limit=limit)
+        return brain_recall(self.stores, query, scope=scope, fmt=fmt, limit=limit, offset=offset)
 
     # ── session lifecycle ────────────────────────────────────────────────────
 

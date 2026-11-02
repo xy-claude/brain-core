@@ -114,3 +114,18 @@ def test_transcript_line_ranks_below_written_memory_of_equal_relevance() -> None
     out = brain_recall([t, v], "launchctl kickstart Hindsight", fmt="detailed", today=TODAY)
     assert [r["kind"] for r in out["results"]] == ["fact", "transcript"]
     assert out["results"][1]["score"] < out["results"][0]["score"]
+
+
+def test_offset_pages_through_the_ranked_list() -> None:
+    page1 = brain_recall([vault()], "hindsight self-hosted launchagent", limit=2, today=TODAY)
+    assert page1["total"] == 3 and len(page1["results"]) == 2
+    assert page1["next_offset"] == 2 and "offset=2" in page1["note"]
+    page2 = brain_recall(
+        [vault()], "hindsight self-hosted launchagent", limit=2, offset=2, today=TODAY
+    )
+    assert len(page2["results"]) == 1 and "next_offset" not in page2
+    assert page2["results"][0]["text"] not in {r["text"] for r in page1["results"]}
+    past = brain_recall([vault()], "hindsight self-hosted launchagent", offset=9, today=TODAY)
+    assert past["results"] == [] and "past the last result" in past["note"]
+    with pytest.raises(ValueError, match="offset"):
+        brain_recall([vault()], "x", offset=-1, today=TODAY)

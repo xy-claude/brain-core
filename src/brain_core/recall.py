@@ -75,6 +75,7 @@ def brain_recall(
     limit: int = 10,
     max_tokens: int = DEFAULT_TOKENS,
     today: date | None = None,
+    offset: int = 0,
 ) -> dict[str, Any]:
     today = today or date.today()
     names = [s.name for s in stores]
@@ -92,6 +93,8 @@ def brain_recall(
         raise ValueError("format must be 'concise' or 'detailed'")
     if limit < 1:
         raise ValueError("limit must be >= 1")
+    if offset < 0:
+        raise ValueError("offset must be >= 0")
     max_tokens = min(max_tokens, MAX_TOKENS)
 
     q_norm, q_tok = normalize(query).lower(), tokens(query)
@@ -147,17 +150,35 @@ def brain_recall(
         ),
         key=lambda h: (h[2], h[0].date),
         reverse=True,
-    )[:limit]
-    results = [_item(r, s, sc, fmt) for r, s, sc in ordered]
-    out: dict[str, Any] = {"query": query, "scope": scope, "stores": report, "results": results}
+    )
+    total = len(ordered)
+    results = [_item(r, s, sc, fmt) for r, s, sc in ordered[offset : offset + limit]]
+    out: dict[str, Any] = {
+        "query": query,
+        "scope": scope,
+        "stores": report,
+        "total": total,
+        "results": results,
+    }
     while results and len(json.dumps(out)) // 4 > max_tokens:
         results.pop()
         out["note"] = (
-            f"truncated to {len(results)} of {len(ordered)} results at {max_tokens} tokens; "
+            f"truncated to {len(results)} of {total} results at {max_tokens} tokens; "
             "narrow `scope`, lower `limit`, or use format='concise'"
         )
+    shown = offset + len(results)
+    if results and shown < total:
+        out["next_offset"] = shown
+        out["note"] = (
+            out.get("note", f"{len(results)} of {total} results")
+            + f"; call again with offset={shown} for the rest"
+        )
     if not results:
-        out["note"] = "no hits; try fewer or different words, or scope='all'"
+        out["note"] = (
+            f"offset {offset} is past the last result ({total})"
+            if total
+            else "no hits; try fewer or different words, or scope='all'"
+        )
     return out
 
 

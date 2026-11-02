@@ -7,6 +7,8 @@ close state, and pending decisions. No LLM, no network beyond each store's own h
 from __future__ import annotations
 
 import glob
+import json
+import math
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -43,6 +45,7 @@ def brain_status(agent: Agent) -> dict[str, Any]:
             if ln.startswith("- ") or (ln.startswith("|") and not _is_table_chrome(ln))
         )
     out["context"] = _context(agent)
+    out["tools"] = tool_metrics(agent)
     marker = _marker(agent)
     last_close = marker.read_text().strip() if marker.exists() else ""
     starts = agent.recent_events(event_type="session_start", limit=1)
@@ -61,6 +64,43 @@ def brain_status(agent: Agent) -> dict[str, Any]:
 
     out["traits"] = traits.compute(agent, out)
     return out
+
+
+def tool_metrics(agent: Agent, days: int = 30) -> dict[str, Any]:
+    """Per-tool calls, runtime, response tokens and errors from `metrics`, with the two
+    diagnostics the tool-design guidance names: error rate → clarify descriptions; answers
+    near the cap → paginate."""
+    rows = agent.db.fetchall(
+        "SELECT metric_name, value, tags FROM metrics WHERE metric_name LIKE 'tool.%' "
+        "AND recorded_at >= datetime('now', ?)",
+        (f"-{days} days",),
+    )
+    acc: dict[str, dict[str, Any]] = {}
+    for r in rows:
+        tags = json.loads(r["tags"] or "{}")
+        d = acc.setdefault(r["metric_name"][5:], {"ms": [], "tokens": 0, "errors": 0})
+        d["ms"].append(float(r["value"]))
+        d["tokens"] += int(tags.get("tokens", 0))
+        d["errors"] += int(tags.get("error", 0))
+    per: dict[str, dict[str, int]] = {}
+    hints: list[str] = []
+    for name, d in sorted(acc.items()):
+        ms = sorted(d["ms"])
+        n = len(ms)
+        per[name] = {
+            "calls": n,
+            "avg_ms": round(sum(ms) / n),
+            "p95_ms": round(ms[max(0, math.ceil(0.95 * n) - 1)]),  # nearest-rank
+            "avg_tokens": d["tokens"] // n,
+            "errors": d["errors"],
+        }
+        if n >= 5 and d["errors"] / n > 0.1:
+            hints.append(
+                f"{name}: {d['errors']}/{n} calls failed; clarify its parameter descriptions"
+            )
+        if name == "brain_recall" and n >= 5 and per[name]["avg_tokens"] > 4000:
+            hints.append("brain_recall answers run near the cap; lower `limit` or use `offset`")
+    return {"window_days": days, "per_tool": per, "hints": hints}
 
 
 def lint(root: Path) -> dict[str, Any]:

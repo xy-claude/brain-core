@@ -15,7 +15,11 @@ it instead of its siblings, and what it does that the schema cannot show.
 
 from __future__ import annotations
 
+import contextlib
+import json
+import time
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated, Any, cast
 
@@ -55,12 +59,16 @@ def build_server(agent: Agent) -> FastMCP:
             ),
         ] = "concise",
         limit: Annotated[int, Field(description="Max results after dedup; default 10.")] = 10,
+        offset: Annotated[
+            int, Field(description="Skip this many ranked results; use the reply's `next_offset`.")
+        ] = 0,
     ) -> dict[str, Any]:
         """Search the agent's long-term memory: facts, patterns, decisions, corrections,
         session notes, raw sources, entity relations and the Claude Code session transcripts
         of this folder, across SQLite, the markdown vault, Hindsight and the graph, returned
         as one deduplicated list ranked by relevance and recency and capped at about 6k
-        tokens. scope='transcript' searches only what past sessions said and ran.
+        tokens. scope='transcript' searches only what past sessions said and ran. `total`
+        counts every hit; when more remain, `next_offset` says where to continue.
 
         Use it before answering anything about past sessions, earlier decisions or the user's
         preferences, and before brain_remember to avoid writing a duplicate. Not for health
@@ -69,7 +77,11 @@ def build_server(agent: Agent) -> FastMCP:
         Read-only. Partial results are normal: `stores` lists hits per store and names any store
         that was unreachable instead of failing the call. A value a `⚠ Fact changed` banner
         superseded is returned but ranked below the banner."""
-        return agent.brain_recall(query, scope=scope, fmt=format, limit=limit)
+        return _timed(
+            agent,
+            "brain_recall",
+            lambda: agent.brain_recall(query, scope=scope, fmt=format, limit=limit, offset=offset),
+        )
 
     @server.tool(
         annotations=ToolAnnotations(
@@ -112,14 +124,18 @@ def build_server(agent: Agent) -> FastMCP:
         old line kept, reported as `contradiction`. `layers` reports each store as
         written|exists|pending|failed|refused, so a dead store is visible, never silent. Text
         that looks like a secret is refused."""
-        return agent.brain_remember(
-            text,
-            kind,
-            domain=domain,
-            source=source,
-            mission=mission,
-            force=force,
-            **cast(dict[str, Any], extra or {}),
+        return _timed(
+            agent,
+            "brain_remember",
+            lambda: agent.brain_remember(
+                text,
+                kind,
+                domain=domain,
+                source=source,
+                mission=mission,
+                force=force,
+                **cast(dict[str, Any], extra or {}),
+            ),
         )
 
     @server.tool(
@@ -160,8 +176,12 @@ def build_server(agent: Agent) -> FastMCP:
         bodies you pass (or a stub built from this session's brain_remember calls), reports
         which trait signals moved, and writes the clean-close marker. A second end overwrites
         the first."""
-        return agent.brain_session(
-            phase, session_id, executive_state=executive_state, critique=critique, sync=sync
+        return _timed(
+            agent,
+            "brain_session",
+            lambda: agent.brain_session(
+                phase, session_id, executive_state=executive_state, critique=critique, sync=sync
+            ),
         )
 
     @server.tool(
@@ -199,8 +219,12 @@ def build_server(agent: Agent) -> FastMCP:
         Fetches over the network for URLs. The same source or body a second time returns
         `status: exists` and writes nothing. A `note` flags a thin capture (JS-only or paywalled
         page) so you can read it in a browser and call again with `text`."""
-        return agent.brain_distill(
-            source, text=text, title=title, author=author, published=published
+        return _timed(
+            agent,
+            "brain_distill",
+            lambda: agent.brain_distill(
+                source, text=text, title=title, author=author, published=published
+            ),
         )
 
     @server.tool(
@@ -218,9 +242,27 @@ def build_server(agent: Agent) -> FastMCP:
         Use it when a store seems down, before maintenance, or when the user asks how the
         memory is doing. Not a search (brain_recall). `ok` is false when any store is down or
         lint found issues; `stores` names the failing one."""
-        return agent.brain_status()
+        return _timed(agent, "brain_status", agent.brain_status)
 
     return server
+
+
+def _timed(agent: Agent, name: str, fn: Callable[[], dict[str, Any]]) -> dict[str, Any]:
+    """Run one tool call and record runtime, response tokens and error flag in `metrics`."""
+    t0, err, out = time.perf_counter(), 1, None
+    try:
+        out = fn()
+        err = 0
+        return out
+    finally:
+        ms = round((time.perf_counter() - t0) * 1000, 1)
+        tokens = len(json.dumps(out, default=str)) // 4 if out is not None else 0
+        tags = {"tokens": tokens, "error": err, "session": agent.current_session}
+        with contextlib.suppress(Exception):  # metrics must never break a tool call
+            agent.db.execute(
+                "INSERT INTO metrics (metric_name, value, tags) VALUES (?, ?, ?)",
+                (f"tool.{name}", ms, json.dumps(tags)),
+            )
 
 
 def run_server(config_path: Path) -> None:

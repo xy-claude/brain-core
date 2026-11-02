@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import textwrap
 from pathlib import Path
 from typing import Any, cast
@@ -57,5 +58,13 @@ async def test_server_remember_then_recall_round_trip(agent: Agent) -> None:
         structured = cast(dict[str, Any], s[1] if isinstance(s, tuple) else s)
         assert structured["stores"]["sqlite"]["ok"] is True
         assert "mcp-test" in server.name
+        # every call left one metrics row: runtime, response tokens, error flag
+        per = structured["tools"]["per_tool"]
+        assert per["brain_remember"]["calls"] == 1 and per["brain_recall"]["errors"] == 0
+        assert per["brain_recall"]["avg_tokens"] > 0
+        with pytest.raises(Exception, match="scope must be"):  # the transport turns it into text
+            await server.call_tool("brain_recall", {"query": "x", "scope": "nope"})
+        rows = agent.db.fetchall("SELECT tags FROM metrics WHERE metric_name = 'tool.brain_recall'")
+        assert [json.loads(r["tags"])["error"] for r in rows] == [0, 1]
     finally:
         agent.close()

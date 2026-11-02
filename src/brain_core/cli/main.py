@@ -258,6 +258,17 @@ def doctor_cmd(
         f"last close {ses['last_close'] or '-'}{flag}"
     )
     typer.echo(f"  pending    {st.get('pending_decisions', 0)} decision(s)")
+    tools = st.get("tools", {}).get("per_tool", {})
+    if tools:
+        typer.echo(
+            "  tools      "
+            + " · ".join(
+                f"{n} {m['calls']}× {m['avg_ms']}ms {m['avg_tokens']}tok {m['errors']}err"
+                for n, m in tools.items()
+            )
+        )
+    for h in st.get("tools", {}).get("hints", []):
+        typer.echo(f"  hint       {h}")
     grown = [t["name"] for t in st.get("traits", {}).values() if t["grown"]]
     typer.echo(
         f"  traits     {len(grown)}/{len(st.get('traits', {}))} grown: {', '.join(grown) or '-'}"
