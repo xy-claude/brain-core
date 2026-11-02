@@ -4,6 +4,8 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-11-03
+
 ### Added
 - `brain_recall(offset=N)`: pagination. The reply carries `total` and, when more hits remain, `next_offset` plus a note saying where to continue; an offset past the end says so instead of "no hits".
 - Per-call tool metrics: every MCP tool call records runtime, response tokens and an error flag in the `metrics` table. `brain_status` reports `tools` (calls, avg and p95 ms, avg tokens, errors per tool, last 30 days) with two diagnostics from Anthropic's tool-design guidance: a tool failing more than 10% of calls needs clearer parameter descriptions; recall answers near the cap need a lower `limit` or `offset`. `brain doctor` prints the same line.
