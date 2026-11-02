@@ -337,3 +337,41 @@ def test_daily_shadow_leaves_the_live_brief_alone_and_reports_missing(tmp_path: 
     assert "Cron Highlights" in (vault / "daily_brief.md").read_text()  # untouched
     assert out["missing_sections"] == ["Cron Highlights — Items"]  # Hot Corrections matched by key
     assert out["backup"].startswith("skipped")
+
+
+def test_brief_names_blocked_missions_correction_patterns_and_recall_misses(tmp_path: Path) -> None:
+    import textwrap
+
+    from brain_core.agent import Agent
+    from brain_core.cron import daily
+
+    vault = tmp_path / "vault"
+    (vault / "sessions").mkdir(parents=True)
+    (vault / "goals").mkdir()
+    (vault / "goals" / "mission_queue.md").write_text(
+        "| ID | Mission | Priority | Status | Next step | Last reviewed |\n"
+        "|---|---|---|---|---|---|\n"
+        "| M-1 | Ship it | P1 | blocked | wait for keys | 2026-11-01 |\n"
+        "| M-2 | Sell it | P1 | active | call | 2026-11-01 |\n"
+        "| M-3 | Fix it | P1 | active | patch | 2026-11-01 |\n"
+    )
+    (vault / "corrections.md").write_text(
+        "# Corrections\n\n"
+        + "".join(
+            f"### [2026-10-{10 + i}] Slip {i}\n- **Theme:** haste\n- **Promoted:** No\n\n"
+            for i in range(3)
+        )
+    )
+    (tmp_path / "brain.yaml").write_text(textwrap.dedent(f"name: T\nstores:\n  vault: {vault}\n"))
+    with Agent.from_config(tmp_path / "brain.yaml") as agent:
+        assert agent.brain_recall("nothing matches this at all")["results"] == []
+        assert (
+            agent.recent_events(event_type="recall_miss")[0].payload["query"].startswith("nothing")
+        )
+        daily(agent, today=date(2026, 11, 3))
+    brief = (vault / "daily_brief.md").read_text()
+    assert "## Missions — blocked, stalled, competing" in brief
+    assert "- blocked: M-1 Ship it → next: wait for keys" in brief
+    assert "3 missions at P1" in brief
+    assert "## Correction Patterns" in brief and "`haste` ×3 → no rule yet" in brief
+    assert "1 recall miss(es) this week (`nothing matches this at all`)" in brief

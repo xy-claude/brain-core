@@ -142,7 +142,11 @@ class Agent:
         offset: int = 0,
     ) -> dict[str, Any]:
         """One query across every store, deduplicated and ranked. See :mod:`brain_core.recall`."""
-        return brain_recall(self.stores, query, scope=scope, fmt=fmt, limit=limit, offset=offset)
+        out = brain_recall(self.stores, query, scope=scope, fmt=fmt, limit=limit, offset=offset)
+        if not out["results"] and offset == 0:
+            # a miss is an eval case waiting to be written; brain daily lists them
+            self.log_event("recall_miss", {"query": query[:200], "scope": scope})
+        return out
 
     # ── session lifecycle ────────────────────────────────────────────────────
 

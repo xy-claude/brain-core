@@ -4,6 +4,10 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+### Added
+- Daily brief: a "Missions — blocked, stalled, competing" section (blocked missions with their next step, missions unreviewed for 14 days, more than two P1s) and a "Correction Patterns" section (any theme with three or more corrections, and whether a draft rule exists).
+- Recall-miss log: a `brain_recall` that returns nothing logs a `recall_miss` event; the brief's Growth section lists the week's misses so they become facts or eval cases.
+
 ## [0.4.5] - 2026-11-03
 
 ### Added

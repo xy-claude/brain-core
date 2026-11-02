@@ -59,6 +59,8 @@ def daily(agent: Agent, today: date | None = None, shadow: bool = False) -> dict
         "`brain_session('start')` reads this file; everything else is one `brain_recall` away._\n",
         _agenda(vault.root / "goals" / "mission_queue.md"),
         _hot_corrections(vault.root / "corrections.md", today),
+        _correction_patterns(vault.root, today),
+        _missions_watch(vault.root / "goals" / "mission_queue.md", today),
         _reinforce(vault.root / "decisions_log.md", today),
         _lessons(vault.root / cfg.session.critique),
         _executive(vault.root / cfg.session.executive),
@@ -254,9 +256,60 @@ def _growth(agent: Agent, root: Path, today: date) -> str:
             "→ read knowledge/_reflections.md; "
             "cite a vault source before acting on it"
         )
+    misses = [
+        e
+        for e in agent.recent_events(event_type="recall_miss", limit=200)
+        if (today - e.occurred_at.date()).days <= 7
+    ]
+    if misses:
+        seen: list[str] = []
+        for e in misses:
+            q = str(e.payload.get("query", ""))
+            if q and q not in seen:
+                seen.append(q)
+        shown = "; ".join(f"`{q[:50]}`" for q in seen[:3])
+        lines.append(
+            f"- {len(misses)} recall miss(es) this week ({shown}) "
+            "→ write the fact if it is known, or add the query to the eval set"
+        )
     if not lines:
         return ""
     return "## Growth — what the traits say to do today\n\n" + "\n".join(lines) + "\n"
+
+
+def _missions_watch(path: Path, today: date) -> str:
+    """Blocked missions, missions not reviewed for 14 days, and too many P1s at once."""
+    lines: list[str] = []
+    for m in traits.missions(path):
+        st = m.get("status", "").lower()
+        if st.startswith("block"):
+            lines.append(f"- blocked: {m['id']} {m['mission']} → next: {m.get('next') or '-'}")
+    for m, days in traits.stalled(path, today):
+        lines.append(f"- stalled {days}d: {m['id']} {m['mission']} ({m['status']})")
+    p1 = [m["id"] for m in traits.missions(path) if m.get("priority", "").upper() == "P1"]
+    if len(p1) > 2:
+        lines.append(f"- {len(p1)} missions at P1 ({', '.join(p1)}) → they compete; rank them")
+    if not lines:
+        return ""
+    return "## Missions — blocked, stalled, competing\n\n" + "\n".join(lines) + "\n"
+
+
+def _correction_patterns(root: Path, today: date) -> str:
+    """A theme with three or more corrections is a pattern: name it and whether a rule exists."""
+    counts: dict[str, int] = {}
+    for _d, _t, f in traits._corrections(_read(root / "corrections.md")):
+        th = f.get("theme", "").lower().strip()
+        if th:
+            counts[th] = counts.get(th, 0) + 1
+    lines = []
+    for th, n in sorted(counts.items(), key=lambda kv: -kv[1]):
+        if n >= 3:
+            draft = root / "procedures" / "_drafts" / f"rule-{th}.md"
+            state = "draft rule waits" if draft.exists() else "no rule yet"
+            lines.append(f"- `{th}` ×{n} → {state}; fix the cause, not the instance")
+    if not lines:
+        return ""
+    return "## Correction Patterns\n\n" + "\n".join(lines) + "\n"
 
 
 def _reinforce(path: Path, today: date) -> str:
