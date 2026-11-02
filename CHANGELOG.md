@@ -4,6 +4,19 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+### Fixed
+- Installer: the LLM key now reaches Hindsight. launchd and systemd do not expand `${VAR}`; `brain hindsight install` writes the key to `~/.config/hindsight/env` (mode 600) and the service sources it. Re-run after exporting the key.
+- `mcp` is a required dependency; `brain serve` works after `uv tool install brain-core-mcp` with no extra.
+- `brain init --force` refreshes rules and skills but never overwrites existing `vault/` files.
+- Titled decisions, corrections and patterns written twice are reported `exists` instead of duplicated; the vault id now matches what the parser reads back.
+- Multi-line text is collapsed to one bullet line before writing, so its id and date survive a re-read.
+- The Hindsight client re-initialises once when the server has restarted and forgotten the session, instead of failing every call until Claude Code restarts.
+- `brain_session('end')` refuses a critique, executive state or sync body that looks like a secret, and drops queued entries that do.
+- Two raw captures with the same title on one day no longer overwrite each other; an empty slug becomes `untitled`.
+- Recall deduplicates by the full text, so two "Fact changed" banners that share a prefix are both returned.
+- A mistyped date in a decision or correction heading no longer takes down `brain_recall` or `brain daily`.
+- The template bash guard now blocks `rm -rf ~/`, `rm -rf /*`, `rm -r -f /`, `rm -rf $HOME/`, `bash -c "rm -rf /"` and `curl … | sudo bash`, and the hook path is quoted so it runs from a folder with a space. The guard has a test.
+
 ## [0.2.2] - 2026-11-02
 
 ### Changed
