@@ -23,6 +23,8 @@ _URL = re.compile(r"https?://[^\s)\]>\"']+")
 MAX_ITEMS = 50  # per hook run; Stop fires every turn, so the backlog is small
 USER_CHARS = 500
 SAID, LINKS = "Said (hook)", "Links (hook)"
+_LOCAL = re.compile(r"https?://(127\.0\.0\.1|localhost|0\.0\.0\.0)(?::\d+)?(/|$)")
+_NOISE = (".svg", ".png", ".gif", ".ico")
 
 
 def capture(agent: Agent, transcript: Path, session_id: str = "") -> dict[str, Any]:
@@ -40,10 +42,13 @@ def capture(agent: Agent, transcript: Path, session_id: str = "") -> dict[str, A
     seen_urls: set[str] = set()
     for raw in lines[cursor:]:
         for _rid, _sess, _ts, role, text in _rows(raw.encode("utf-8"), transcript.stem):
-            for url in _URL.findall(text):
-                if url not in seen_urls:
-                    seen_urls.add(url)
-                    items.append((f"URL {url}", LINKS))
+            # URLs from speech only: shell commands and tool output carry local and asset noise
+            for url in [] if text.startswith(("$ ", "→")) else _URL.findall(text):
+                url = url.rstrip(".,;:|)\\")
+                if url in seen_urls or _LOCAL.match(url) or url.lower().endswith(_NOISE):
+                    continue
+                seen_urls.add(url)
+                items.append((f"URL {url}", LINKS))
             if role == "user" and not text.startswith(("$ ", "[", "→")):
                 items.append((text[:USER_CHARS], SAID))
     items = items[:MAX_ITEMS]

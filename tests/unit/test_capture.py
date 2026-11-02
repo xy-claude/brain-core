@@ -51,6 +51,21 @@ def test_capture_is_incremental_and_skips_tool_rows(tmp_path: Path) -> None:
                     "u2",
                 ),
                 line("user", "my token is hsk_abcdefghijklmnop1234 keep it out", "u3"),
+                line(
+                    "assistant",
+                    [
+                        {
+                            "type": "text",
+                            "text": "badge https://x.test/b.svg; api http://127.0.0.1:8888/v1 ok",
+                        },
+                        {
+                            "type": "tool_use",
+                            "name": "Bash",
+                            "input": {"command": "curl https://cmd.test/x"},
+                        },
+                    ],
+                    "a2",
+                ),
             ]
         )
         + "\n"
@@ -62,6 +77,7 @@ def test_capture_is_incremental_and_skips_tool_rows(tmp_path: Path) -> None:
         assert "deadline is 2026-12-01" in day and "URL https://docs.test/x" in day
         assert "ls -la" not in day and "total 0 files" not in day  # tool rows are not speech
         assert "[redacted]" in day and "hsk_abcdefghijklmnop1234" not in day
+        assert "b.svg" not in day and "127.0.0.1" not in day and "cmd.test" not in day
         again = capture(agent, t, "s1")
         assert again["written"] == 0 and again["scanned"] == 0  # cursor: nothing re-read
         with t.open("a") as f:
