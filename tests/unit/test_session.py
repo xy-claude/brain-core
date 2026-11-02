@@ -160,3 +160,20 @@ def test_end_reports_which_trait_signals_moved(tmp_path: Path) -> None:
     assert any(m.startswith("metacognition.confidence_spread:") for m in moved), moved
     day = next((vault / "sessions").glob("*.md")).read_text()
     assert "trait signal(s) moved" in day
+
+
+def test_start_omits_the_brief_when_the_sessionstart_hook_injected_it(tmp_path: Path) -> None:
+    agent, _vault, _ = make(tmp_path)
+    with agent:
+        agent.log_event("brief_injected", {"session_id": "claude-1"})
+        s = agent.brain_session("start", "s1")
+        assert s["brief"].startswith("injected at SessionStart") and "Daily Brief" not in s["brief"]
+        assert s["brief_stale"] is True  # staleness is still judged from the file
+
+
+def test_sections_match_headings_regardless_of_case() -> None:
+    from brain_core.session import _sections
+
+    text = "## Apply next session\n- a\n\n## WHAT TO IMPROVE\n- b\n\n## Other\n- c\n"
+    out = _sections(text, ("Apply Next Session", "What To Improve"))
+    assert "- a" in out and "- b" in out and "- c" not in out

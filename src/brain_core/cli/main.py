@@ -40,21 +40,38 @@ def init_cmd(
         Path | None,
         typer.Option("--profile", help="Directory copied over the generic pack (your own rules)."),
     ] = None,
+    lite: Annotated[
+        bool,
+        typer.Option("--lite", help="Vault + SQLite only, no Hindsight; upgrade later."),
+    ] = False,
 ) -> None:
     """Write a whole agent: brain.yaml, CLAUDE.md, rules, skills, hooks, .mcp.json, vault."""
-    init_agent(name=name, path=path, force=force, user=user, profile=profile)
+    init_agent(name=name, path=path, force=force, user=user, profile=profile, lite=lite)
 
 
 @app.command("daily")
 def daily_cmd(
     path: Annotated[Path, typer.Argument(help="Agent directory or brain.yaml.")] = Path(),
+    shadow: Annotated[
+        bool,
+        typer.Option(
+            "--shadow",
+            help="Write <brief>.shadow.md beside a brief another tool owns and list its sections "
+            "missing here; no health line, no backup.",
+        ),
+    ] = False,
 ) -> None:
     """Tier 1 cron: write the daily brief, a health line, and back up Hindsight."""
     from brain_core.cron import daily
 
     with _open(path) as agent:
-        out = daily(agent)
+        out = daily(agent, shadow=True) if shadow else daily(agent)
     typer.echo(f"brief: {out['brief']} (~{out['brief_tokens']} tokens)")
+    if shadow:
+        miss = out["missing_sections"]
+        typer.echo(f"parity vs {out['shadow_of']}: {len(miss)} section(s) missing here")
+        for m in miss:
+            typer.echo(f"  missing: {m}")
     typer.echo(f"health: {out['health']}")
     typer.echo(f"backup: {out['backup']}")
 
@@ -230,6 +247,47 @@ def index_cmd(
                 )
                 written += 1
     typer.echo(f"indexed {written} new, {exists} already there")
+
+
+@app.command("brief")
+def brief_cmd(
+    path: Annotated[
+        Path, typer.Option("--path", "-p", help="Agent directory or brain.yaml.")
+    ] = Path(),
+    hook: Annotated[
+        bool,
+        typer.Option("--hook", help="SessionStart mode: print the brief as additionalContext."),
+    ] = False,
+) -> None:
+    """Print the daily brief. With --hook it is injected into context at SessionStart and
+    `brain_session('start')` then omits it instead of repeating it."""
+    import json
+    import sys
+
+    payload = json.loads(sys.stdin.read() or "{}") if hook else {}
+    with _open(path) as agent:
+        vault = next((s for s in agent.stores if isinstance(s, VaultStore)), None)
+        brief = (vault.root / agent.config.session.brief) if vault else None
+        text = brief.read_text(encoding="utf-8") if brief and brief.exists() else ""
+        if not text.strip():
+            return
+        if not hook:
+            typer.echo(text)
+            return
+        agent.log_event(
+            "brief_injected",
+            {"session_id": str(payload.get("session_id", "")), "brief": str(brief)},
+        )
+    typer.echo(
+        json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "SessionStart",
+                    "additionalContext": f"Daily brief (injected by brain brief --hook):\n{text}",
+                }
+            }
+        )
+    )
 
 
 @app.command("capture")

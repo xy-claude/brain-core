@@ -41,6 +41,16 @@
           }
         ]
       }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "brain brief --hook --path \"$CLAUDE_PROJECT_DIR\" 2>/dev/null || true"
+          }
+        ]
+      }
     ]
   }
 }

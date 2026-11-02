@@ -312,3 +312,28 @@ def test_weekly_drafts_a_rule_per_recurring_theme_and_reflects(tmp_path: Path) -
     assert (
         "draft rule `rule-verification.md`" in brief and "wrote a reflection on 2026-11-02" in brief
     )
+
+
+def test_daily_shadow_leaves_the_live_brief_alone_and_reports_missing(tmp_path: Path) -> None:
+    import textwrap
+
+    from brain_core.agent import Agent
+    from brain_core.cron import daily
+
+    vault = tmp_path / "vault"
+    (vault / "sessions").mkdir(parents=True)
+    (vault / "corrections.md").write_text(
+        f"# Corrections\n\n### [{date.today().isoformat()}] Shipped untested\n"
+        "**Rule:** test first\n"
+    )
+    (vault / "daily_brief.md").write_text(
+        "# Daily Brief\n\n## Hot Corrections — Apply These NOW\n- a\n\n"
+        "## Cron Highlights — Items\n- b\n"
+    )
+    (tmp_path / "brain.yaml").write_text(textwrap.dedent(f"name: T\nstores:\n  vault: {vault}\n"))
+    with Agent.from_config(tmp_path / "brain.yaml") as agent:
+        out = daily(agent, shadow=True)
+    assert (vault / "daily_brief.shadow.md").exists()
+    assert "Cron Highlights" in (vault / "daily_brief.md").read_text()  # untouched
+    assert out["missing_sections"] == ["Cron Highlights — Items"]  # Hot Corrections matched by key
+    assert out["backup"].startswith("skipped")

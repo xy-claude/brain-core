@@ -47,7 +47,9 @@ _CORRECTION = re.compile(r"^### \[(\d{4}-\d{2}-\d{2})\] (.+)$")
 # ── daily ─────────────────────────────────────────────────────────────────────
 
 
-def daily(agent: Agent, today: date | None = None) -> dict[str, Any]:
+def daily(agent: Agent, today: date | None = None, shadow: bool = False) -> dict[str, Any]:
+    """``shadow=True`` writes ``<brief>.shadow.md`` beside a brief another tool still owns and
+    reports which of its sections are missing here, so a migration never loses a section."""
     today = today or date.today()
     vault = _vault(agent)
     cfg = agent.config
@@ -67,7 +69,22 @@ def daily(agent: Agent, today: date | None = None) -> dict[str, Any]:
         _warmup(vault.root / "sessions"),
     ]
     brief = "\n".join(p for p in parts if p)
-    (vault.root / cfg.session.brief).write_text(brief, encoding="utf-8")
+    live = vault.root / cfg.session.brief
+    target = live.with_name(f"{live.stem}.shadow.md") if shadow else live
+    target.write_text(brief, encoding="utf-8")
+    if shadow:
+        old = _read(live) if live.exists() else ""
+        mine = {_section_key(ln) for ln in brief.splitlines() if ln.startswith("## ")}
+        theirs = [ln for ln in old.splitlines() if ln.startswith("## ")]
+        missing = [ln[3:] for ln in theirs if _section_key(ln) not in mine]
+        return {
+            "brief": str(target),
+            "brief_tokens": len(brief) // 4,
+            "shadow_of": str(live),
+            "missing_sections": missing,
+            "health": "shadow run: no health line, no backup",
+            "backup": "skipped (shadow)",
+        }
     up = sum(1 for s in status["stores"].values() if s["ok"])
     line = (
         f"- {today.isoformat()} ok={status['ok']} stores={up}/{len(status['stores'])} "
@@ -89,6 +106,11 @@ def daily(agent: Agent, today: date | None = None) -> dict[str, Any]:
         if isinstance(s, TranscriptStore):
             out["transcripts"] = s.index()
     return out
+
+
+def _section_key(heading: str) -> str:
+    """'## Hot Corrections — Apply These NOW' and '## Hot Corrections — last 14 days' are one."""
+    return re.split(r"\s+[—(\-]", heading[3:].strip(), maxsplit=1)[0].strip().lower()
 
 
 def _agenda(path: Path) -> str:

@@ -272,3 +272,47 @@ def test_index_loads_vault_facts_into_sqlite_with_their_date(tmp_path: Path) -> 
 
     again = runner.invoke(app, ["index", str(tmp_path)])
     assert "0 new" in again.stdout
+
+
+# ── init --lite ──────────────────────────────────────────────────────────────
+
+
+def test_init_lite_has_no_hindsight_and_still_runs(tmp_path: Path) -> None:
+    from brain_core.agent import Agent
+
+    r = runner.invoke(app, ["init", "lite-bot", "--path", str(tmp_path), "--lite"])
+    assert r.exit_code == 0 and "lite" in r.stdout
+    yaml_body = (tmp_path / "brain.yaml").read_text()
+    assert "\n  hindsight:" not in yaml_body and "  # hindsight:" in yaml_body
+    assert "mental_models: []" in yaml_body
+    with Agent.from_config(tmp_path / "brain.yaml") as agent:
+        assert "hindsight" not in {s.name for s in agent.stores}
+        agent.brain_remember("lite agents remember too", "fact")
+        assert agent.brain_recall("lite remember")["results"][0]["text"].startswith("lite agents")
+        s = agent.brain_session("start", "s1")
+        assert s["mental_models"] == {"note": "hindsight not configured"}
+        assert agent.brain_status()["ok"] is True
+
+
+# ── brief --hook ─────────────────────────────────────────────────────────────
+
+
+def test_brief_hook_injects_and_logs(tmp_path: Path) -> None:
+    import json
+
+    from brain_core.agent import Agent
+
+    runner.invoke(app, ["init", "bot", "--path", str(tmp_path), "--lite"])
+    (tmp_path / "vault" / "daily_brief.md").write_text("# Daily Brief — 2026-11-03\n\n- x\n")
+    r = runner.invoke(
+        app, ["brief", "--hook", "--path", str(tmp_path)], input=json.dumps({"session_id": "c1"})
+    )
+    assert r.exit_code == 0, r.stdout
+    out = json.loads(r.stdout)["hookSpecificOutput"]
+    assert out["hookEventName"] == "SessionStart"
+    assert "Daily Brief — 2026-11-03" in out["additionalContext"]
+    with Agent.from_config(tmp_path / "brain.yaml") as agent:
+        assert agent.recent_events(event_type="brief_injected")[0].payload["session_id"] == "c1"
+        assert agent.brain_session("start", "s1")["brief"].startswith("injected at SessionStart")
+    plain = runner.invoke(app, ["brief", "--path", str(tmp_path)])
+    assert plain.stdout.startswith("# Daily Brief")

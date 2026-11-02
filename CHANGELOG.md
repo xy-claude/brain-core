@@ -4,6 +4,11 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+### Added
+- `brain init --lite` and `install.sh --lite`: vault + SQLite only, no Hindsight. The `hindsight:` block stays in `brain.yaml` commented for the upgrade; session start, status, daily and weekly all run without it. The CI recall eval already measures this configuration.
+- `brain brief --hook`: a SessionStart hook that injects the daily brief as `additionalContext` and logs it; `brain_session('start')` then omits the brief for 15 minutes instead of repeating it, so the brief is never in context twice. The template `settings.json` wires it.
+- `brain daily --shadow`: writes `<brief>.shadow.md` beside a brief another tool still owns, leaves that brief alone, and lists its sections missing from brain-core's, so a migration from another brief writer never loses a section.
+
 ## [0.4.4] - 2026-11-03
 
 ### Added

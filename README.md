@@ -78,8 +78,8 @@ Plus `brain_status()` for health in one call: which stores are up, how many toke
 | You need | Why | Check |
 |---|---|---|
 | macOS, or Linux with systemd | the installer sets up a background service and cron | `uname` |
-| about 2 GB of disk and 10 minutes | Hindsight ships an embedded Postgres and a CPU embedding model | |
-| an Anthropic API key, or a Claude Code login | Hindsight uses an LLM to reason over memories | `echo $ANTHROPIC_API_KEY` |
+| about 2 GB of disk and 10 minutes, or `--lite` | Hindsight ships an embedded Postgres and a CPU embedding model; `--lite` skips it | |
+| an Anthropic API key, or a Claude Code login, or `--lite` | Hindsight uses an LLM to reason over memories | `echo $ANTHROPIC_API_KEY` |
 | Claude Code | the agent runs inside it; the installer adds it if missing | `claude --version` |
 
 Pick two names before you run the command: the agent's name (`--agent`), which becomes its folder and identity, and your own (`--user`), which is how the agent addresses you. Both can be changed later by editing `CLAUDE.md`.
@@ -90,6 +90,12 @@ Pick two names before you run the command: the agent's name (`--agent`), which b
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/xy-claude/brain-core/main/install.sh | bash -s -- --agent Atlas --user Alex
+```
+
+In a hurry, or no 2 GB to spare? Add `--lite`: vault plus SQLite full-text search, no Hindsight, installed in about a minute. Everything in the five tools works; what you give up is semantic recall over paraphrases, mental models and the weekly reflection. The recall numbers in [Does it work?](#does-it-work) are measured on exactly this configuration. Upgrade any time with `brain hindsight install`, then uncomment the `hindsight:` block in `brain.yaml`.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/xy-claude/brain-core/main/install.sh | bash -s -- --agent Atlas --user Alex --lite
 ```
 
 What it does, in order. Re-running skips what is already there, so after a failure you fix the cause and run the same line again.
@@ -136,6 +142,7 @@ The installer prints a note if the key was not in your shell when it ran. If you
 | `--provider` | `anthropic` (default), `openai`, or `claude-code` (uses your Claude Code login; personal use only) |
 | `--api-key-env VAR` | read the key from a variable other than `<PROVIDER>_API_KEY` |
 | `--profile DIR` | a folder copied over the generic rules last, for your own doctrine |
+| `--lite` | skip Hindsight: vault + SQLite only, upgrade later |
 | `--dashboard` | the Hindsight web UI on http://localhost:9999 |
 | `--ref v0.4.0` | pin a git tag instead of the PyPI release |
 
@@ -278,15 +285,15 @@ Rules: idempotent by content hash, append-only, nothing deleted, secrets refused
 ## Requirements
 
 - macOS or Linux for the installer; the library and MCP run anywhere Python 3.12 does
-- [Hindsight](https://github.com/vectorize-io/hindsight) (MIT) as the vector store, installed for you. Postgres is embedded; embeddings run on CPU
-- an LLM key for Hindsight's reasoning, or a Claude Code login for personal use
+- optional: [Hindsight](https://github.com/vectorize-io/hindsight) (MIT) as the vector store, installed for you unless `--lite`. Postgres is embedded; embeddings run on CPU
+- with Hindsight: an LLM key for its reasoning, or a Claude Code login for personal use
 
 On PyPI the package is `brain-core-mcp` (the plain name collides with an unrelated project); the command is still `brain` and the import is still `brain_core`.
 
 ## Roadmap
 
-- SQLite-only mode for a first run without Hindsight
 - an `import` for existing notes folders
+- a recall-miss log that grows the eval set from real misses
 
 How it compares to claude-mem, mem0 OpenMemory and a plain CLAUDE.md: [`docs/COMPARISON.md`](docs/COMPARISON.md). Shipped milestones: [`docs/MILESTONES.md`](docs/MILESTONES.md). Design: [`docs/SPEC_v0.2.md`](docs/SPEC_v0.2.md). Threat model for a memory that reads untrusted text: [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md).
 

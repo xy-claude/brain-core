@@ -29,6 +29,7 @@ def init_agent(
     *,
     user: str = "the user",
     profile: Path | None = None,
+    lite: bool = False,
 ) -> list[Path]:
     """Write the pack into ``path``; return the files written. ``typer.Exit(1)`` on error."""
     name = name.strip()
@@ -71,6 +72,33 @@ def init_agent(
         if src.suffix == ".sh":
             dest.chmod(0o755)
         written.append(dest)
+    if (
+        lite
+    ):  # vault + SQLite only; the Hindsight block stays in the file, commented, for the upgrade
+        y = target / "brain.yaml"
+        text = y.read_text(encoding="utf-8")
+        text = re.sub(
+            r"^(  hindsight:.*\n(?:    .*\n)+)",
+            lambda m: "".join("  # " + ln[2:] + "\n" for ln in m.group(1).splitlines()),
+            text,
+            count=1,
+            flags=re.M,
+        )
+        text = re.sub(
+            r"^  # hindsight:.*$",
+            "  # hindsight:  # lite: `brain hindsight install`, then uncomment these lines",
+            text,
+            count=1,
+            flags=re.M,
+        )
+        text = re.sub(
+            r"^  mental_models: \[.*$",
+            "  mental_models: []  # Hindsight only; set [active-priorities] after upgrading",
+            text,
+            count=1,
+            flags=re.M,
+        )
+        y.write_text(text, encoding="utf-8")
     if profile is not None:
         for src in sorted(p for p in profile.rglob("*") if p.is_file()):
             dest = target / src.relative_to(profile)
@@ -79,6 +107,10 @@ def init_agent(
             written.append(dest)
 
     typer.echo(f"Agent '{name}' written to {target}: {len(written)} files")
-    typer.echo(f"  memory: vault/ · data/brain.db · Hindsight bank {subs['bank']}")
+    typer.echo(
+        "  memory: vault/ · data/brain.db (lite, no Hindsight; `brain hindsight install` later)"
+        if lite
+        else f"  memory: vault/ · data/brain.db · Hindsight bank {subs['bank']}"
+    )
     typer.echo("  next: `brain doctor` here, then open Claude Code in this folder")
     return written

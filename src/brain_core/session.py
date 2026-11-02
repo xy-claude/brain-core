@@ -14,7 +14,7 @@ import json
 import os
 import re
 import uuid
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 from brain_core.config import SessionConfig
 
 START_TOKENS = 6_000
+INJECT_WINDOW_MIN = 15  # a brief injected by the SessionStart hook this recently is not repeated
 _SECTION = re.compile(r"^## (.+)$", re.M)
 _BRIEF_DATE = re.compile(r"Daily Brief — (\d{4}-\d{2}-\d{2})")
 
@@ -54,7 +55,15 @@ def session_start(agent: Agent, session_id: str | None = None) -> dict[str, Any]
         return out
     brief = _read(vault.root / cfg.brief)
     m = _BRIEF_DATE.search(brief)
-    out["brief"] = brief or f"missing: {cfg.brief}"
+    injected = agent.recent_events(event_type="brief_injected", limit=1)
+    if injected and _minutes_ago(injected[0].occurred_at) <= INJECT_WINDOW_MIN:
+        # the SessionStart hook already put the brief in context; never twice
+        out["brief"] = (
+            f"injected at SessionStart ({injected[0].occurred_at.isoformat(timespec='minutes')}); "
+            "not repeated here"
+        )
+    else:
+        out["brief"] = brief or f"missing: {cfg.brief}"
     out["brief_stale"] = m is not None and (today - date.fromisoformat(m.group(1))).days > 1
     exec_text = _read(vault.root / cfg.executive)
     out["executive_state"] = _sections(
@@ -194,7 +203,7 @@ def _marker(agent: Agent) -> Path:
 def _sections(text: str, wanted: tuple[str, ...]) -> str:
     parts, keep = re.split(r"^(?=## )", text, flags=re.M), []
     for p in parts:
-        if any(p.startswith(f"## {w}") for w in wanted):
+        if any(p.lower().startswith(f"## {w.lower()}") for w in wanted):  # heading case varies
             keep.append(p.rstrip())
     return "\n\n".join(keep)
 
@@ -207,6 +216,13 @@ def _mission_lines(exec_text: str) -> list[str]:
         if len(ln) > 8 and not ln.lower().startswith(("mission", "status")):
             out.append(" ".join(ln.split()[:12]))
     return out
+
+
+def _minutes_ago(when: datetime) -> float:
+    now = datetime.now(UTC)
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=UTC)  # SQLite CURRENT_TIMESTAMP is UTC
+    return (now - when).total_seconds() / 60
 
 
 def _peers(vault: VaultStore, cfg: SessionConfig) -> str:
