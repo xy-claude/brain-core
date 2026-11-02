@@ -90,3 +90,15 @@ def test_truncation_adds_steering_note() -> None:
     out = brain_recall([v], "budget item", limit=40, max_tokens=2000, today=TODAY)
     assert 0 < len(out["results"]) < 40 and "narrow `scope`" in out["note"]
     assert brain_recall([v], "zzz", today=TODAY)["note"].startswith("no hits")
+
+
+def test_two_banners_sharing_a_prefix_are_both_returned() -> None:
+    v = MemoryStore()
+    v.name = "vault"
+    head = (
+        "**⚠ Fact changed 2026-11-02:** The self-hosted Hindsight API on this Mac listens on port"
+    )
+    v.write("fact", f"{head} 8887 for MCP", when=date(2026, 11, 1))
+    v.write("fact", f"{head} 8888 for MCP", when=date(2026, 11, 2))
+    texts = [r["text"] for r in brain_recall([v], "hindsight port", today=TODAY)["results"]]
+    assert any("8887" in t for t in texts) and any("8888" in t for t in texts)

@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from brain_core.stores.hindsight import HindsightStore
-from brain_core.stores.vault import VaultStore
+from brain_core.stores.vault import _SECRET, VaultStore
 
 if TYPE_CHECKING:
     from brain_core.agent import Agent
@@ -209,6 +209,8 @@ def _drain_queue(agent: Agent, queue: str | None) -> int:
         (mine if str(e.get("agent", "")).lower() == agent.name.lower() else others).append(ln)
     for ln in mine:
         e = json.loads(ln)
+        if _SECRET.search(str(e.get("content", ""))):
+            continue  # a queued secret is dropped, never retained or kept on disk
         if h is None:
             others.append(ln)  # keep it; nothing to drain into
             continue
@@ -232,6 +234,8 @@ def _put(
 ) -> str:
     if body is None:
         return unchanged
+    if _SECRET.search(body):
+        return "refused: looks like it contains a secret"
     fm = (
         f"---\ntype: log\nowner: {vault.owner}\ndomain: system\nstatus: active\n"
         f"updated: {today.isoformat()}\n---\n"

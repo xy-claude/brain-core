@@ -116,7 +116,7 @@ def brain_recall(
                     if rel <= 0:
                         continue
                     score = 0.75 * min(rel, 1.5) / 1.5 + 0.25 * recency(r.date, today)
-                    key = normalize(r.text).lower()[:80]
+                    key = normalize(r.text).lower()
                     if r.id in hits or key in seen_text:
                         if r.id in hits and score > hits[r.id][2]:
                             hits[r.id] = (r, store.name, score)

@@ -118,6 +118,15 @@ class HindsightStore:
         )
 
     def call(self, tool: str, **args: Any) -> Any:
+        try:
+            return self._call(tool, args)
+        except urllib.error.HTTPError as e:
+            if e.code not in (400, 404) or self._session is None:
+                raise
+            self._session = None  # the server restarted and forgot us: initialise again, once
+            return self._call(tool, args)
+
+    def _call(self, tool: str, args: dict[str, Any]) -> Any:
         if self._session is None:
             self._post(
                 "initialize",

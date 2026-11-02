@@ -112,7 +112,7 @@ class VaultStore:
                         record_id(m.group(2)),
                         kind,
                         m.group(2),
-                        date.fromisoformat(m.group(1)),
+                        _parse_date(m.group(1)) or fallback,
                         domain,
                         rel,
                         n,
@@ -127,7 +127,7 @@ class VaultStore:
                         record_id(m.group(2)),
                         kind,
                         m.group(2),
-                        date.fromisoformat(m.group(1)),
+                        _parse_date(m.group(1)) or fallback,
                         domain,
                         rel,
                         n,
@@ -152,7 +152,7 @@ class VaultStore:
                         record_id(body),
                         kind,
                         body,
-                        date.fromisoformat(d) if d else fallback,
+                        _parse_date(d) or fallback,
                         domain,
                         rel,
                         n,
@@ -169,6 +169,8 @@ class VaultStore:
         if _SECRET.search(text):
             return WriteResult(self.name, "", "refused", "text looks like it contains a secret")
         when = when or date.today()
+        if kind != "raw":
+            text = " ".join(text.split())  # one bullet line; the id is hashed the same way
         rid = record_id(text)
         if kind == "note":
             path = self.root / "sessions" / f"{when.isoformat()}.md"
@@ -193,14 +195,18 @@ class VaultStore:
             )
         if kind == "pattern":
             title = extra.get("title", "")
-            body = (
-                f"- **{title}** — {text} ({when.isoformat()})"
-                if title
-                else f"- {text} ({when.isoformat()})"
-            )
+            bullet = f"**{title}** — {text}" if title else text
+            # the id must match what _parse will read back: the whole bullet body
             return self._append_bullet(
-                self.root / FILES[kind], rid, body, domain or "General", when, kind
+                self.root / FILES[kind],
+                record_id(bullet),
+                f"- {bullet} ({when.isoformat()})",
+                domain or "General",
+                when,
+                kind,
             )
+        if kind in ("decision", "correction"):
+            rid = record_id(extra.get("title", text[:60]))  # _parse keys these by heading
         if kind == "decision":
             block = (
                 f"## {when.isoformat()} — {extra.get('title', text[:60])}\n"
@@ -288,8 +294,10 @@ class VaultStore:
 
     def _write_raw(self, body: str, when: date, meta: dict[str, str]) -> WriteResult:
         slug = re.sub(r"[^a-z0-9]+", "-", meta.get("title", "untitled").lower()).strip("-")[:60]
-        path = self.root / "raw" / f"{when.isoformat()}-{slug}.md"
         sha = record_id(body)
+        path = self.root / "raw" / f"{when.isoformat()}-{slug or 'untitled'}.md"
+        if path.exists():  # same title, different source: raw/ is immutable, never overwrite
+            path = path.with_name(f"{path.stem}-{sha[:8]}.md")
         existing = [
             r
             for r in self.read("raw", limit=10_000)

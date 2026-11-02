@@ -115,3 +115,23 @@ def test_end_without_session_is_an_error(tmp_path: Path) -> None:
             assert "no active session" in str(e)
         else:
             raise AssertionError("expected ValueError")
+
+
+def test_end_refuses_secrets_in_files_and_drops_them_from_the_queue(tmp_path: Path) -> None:
+    agent, vault, fake = make(tmp_path)
+    q = tmp_path / "queue.jsonl"
+    q.write_text(
+        q.read_text()
+        + json.dumps({"agent": "T", "content": "token ghp_abcdefghijklmnopqrstuvwxyz0123"})
+        + "\n"
+    )
+    try:
+        agent.brain_session("start", "s9")
+        e = agent.brain_session(
+            "end", critique="# Critique\n\nused ghp_abcdefghijklmnopqrstuvwxyz0123 today"
+        )
+    finally:
+        agent.close()
+    assert e["critique"].startswith("refused") and e["queue_drained"] == 1
+    assert not (vault / "session_critique.md").exists(), "a refused body writes nothing"
+    assert "ghp_" not in q.read_text() and "ghp_" not in json.dumps(fake.retained)

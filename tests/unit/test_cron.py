@@ -138,3 +138,15 @@ def test_cron_lines_and_crontab_merge(tmp_path: Path) -> None:
     assert merged.splitlines()[0] == "0 3 * * * backup.sh" and "old brain" not in merged
     assert merged.count("# brain-core atlas") == 2
     assert cron._crontab_merge(merged, "Atlas", []) == "0 3 * * * backup.sh\n"
+
+
+def test_daily_survives_a_typo_date_in_corrections(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(cron, "_admin", lambda: None)
+    agent = make(tmp_path)
+    corr = tmp_path / "atlas" / "vault" / "corrections.md"
+    corr.write_text(corr.read_text() + "\n### [2026-13-01] Typed by hand\n- **Theme:** x\n")
+    with agent:
+        out = cron.daily(agent, TODAY)
+    assert "[2026-11-01] Claimed done without output" in Path(out["brief"]).read_text()

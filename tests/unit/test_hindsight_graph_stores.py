@@ -89,3 +89,24 @@ def test_graph_write_read_import_in_sqlite(db: Database) -> None:
     )
     assert counts == {"written": 1, "exists": 1, "skipped": 1}
     assert g.read("relation", "hindsight")[0].date == date(2026, 4, 11)
+
+
+def test_call_reinitialises_once_after_the_server_forgets_the_session() -> None:
+    import io
+    import urllib.error
+
+    store = HindsightStore("http://127.0.0.1:1", "b", "A", timeout=1)
+    store._session = "stale"
+    posts: list[str] = []
+
+    def post(method: str, params: dict[str, Any], notify: bool = False) -> dict[str, Any]:
+        posts.append(method)
+        if method == "tools/call" and store._session == "stale":
+            raise urllib.error.HTTPError("u", 404, "gone", {}, io.BytesIO())  # type: ignore[arg-type]
+        if method == "initialize":
+            store._session = "fresh"
+        return {"content": [{"text": '{"ok": true}'}]} if method == "tools/call" else {}
+
+    store._post = post  # type: ignore[method-assign]
+    assert store.call("recall", query="x") == {"ok": True}
+    assert posts == ["tools/call", "initialize", "notifications/initialized", "tools/call"]

@@ -97,7 +97,11 @@ def _hot_corrections(path: Path, today: date) -> str:
     current: tuple[str, str] | None = None
     for ln in text.splitlines():
         if m := _CORRECTION.match(ln):
-            d = date.fromisoformat(m.group(1))
+            try:
+                d = date.fromisoformat(m.group(1))
+            except ValueError:  # a hand-typed heading must not take the brief down
+                current = None
+                continue
             current = (m.group(1), m.group(2)) if (today - d).days <= HOT_DAYS else None
             if current:
                 hot.append(f"- [{m.group(1)}] {m.group(2)}")

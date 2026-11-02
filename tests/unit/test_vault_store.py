@@ -8,7 +8,8 @@ from pathlib import Path
 import pytest
 
 from brain_core.stores import MemoryStore, VaultStore
-from brain_core.stores.base import record_id
+from brain_core.stores.base import Kind, record_id
+from brain_core.stores.vault import FILES
 
 LEGACY_FACTS = """---
 type: reference
@@ -209,3 +210,45 @@ def test_knowledge_pages_are_read_per_section_and_never_written(tmp_path: Path) 
         and recs[0].date == date(2026, 11, 2)
     )
     assert v.write("knowledge", "nope").status == "refused"
+
+
+@pytest.mark.parametrize(
+    ("kind", "extra"),
+    [
+        ("decision", {"title": "Hindsight self-hosted"}),
+        ("correction", {"title": "Pushed without approval"}),
+        ("pattern", {"title": "Cadence"}),
+    ],
+)
+def test_titled_write_twice_is_exists_not_a_duplicate(
+    vault: VaultStore, kind: Kind, extra: dict[str, str]
+) -> None:
+    first = vault.write(kind, "Self-host Hindsight before paying for cloud", title=extra["title"])
+    second = vault.write(kind, "Self-host Hindsight before paying for cloud", title=extra["title"])
+    assert first.status == "written" and second.status == "exists" and first.id == second.id
+    body = (vault.root / FILES[kind]).read_text()
+    assert body.count(extra["title"]) == 1
+
+
+def test_multiline_text_is_one_bullet_with_one_id(vault: VaultStore) -> None:
+    first = vault.write("fact", "step one\n  step two", domain="System")
+    second = vault.write("fact", "step one step two", domain="System")
+    assert first.status == "written" and second.status == "exists"
+    assert "- step one step two (" in (vault.root / "facts.md").read_text()
+
+
+def test_typo_date_heading_does_not_break_reads(vault: VaultStore) -> None:
+    path = vault.root / "decisions_log.md"
+    path.write_text(path.read_text() + "\n## 2026-13-01 — Typed by hand\n**Decision:** x\n")
+    titles = [r.text for r in vault.read("decision")]
+    assert "Typed by hand" in titles and "Universal Brain Inheritance Architecture" in titles
+
+
+def test_raw_same_title_different_source_keeps_both(vault: VaultStore) -> None:
+    a = vault.write("raw", "body of a", title="Home", source="https://a.example/")
+    b = vault.write("raw", "body of b", title="Home", source="https://b.example/")
+    assert a.status == b.status == "written" and a.detail != b.detail
+    assert (vault.root / a.detail).read_text().endswith("body of a")
+    assert (vault.root / b.detail).read_text().endswith("body of b")
+    c = vault.write("raw", "body of c", title="日本語", source="https://c.example/")
+    assert c.detail.endswith("-untitled.md")

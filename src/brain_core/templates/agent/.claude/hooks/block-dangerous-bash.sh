@@ -40,7 +40,8 @@ block() {
 # 1) rm -rf on dangerous targets
 if printf '%s' "$CMD" | grep -Eq 'rm[[:space:]]+(-[a-zA-Z]*[rRfF][a-zA-Z]*[[:space:]]+|-rf[[:space:]]+|-fr[[:space:]]+|-Rf[[:space:]]+|-fR[[:space:]]+)'; then
   # check if path looks dangerous: /, ~, $HOME, ., .., or wildcards near root
-  if printf '%s' "$CMD" | grep -Eq 'rm[[:space:]]+-[rRfF]+[[:space:]]+(/|~|\$HOME|\.|\*|\$\{HOME\})([[:space:]]|$)'; then
+  # any number of flag groups (-r -f), then a root-ish path, optionally ending in / or *
+  if printf '%s' "$CMD" | grep -Eq 'rm[[:space:]]+(-[a-zA-Z]+[[:space:]]+)+(/|~|\$HOME|\$\{HOME\}|\.|\*)[/*]*(["'"'"'[:space:];|&]|$)'; then
     block "rm -rf on critical path detected"
   fi
 fi
@@ -58,7 +59,7 @@ if printf '%s' "$CMD" | grep -Eq 'git[[:space:]]+reset[[:space:]]+--hard'; then
 fi
 
 # 4) curl/wget piped to shell
-if printf '%s' "$CMD" | grep -Eq '(curl|wget)[[:space:]].*\|[[:space:]]*(bash|sh|zsh)([[:space:]]|$)'; then
+if printf '%s' "$CMD" | grep -Eq '(curl|wget)[[:space:]].*\|[[:space:]]*(sudo[[:space:]]+)?(bash|sh|zsh)([[:space:]"'"'"']|$)'; then
   block "piping remote content directly to a shell is unsafe — download, inspect, then run"
 fi
 
