@@ -61,6 +61,7 @@ class SessionConfig(BaseModel):
     inbox: str = "inbox_staged.md"
     critique: str = "session_critique.md"
     sync: str = "last_standalone_session.md"
+    peers: list[str] = Field(default_factory=list)  # globs of other agents' sync files
     mental_models: list[str] = Field(default_factory=lambda: ["active-priorities"])
     queue: str | None = None  # Hindsight amnesia queue (jsonl), drained at end
     marker: str | None = None  # clean-close marker; default data_dir/last_close.txt

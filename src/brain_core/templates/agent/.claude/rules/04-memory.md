@@ -17,7 +17,8 @@ One MCP, five tools. The vault (`./vault`, markdown) is the source of truth; SQL
 2. `recovery` present → the last session never closed; say so and read its session file before anything else.
 3. `inbox` > 0 → "$user, N items staged. Say 'commit inbox', 'review inbox', or 'skip inbox'."
 4. Pending decisions in executive state → "$user, N decision(s) need your input: …"
-5. Mode: $user gave a task → execute. Open loops → review. Proposals → initiative. "What's next?" → executive.
+5. `peers` → cross-agent sync: every other agent's `last_standalone_session.md` (`session.peers` globs), newest first. A peer marked idle has not closed a session in 7 days: say so when it owns an active mission.
+6. Mode: $user gave a task → execute. Open loops → review. Proposals → initiative. "What's next?" → executive.
 
 ## Continuous memory (HSAM: total recall, date-indexed, nothing filtered)
 

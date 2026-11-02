@@ -37,6 +37,9 @@ def make(tmp_path: Path, *, queue: bool = True) -> tuple[Agent, Path, FakeHindsi
         "## Pending Decisions (Ada)\n- none\n\n## Open Loops\n- lots\n"
     )
     (vault / "inbox_staged.md").write_text("# Inbox\n- item one\n- item two\n")
+    (vault / "last_standalone_session.md").write_text("## T — own sync, must be skipped\n")
+    (tmp_path / "OTHER").mkdir()
+    (tmp_path / "OTHER" / "last_standalone_session.md").write_text("## OTHER — shipped v2\n")
     q = tmp_path / "queue.jsonl"
     q.write_text(
         json.dumps({"agent": "T", "content": "mine", "context": "hsam-conversation", "tags": []})
@@ -52,6 +55,7 @@ def make(tmp_path: Path, *, queue: bool = True) -> tuple[Agent, Path, FakeHindsi
           vault: {vault}
         session:
           mental_models: [active-priorities, user-working-style]
+          peers: ['{tmp_path}/*/last_standalone_session.md']
           queue: {q if queue else "null"}
         """)
     )
@@ -72,6 +76,8 @@ def test_start_block_and_recovery_flag(tmp_path: Path) -> None:
             and "Open Loops" not in s["executive_state"]
         )
         assert s["inbox"] == 2
+        assert s["peers"].startswith("### OTHER (") and "shipped v2" in s["peers"]
+        assert "own sync" not in s["peers"]
         assert s["mental_models"] == {
             "active-priorities": "model active-priorities body",
             "user-working-style": "model user-working-style body",

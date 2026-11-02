@@ -16,6 +16,7 @@ stores:
 session:
   mental_models: [active-priorities]  # Hindsight mental models read at session start
   marker: ./data/last_close.txt       # clean-close marker; missing after a start = recovery
+  # peers: [../*/last_standalone_session.md]  # other agents' sync files, read at session start
 
 status:
   context_files: [CLAUDE.md, .claude/rules/*.md]   # what counts as always-loaded context

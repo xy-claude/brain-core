@@ -9,6 +9,7 @@ from this session's ``brain_remember`` events), and writes the clean-close marke
 from __future__ import annotations
 
 import contextlib
+import glob
 import json
 import os
 import re
@@ -23,6 +24,7 @@ from brain_core.stores.vault import read_text as _read
 
 if TYPE_CHECKING:
     from brain_core.agent import Agent
+from brain_core.config import SessionConfig
 
 START_TOKENS = 6_000
 _SECTION = re.compile(r"^## (.+)$", re.M)
@@ -64,6 +66,7 @@ def session_start(agent: Agent, session_id: str | None = None) -> dict[str, Any]
         if "**Empty**" in inbox
         else sum(1 for ln in inbox.splitlines() if ln.startswith(("- ", "### ")))
     )
+    out["peers"] = _peers(vault, cfg)
     out["mental_models"] = _mental_models(agent, cfg.mental_models)
     missions = _mission_lines(exec_text)
     out["missions"] = {q: agent.brain_recall(q, limit=3)["results"] for q in missions[:2]}
@@ -204,6 +207,26 @@ def _mission_lines(exec_text: str) -> list[str]:
         if len(ln) > 8 and not ln.lower().startswith(("mission", "status")):
             out.append(" ".join(ln.split()[:12]))
     return out
+
+
+def _peers(vault: VaultStore, cfg: SessionConfig) -> str:
+    """Other agents' sync files (session.peers globs), newest first, own file skipped."""
+    own = (vault.root / cfg.sync).resolve()
+    found: list[tuple[date, Path]] = []
+    for pattern in cfg.peers:
+        pat = os.path.expanduser(pattern)
+        if not os.path.isabs(pat):
+            pat = str(vault.root / pat)
+        for hit in glob.glob(pat):
+            p = Path(hit)
+            if p.resolve() != own and p.is_file():
+                found.append((date.fromtimestamp(p.stat().st_mtime), p))
+    out = []
+    for when, p in sorted(found, reverse=True):
+        age = (date.today() - when).days
+        body = "\n".join(_read(p).splitlines()[:15])
+        out.append(f"### {p.parent.name} ({when}, {age}d{', idle' if age > 7 else ''})\n{body}")
+    return "\n\n".join(out)
 
 
 def _mental_models(agent: Agent, ids: list[str]) -> dict[str, str]:
