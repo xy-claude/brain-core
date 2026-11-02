@@ -297,15 +297,23 @@ def _missions_watch(path: Path, today: date) -> str:
 def _correction_patterns(root: Path, today: date) -> str:
     """A theme with three or more corrections is a pattern: name it and whether a rule exists."""
     counts: dict[str, int] = {}
+    promoted: set[str] = set()
     for _d, _t, f in traits._corrections(_read(root / "corrections.md")):
         th = f.get("theme", "").lower().strip()
         if th:
             counts[th] = counts.get(th, 0) + 1
+            if f.get("promoted", "").lower().startswith("yes"):
+                promoted.add(th)
     lines = []
     for th, n in sorted(counts.items(), key=lambda kv: -kv[1]):
         if n >= 3:
             draft = root / "procedures" / "_drafts" / f"rule-{th}.md"
-            state = "draft rule waits" if draft.exists() else "no rule yet"
+            if th in promoted:
+                state = "rule promoted, still recurring: rewrite it"
+            elif draft.exists():
+                state = "draft rule waits"
+            else:
+                state = "no rule yet"
             lines.append(f"- `{th}` ×{n} → {state}; fix the cause, not the instance")
     if not lines:
         return ""
