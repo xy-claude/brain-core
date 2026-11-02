@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # pinned: a release never changes OS without a deliberate bump
     steps:
       - uses: actions/checkout@v7
 

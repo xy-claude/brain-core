@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # pinned: a release never changes OS without a deliberate bump
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.3.3
@@ -33,7 +33,7 @@ jobs:
 
   pypi:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # pinned: a release never changes OS without a deliberate bump
     environment: pypi
     steps:
       - uses: actions/download-artifact@v8
@@ -42,7 +42,7 @@ jobs:
 
   github-release:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # pinned: a release never changes OS without a deliberate bump
     steps:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
@@ -64,7 +64,7 @@ jobs:
   # so this runs after the PyPI publish. OIDC: a workflow in xy-claude/* owns io.github.xy-claude/*.
   mcp-registry:
     needs: pypi
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # pinned: a release never changes OS without a deliberate bump
     env:
       MCP_PUBLISHER_VERSION: v1.8.7
     steps:
