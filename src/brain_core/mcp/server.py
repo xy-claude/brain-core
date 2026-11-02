@@ -7,61 +7,110 @@ One process per agent, spawned by Claude Code via .mcp.json::
 The v0.1 one-tool-per-function surface (remember, recall, decide, …) stays available as the
 Python API in :mod:`brain_core.mcp.tools`; the MCP no longer exposes it. Five consolidated
 workflow tools beat fourteen endpoint mirrors for an agent choosing what to call.
+
+Each tool carries MCP annotations and a description per parameter: the description is the
+only thing an agent reads before it picks a tool, so it says what the tool does, when to use
+it instead of its siblings, and what it does that the schema cannot show.
 """
 
 from __future__ import annotations
 
 import uuid
 from pathlib import Path
-from typing import Any, cast
+from typing import Annotated, Any, cast
 
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
+from pydantic import Field
 
 from brain_core.agent import Agent
 
 _SESSION_PREFIX = "mcp-"
+_KINDS = "fact|pattern|decision|correction|note|raw|relation"
 
 
 def build_server(agent: Agent) -> FastMCP:
     """Register the five brain tools on a FastMCP instance. Exposed for testing."""
     server = FastMCP(name=f"brain-core:{agent.name}")
 
-    @server.tool()
+    @server.tool(
+        annotations=ToolAnnotations(
+            readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False
+        )
+    )
     def brain_recall(
-        query: str,
-        scope: str = "all",
-        format: str = "concise",
-        limit: int = 10,
+        query: Annotated[str, Field(description="Free-text search; keywords beat sentences.")],
+        scope: Annotated[
+            str,
+            Field(
+                description=f"'all' (default), one kind ({_KINDS}) or one store "
+                "(sqlite|vault|hindsight|graph)."
+            ),
+        ] = "all",
+        format: Annotated[
+            str,
+            Field(
+                description="'concise' (default) for text to quote; 'detailed' adds ids, "
+                "scores and store names for chained calls."
+            ),
+        ] = "concise",
+        limit: Annotated[int, Field(description="Max results after dedup; default 10.")] = 10,
     ) -> dict[str, Any]:
-        """Search the agent's whole memory with one query: facts, patterns, decisions,
-        corrections, session notes, raw sources and entity relations across every store
-        (SQLite, markdown vault, Hindsight, graph). Results are deduplicated, ranked by
-        relevance and recency, and capped at ~6k tokens. `scope` narrows to one kind
-        (fact|pattern|decision|correction|note|raw|relation) or one store
-        (sqlite|vault|hindsight|graph). `format='detailed'` adds ids, scores and store names
-        for chained calls. `stores` in the reply shows hits per store or the error if one
-        was unreachable."""
+        """Search the agent's long-term memory: facts, patterns, decisions, corrections,
+        session notes, raw sources and entity relations across SQLite, the markdown vault,
+        Hindsight and the graph, returned as one deduplicated list ranked by relevance and
+        recency and capped at about 6k tokens.
+
+        Use it before answering anything about past sessions, earlier decisions or the user's
+        preferences, and before brain_remember to avoid writing a duplicate. Not for health
+        checks (brain_status) and not for reading a file you already know the path of.
+
+        Read-only. Partial results are normal: `stores` lists hits per store and names any store
+        that was unreachable instead of failing the call. A value a `⚠ Fact changed` banner
+        superseded is returned but ranked below the banner."""
         return agent.brain_recall(query, scope=scope, fmt=format, limit=limit)
 
-    @server.tool()
+    @server.tool(
+        annotations=ToolAnnotations(
+            readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=False
+        )
+    )
     def brain_remember(
-        text: str,
-        kind: str,
-        domain: str = "",
-        source: str = "",
-        mission: str | None = None,
-        force: bool = False,
-        extra: dict[str, str] | None = None,
+        text: Annotated[str, Field(description="The memory itself, one item, plain text.")],
+        kind: Annotated[str, Field(description=f"One of {_KINDS}.")],
+        domain: Annotated[
+            str, Field(description="Topic tag such as 'trading' or 'system'; empty = none.")
+        ] = "",
+        source: Annotated[
+            str, Field(description="Where it came from: a URL, file path or 'user'.")
+        ] = "",
+        mission: Annotated[
+            str | None, Field(description="Mission id to tag, e.g. 'M-012'.")
+        ] = None,
+        force: Annotated[
+            bool, Field(description="Write even when a near-duplicate exists.")
+        ] = False,
+        extra: Annotated[
+            dict[str, str] | None,
+            Field(
+                description="Kind-specific fields. decision: title, reason, classification, "
+                "confidence. correction: title, error, correction, rule, theme. relation: "
+                "subject, predicate, object (or text 'S —[p]→ O'). note: section."
+            ),
+        ] = None,
     ) -> dict[str, Any]:
-        """Remember one thing in every store at once, in order: markdown vault, SQLite,
-        Hindsight, and the entity graph (relations only). `kind` is one of
-        fact|pattern|decision|correction|note|raw|relation. A near-duplicate fact is skipped
-        (`status: duplicate`, with the existing one); a changed value is written with a
-        `⚠ Fact changed` banner and the old line kept (`contradiction` in the reply). `layers`
-        reports each store as written|exists|pending|failed|refused with detail, so a dead
-        store is never silent. `extra` carries kind-specific fields: decision → title, reason,
-        classification, confidence; correction → title, error, correction, rule, theme;
-        relation → subject, predicate, object (or text 'S —[p]→ O'); note → section."""
+        """Write one memory item to every store in one call, in order: markdown vault, SQLite,
+        Hindsight, and the entity graph (relations only).
+
+        Use it the moment the user states a fact, decision, correction, preference or
+        relationship worth keeping across sessions; one call per item. Not for whole documents
+        or web pages (brain_distill) and not for the end-of-session summary (brain_session).
+
+        Never deletes. A near-duplicate fact returns `status: duplicate` with the existing entry
+        and writes nothing. A changed value is appended under a `⚠ Fact changed` banner with the
+        old line kept, reported as `contradiction`. `layers` reports each store as
+        written|exists|pending|failed|refused, so a dead store is visible, never silent. Text
+        that looks like a secret is refused."""
         return agent.brain_remember(
             text,
             kind,
@@ -72,52 +121,102 @@ def build_server(agent: Agent) -> FastMCP:
             **cast(dict[str, Any], extra or {}),
         )
 
-    @server.tool()
+    @server.tool(
+        annotations=ToolAnnotations(
+            readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=False
+        )
+    )
     def brain_session(
-        phase: str,
-        session_id: str | None = None,
-        executive_state: str | None = None,
-        critique: str | None = None,
-        sync: str | None = None,
+        phase: Annotated[str, Field(description="'start' or 'end'.")],
+        session_id: Annotated[
+            str | None,
+            Field(description="Caller's session id; omit to keep the one the server opened."),
+        ] = None,
+        executive_state: Annotated[
+            str | None,
+            Field(description="end only: full markdown body that replaces executive_state."),
+        ] = None,
+        critique: Annotated[
+            str | None,
+            Field(description="end only: full markdown body that replaces session_critique."),
+        ] = None,
+        sync: Annotated[
+            str | None,
+            Field(description="end only: full markdown body of the cross-agent sync note."),
+        ] = None,
     ) -> dict[str, Any]:
-        """Open or close a session in one call. `phase='start'` returns the whole start block:
-        the cron daily brief (with a stale flag), executive state (objective, missions, pending
-        decisions), the configured Hindsight mental models, a recall for each top mission, the
-        staged-inbox count, and `recovery` if the previous session never closed. `phase='end'`
-        drains the Hindsight queue, appends a close line to today's HSAM file, rewrites
-        executive_state / session_critique / cross-agent sync from the text you pass (or writes
-        a stub built from this session's brain_remember calls), and writes the clean-close
-        marker. Pass `executive_state`, `critique` and `sync` as full markdown bodies."""
+        """Open or close the agent's working session. Call phase='start' once at the beginning
+        of every conversation, before any other brain tool; call phase='end' once when the user
+        signals they are done. Not for single facts (brain_remember).
+
+        start returns the whole context block: the cron daily brief with a stale flag,
+        executive state (objective, missions, pending decisions), the configured Hindsight
+        mental models, a recall per top mission, the staged-inbox count, and `recovery` when
+        the previous session never closed.
+
+        end drains the Hindsight queue, appends a close line to today's session archive,
+        replaces executive_state, session_critique and the cross-agent sync file with the
+        bodies you pass (or a stub built from this session's brain_remember calls), reports
+        which trait signals moved, and writes the clean-close marker. A second end overwrites
+        the first."""
         return agent.brain_session(
             phase, session_id, executive_state=executive_state, critique=critique, sync=sync
         )
 
-    @server.tool()
+    @server.tool(
+        annotations=ToolAnnotations(
+            readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=True
+        )
+    )
     def brain_distill(
-        source: str,
-        text: str | None = None,
-        title: str | None = None,
-        author: str | None = None,
-        published: str | None = None,
+        source: Annotated[
+            str,
+            Field(
+                description="A URL (web page, GitHub repo, YouTube video, PDF), a local file "
+                "path, or a short name for pasted `text`."
+            ),
+        ],
+        text: Annotated[
+            str | None,
+            Field(description="The body itself, when you already have it; skips fetching."),
+        ] = None,
+        title: Annotated[str | None, Field(description="Override the detected title.")] = None,
+        author: Annotated[str | None, Field(description="Override the detected author.")] = None,
+        published: Annotated[
+            str | None, Field(description="Publication date YYYY-MM-DD, if known.")
+        ] = None,
     ) -> dict[str, Any]:
-        """Capture a source into the agent's immutable `raw/` folder (step 1 of /distill).
-        `source` is a URL (web page via defuddle with a stdlib fallback, GitHub repo README,
-        YouTube subtitles via yt-dlp, PDF saved as bytes), a local file path, or a name for
-        pasted `text`. Writes `raw/YYYY-MM-DD-<slug>.md` with source, title, author, published,
-        sha256 and word count; `status: exists` means the same source or body was captured
-        before. A `note` says when the capture looks thin (JS or paywalled page) so you can
-        fetch it in the browser and pass `text=`. Compiling the knowledge page is your job."""
+        """Capture an external source into the agent's immutable raw/ folder as a dated
+        markdown file with provenance: source, title, author, published, sha256, word count.
+        This is step 1 of /distill; compiling the knowledge page from the raw file is your job
+        afterwards.
+
+        Use it for a web page (defuddle with a stdlib fallback), a GitHub repo README, YouTube
+        subtitles via yt-dlp, a PDF saved as bytes, a local file, or pasted text. Not for short
+        facts (brain_remember).
+
+        Fetches over the network for URLs. The same source or body a second time returns
+        `status: exists` and writes nothing. A `note` flags a thin capture (JS-only or paywalled
+        page) so you can read it in a browser and call again with `text`."""
         return agent.brain_distill(
             source, text=text, title=title, author=author, published=published
         )
 
-    @server.tool()
+    @server.tool(
+        annotations=ToolAnnotations(
+            readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False
+        )
+    )
     def brain_status() -> dict[str, Any]:
-        """Health in one call: every store's reachability, knowledge-wiki lint (pages not in
-        _index, index links to missing pages, pages without sources, raw files never compiled),
-        always-loaded context size in tokens per file, last session start/close ids with an
-        `unclosed` flag, and the count of pending decisions in executive state. `ok` is false
-        when any store is down or lint found issues."""
+        """Report the agent's health in one read-only call: reachability of every store (vault,
+        SQLite, Hindsight, graph), knowledge-wiki lint (pages missing from _index, index links
+        to missing pages, pages without sources, raw files never compiled), always-loaded
+        context size in tokens per file, the last session start and close ids with an
+        `unclosed` flag, the pending-decision count, and the twelve trait signals.
+
+        Use it when a store seems down, before maintenance, or when the user asks how the
+        memory is doing. Not a search (brain_recall). `ok` is false when any store is down or
+        lint found issues; `stores` names the failing one."""
         return agent.brain_status()
 
     return server

@@ -4,6 +4,9 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+### Changed
+- Tool definitions rewritten for agents that pick tools by description: each of the five tools now states what it does first, when to use it instead of its siblings, and the behaviour the schema cannot show (read-only, never deletes, fetches the network, overwrites on repeat). Every parameter has a schema description and every tool carries MCP annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`). `tdqs lint` goes from 9 warnings to 0. No behaviour change.
+
 ## [0.2.5] - 2026-11-02
 
 ### Fixed
