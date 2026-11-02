@@ -4,6 +4,8 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-11-02
+
 ### Fixed
 - Installer: the LLM key now reaches Hindsight. launchd and systemd do not expand `${VAR}`; `brain hindsight install` writes the key to `~/.config/hindsight/env` (mode 600) and the service sources it. Re-run after exporting the key.
 - `mcp` is a required dependency; `brain serve` works after `uv tool install brain-core-mcp` with no extra.

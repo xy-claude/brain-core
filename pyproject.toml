@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "brain-core-mcp"  # PyPI: "brain-core" collides with an existing "braincore"
-version = "0.2.2"
-description = "Cognitive primitives for AI agents — memory, decisions, reflection."
+version = "0.2.3"
+description = "A memory for your Claude Code agent that survives the session: one local MCP server, five tools, a markdown vault, an eval."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { file = "LICENSE" }

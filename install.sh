@@ -1,7 +1,7 @@
 #!/bin/bash
 # brain-core one-line installer (macOS and Linux).
 #
-#   curl -fsSL https://raw.githubusercontent.com/xy-claude/brain-core/main/install.sh | bash -s -- --agent NAME [--user Alex] [--dir ~/Agents/NAME] [--provider anthropic|openai|claude-code] [--profile DIR] [--dashboard] [--ref v0.2.2]
+#   curl -fsSL https://raw.githubusercontent.com/xy-claude/brain-core/main/install.sh | bash -s -- --agent NAME [--user Alex] [--dir ~/Agents/NAME] [--provider anthropic|openai|claude-code] [--profile DIR] [--dashboard] [--ref v0.2.3]
 #
 # Idempotent: re-running skips what is already in place. Every step prints what it did.
 # It never asks for secrets. Three things stay yours: `claude` login, `gh auth login`, SSH keys.

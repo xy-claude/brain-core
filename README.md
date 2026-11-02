@@ -96,7 +96,7 @@ What it does, in order. Re-running skips what is already there, so after a failu
 == 1/8 Xcode command line tools      present
 == 2/8 Homebrew                      present
 == 3/8 uv, gh, gitleaks, node, Claude Code
-== 4/8 brain-core (v0.2.2)           installed with uv tool
+== 4/8 brain-core (v0.2.3)           installed with uv tool
 == 5/8 Agent Atlas at ~/Agents/Atlas  31 files written
 == 6/8 Hindsight (required store)    service: healthy
 == 7/8 Cron                          daily 06:07, weekly Sun 07:13
@@ -108,7 +108,7 @@ What it does, in order. Re-running skips what is already there, so after a failu
 | 1 | checks for `git` via the Xcode command line tools | macOS opens an install dialog; finish it, then re-run |
 | 2 | installs Homebrew if missing | Homebrew asks for your password itself |
 | 3 | installs `uv`, `gh`, `gitleaks`, `node` and Claude Code with Homebrew | anything already present is left alone |
-| 4 | installs the `brain` command from PyPI with `uv tool` | `--ref v0.2.2` pins a git tag instead |
+| 4 | installs the `brain` command from PyPI with `uv tool` | `--ref v0.2.3` pins a git tag instead |
 | 5 | runs `brain init` and writes the agent folder | an existing `brain.yaml` is never overwritten |
 | 6 | installs Hindsight as a launchd service on `127.0.0.1:8888` | first start downloads the embedding model; give it a few minutes |
 | 7 | installs `brain daily` and `brain weekly` as launchd agents | |
@@ -135,7 +135,7 @@ The installer prints a note if the key was not in your shell when it ran. If you
 | `--api-key-env VAR` | read the key from a variable other than `<PROVIDER>_API_KEY` |
 | `--profile DIR` | a folder copied over the generic rules last, for your own doctrine |
 | `--dashboard` | the Hindsight web UI on http://localhost:9999 |
-| `--ref v0.2.2` | pin a git tag instead of the PyPI release |
+| `--ref v0.2.3` | pin a git tag instead of the PyPI release |
 
 ### Linux
 
@@ -144,7 +144,7 @@ The same one line. It needs `git` and `curl` already present. It then installs `
 ### Manual, any platform
 
 ```bash
-uv tool install brain-core-mcp   # or: uv tool install git+https://github.com/xy-claude/brain-core@v0.2.2
+uv tool install brain-core-mcp   # or: uv tool install git+https://github.com/xy-claude/brain-core@v0.2.3
 brain init Atlas --path ~/Agents/Atlas --user Alex
 brain hindsight install          # launchd on macOS, systemd --user on Linux
 brain cron install ~/Agents/Atlas
