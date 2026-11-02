@@ -30,6 +30,10 @@ class FakeHindsight(HindsightStore):
             return {"status": "ok"}
         if tool == "recall":
             return {"results": []}
+        if tool == "reflect":
+            return {
+                "text": "You claim done before the output is pasted.  Three corrections say so."
+            }
         raise AssertionError(tool)
 
     def health(self) -> tuple[bool, str]:
@@ -274,3 +278,37 @@ def test_growth_section_names_rules_missions_and_old_pending(
     assert "M-002 stalled (blocked) not reviewed for 62 days" in growth and "M-001" not in growth
     assert "pending decision `buy the domain` has waited 32 days" in growth
     assert json.loads(seen.read_text()) == {"buy the domain": "2026-10-01"}, "gone ones are dropped"
+
+
+def test_reinforce_lists_decisions_at_the_spaced_intervals(tmp_path: Path) -> None:
+    agent = make(tmp_path)
+    (tmp_path / "atlas" / "vault" / "decisions_log.md").write_text(
+        "# Decisions\n\n## 2026-10-30 — Three days old\n**Decision:** a\n\n"
+        "## 2026-10-28 — Five days old\n**Decision:** b\n\n## 2026-10-03 — Thirty days old\n"
+    )
+    brief = Path(cron.daily(agent, TODAY)["brief"]).read_text()
+    assert "## Reinforce" in brief
+    assert "- day 3: Three days old (2026-10-30)" in brief
+    assert "- day 30: Thirty days old (2026-10-03)" in brief
+    assert "Five days old" not in brief
+
+
+def test_weekly_drafts_a_rule_per_recurring_theme_and_reflects(tmp_path: Path) -> None:
+    agent = make(tmp_path)
+    agent._stores = [*agent.stores, FakeHindsight()]
+    out = cron.weekly(agent, TODAY)
+    vault = tmp_path / "atlas" / "vault"
+    draft = vault / "procedures" / "_drafts" / "rule-verification.md"
+    assert out["rule_drafts"] == [str(draft)]  # authority has 1 correction, verification 4
+    body = draft.read_text()
+    assert "theme: verification" in body and body.count("\n- ") == 4
+    draft.write_text("edited by the agent\n")
+    assert cron.weekly(agent, TODAY)["rule_drafts"] == []  # never overwritten
+    assert draft.read_text() == "edited by the agent\n"
+    assert out["reflection"] == "written"
+    refl = (vault / "knowledge" / "_reflections.md").read_text()
+    assert "## 2026-11-02" in refl and "You claim done before the output is pasted. Three" in refl
+    brief = Path(cron.daily(agent, TODAY)["brief"]).read_text()
+    assert (
+        "draft rule `rule-verification.md`" in brief and "wrote a reflection on 2026-11-02" in brief
+    )

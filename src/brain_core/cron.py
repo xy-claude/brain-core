@@ -26,12 +26,17 @@ from brain_core.session import _sections
 from brain_core.status import _frontmatter
 from brain_core.stores.hindsight import HindsightStore
 from brain_core.stores.transcripts import TranscriptStore
-from brain_core.stores.vault import VaultStore
+from brain_core.stores.vault import _DECISION, VaultStore, _parse_date
 from brain_core.stores.vault import read_text as _read
 
 if TYPE_CHECKING:
     from brain_core.agent import Agent
 
+REINFORCE_DAYS = (1, 3, 7, 30)  # spaced repetition for decisions
+DRAFT_AFTER = 3  # unpromoted corrections on one theme before a draft rule is written
+REFLECT_QUERY = (
+    "Across recent sessions, what should change in how I work? Name the pattern and the evidence."
+)
 HOT_DAYS = 14
 STALE_DAYS = 30
 ARCHIVE_DAYS = 30
@@ -52,6 +57,7 @@ def daily(agent: Agent, today: date | None = None) -> dict[str, Any]:
         "`brain_session('start')` reads this file; everything else is one `brain_recall` away._\n",
         _agenda(vault.root / "goals" / "mission_queue.md"),
         _hot_corrections(vault.root / "corrections.md", today),
+        _reinforce(vault.root / "decisions_log.md", today),
         _lessons(vault.root / cfg.session.critique),
         _executive(vault.root / cfg.session.executive),
         _health(status),
@@ -214,9 +220,98 @@ def _growth(agent: Agent, root: Path, today: date) -> str:
                 f"- pending decision `{key[:60]}` has waited {days} days "
                 "→ ask again, or decide it is not needed"
             )
+    for p in sorted((root / "procedures" / "_drafts").glob("rule-*.md")):
+        lines.append(
+            f"- draft rule `{p.name}` waits for your decision "
+            "→ approve into a rule file, or delete it"
+        )
+    latest = _latest_reflection(root / "knowledge" / "_reflections.md")
+    if latest and (today - latest).days <= 7:
+        lines.append(
+            f"- `brain weekly` wrote a reflection on {latest.isoformat()} "
+            "→ read knowledge/_reflections.md; "
+            "cite a vault source before acting on it"
+        )
     if not lines:
         return ""
     return "## Growth — what the traits say to do today\n\n" + "\n".join(lines) + "\n"
+
+
+def _reinforce(path: Path, today: date) -> str:
+    """Spaced repetition for decisions: resurface each one at 1, 3, 7 and 30 days."""
+    lines = []
+    for ln in _read(path).splitlines():
+        if (m := _DECISION.match(ln)) and (d := _parse_date(m.group(1))):
+            age = (today - d).days
+            if age in REINFORCE_DAYS:
+                lines.append(f"- day {age}: {m.group(2)} ({d.isoformat()})")
+    if not lines:
+        return ""
+    return "## Reinforce — decisions due for a second look\n\n" + "\n".join(lines) + "\n"
+
+
+def rule_drafts(root: Path, today: date) -> list[str]:
+    """A theme with DRAFT_AFTER or more unpromoted corrections gets one draft rule file in
+    procedures/_drafts/. Never overwritten: the agent edits, approves or deletes it."""
+    by_theme: dict[str, list[tuple[date, str, dict[str, str]]]] = {}
+    for d, t, f in traits._corrections(_read(root / "corrections.md")):
+        th = f.get("theme", "").strip().lower()
+        if th and not f.get("promoted", "").lower().startswith("yes"):
+            by_theme.setdefault(th, []).append((d, t, f))
+    written = []
+    for th, items in sorted(by_theme.items()):
+        if len(items) < DRAFT_AFTER:
+            continue
+        p = root / "procedures" / "_drafts" / f"rule-{re.sub(r'[^a-z0-9]+', '-', th).strip('-')}.md"
+        if p.exists():
+            continue
+        p.parent.mkdir(parents=True, exist_ok=True)
+        rules = "\n".join(
+            f"- {f.get('implied rule') or f.get('rule') or t} ({d.isoformat()})"
+            for d, t, f in items
+        )
+        p.write_text(
+            f"---\ntype: draft-rule\ntheme: {th}\nstatus: draft\n"
+            f"created: {today.isoformat()}\n---\n"
+            f"# Draft rule — {th} ({len(items)} corrections)\n\n{rules}\n\n"
+            "Approve: write the rule in one line in your own rule file and set `Promoted: Yes` on "
+            "each correction above. Reject: delete this file.\n",
+            encoding="utf-8",
+        )
+        written.append(str(p))
+    return written
+
+
+def reflect(agent: Agent, today: date) -> str:
+    """One Hindsight reflection a week, appended to knowledge/_reflections.md as unverified."""
+    h = next((s for s in agent.stores if isinstance(s, HindsightStore)), None)
+    if h is None:
+        return "no hindsight"
+    try:
+        res = h.call("reflect", query=REFLECT_QUERY, budget="mid")
+    except Exception as e:
+        return f"error: {str(e)[:80]}"
+    text = (res.get("text") or res.get("answer") or "") if isinstance(res, dict) else str(res)
+    text = " ".join(str(text).split())[:1500]
+    if not text:
+        return "empty"
+    p = _vault(agent).root / "knowledge" / "_reflections.md"
+    if not p.exists():
+        p.write_text(
+            "# Reflections (written by `brain weekly`)\n\n_Unverified synthesis from Hindsight "
+            "reflect. Cite a vault source before acting on any line._\n",
+            encoding="utf-8",
+        )
+    with p.open("a", encoding="utf-8") as f:
+        f.write(f"\n## {today.isoformat()}\n\n{text}\n")
+    return "written"
+
+
+def _latest_reflection(path: Path) -> date | None:
+    dates = [
+        d for ln in _read(path).splitlines() if ln.startswith("## ") and (d := _parse_date(ln[3:]))
+    ]
+    return max(dates) if dates else None
 
 
 def _track_pending(data_dir: Path, pending: list[list[str]], today: date) -> dict[str, int]:
@@ -316,7 +411,12 @@ def weekly(agent: Agent, today: date | None = None) -> dict[str, Any]:
             refreshed[mid] = "refreshed"
         except Exception as e:
             refreshed[mid] = f"error: {str(e)[:80]}"
-    return {"archived": moved, "mental_models": refreshed}
+    return {
+        "archived": moved,
+        "mental_models": refreshed,
+        "rule_drafts": rule_drafts(vault.root, today),
+        "reflection": reflect(agent, today),
+    }
 
 
 def consolidate(sdir: Path, today: date) -> dict[str, int]:
