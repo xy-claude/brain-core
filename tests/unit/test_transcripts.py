@@ -65,7 +65,7 @@ def _write_session(folder: Path) -> Path:
 
 
 def test_project_dir_encodes_the_cwd_like_claude_code(tmp_path: Path) -> None:
-    root = tmp_path / "AI-ORG" / "CLARK_AI"
+    root = tmp_path / "Agents" / "Atlas"
     assert project_dir(tmp_path / "projects", root).name == str(root.resolve()).translate(
         str.maketrans("/_.", "---")
     )

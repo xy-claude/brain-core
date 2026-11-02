@@ -4,6 +4,12 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-02
+
+### Added
+- Listed in the official MCP registry as `io.github.xy-claude/brain-core`: `server.json` at the repo root, the ownership marker in the README, and a release-workflow job that publishes each tag to the registry over OIDC after the PyPI upload.
+- A second console script, `brain-core-mcp`, equal to `brain`, so `uvx brain-core-mcp serve DIR` runs the server with nothing installed.
+
 ## [0.3.0] - 2026-11-02
 
 ### Added
