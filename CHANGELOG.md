@@ -4,6 +4,12 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+### Added
+- `brain index <agent>`: loads the vault's `facts.md` and `patterns.md` into the SQLite FTS index, keeping each line's date and file position so recall ranks and cites them as the vault does. Idempotent; run it once after pointing `brain.yaml` at an existing vault.
+
+### Fixed
+- An agent configured on an existing vault had an empty SQLite fact index (`brain doctor` showed `sqlite facts=0`), so recall over facts had no full-text ranking.
+
 ## [0.4.0] - 2026-11-03
 
 ### Added

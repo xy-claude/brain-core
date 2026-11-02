@@ -10,6 +10,7 @@ import typer
 from brain_core import __version__
 from brain_core.agent import Agent
 from brain_core.cli.init import init_agent
+from brain_core.stores.vault import VaultStore
 
 app = typer.Typer(
     help="brain-core — cognitive primitives for AI agents.",
@@ -199,6 +200,36 @@ def graph_cmd(
             typer.echo("ERROR: pass --dump FILE or set stores.graph in brain.yaml", err=True)
             raise typer.Exit(code=1)
         typer.echo(f"import: {g.import_dump(text)}")
+
+
+@app.command("index")
+def index_cmd(
+    path: Annotated[
+        Path,
+        typer.Argument(help="Path to agent directory (contains brain.yaml)."),
+    ] = Path(),
+) -> None:
+    """Load the vault's facts.md and patterns.md into the SQLite FTS index. Idempotent."""
+    with _open(path) as agent:
+        vault = next((s for s in agent.stores if isinstance(s, VaultStore)), None)
+        if vault is None:
+            typer.echo("ERROR: no vault configured in brain.yaml", err=True)
+            raise typer.Exit(code=1)
+        sqlite = agent.stores[0]
+        written = exists = 0
+        for kind in ("fact", "pattern"):
+            for r in vault.read(kind, limit=1_000_000):
+                res = sqlite.write(kind, r.text, domain=r.domain, path=r.path, line=str(r.line))
+                if res.status != "written":
+                    exists += 1
+                    continue
+                # keep the vault date, or recall's recency term would rank an old fact as new
+                agent.db.execute(
+                    "UPDATE facts SET created_at = ?, updated_at = ? WHERE id = ?",
+                    (f"{r.date} 00:00:00", f"{r.date} 00:00:00", res.detail.split("/")[1]),
+                )
+                written += 1
+    typer.echo(f"indexed {written} new, {exists} already there")
 
 
 @app.command("doctor")

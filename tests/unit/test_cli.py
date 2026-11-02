@@ -248,3 +248,27 @@ def test_recall_prints_hits_and_the_failure_hook_adds_context(tmp_path: Path) ->
     assert r.exit_code == 0 and r.stdout == ""
     r = runner.invoke(app, ["recall", "--hook", "--path", str(out)], input='{"error": ""}')
     assert r.exit_code == 0 and r.stdout == ""
+
+
+# ── index ────────────────────────────────────────────────────────────────────
+
+
+def test_index_loads_vault_facts_into_sqlite_with_their_date(tmp_path: Path) -> None:
+    runner.invoke(app, ["init", "bot", "--path", str(tmp_path)])
+    facts = tmp_path / "vault" / "facts.md"
+    facts.write_text(facts.read_text() + "\n- an old fact from the vault (2026-04-01)\n")
+
+    result = runner.invoke(app, ["index", str(tmp_path)])
+    assert result.exit_code == 0, result.stdout
+    assert "0 already there" in result.stdout
+
+    from brain_core.agent import Agent
+
+    with Agent.from_config(tmp_path / "brain.yaml") as agent:
+        row = agent.db.fetchone("SELECT created_at FROM facts WHERE content LIKE 'an old fact%'")
+        assert row is not None and row["created_at"].startswith("2026-04-01")
+        hit = agent.brain_recall("old fact from the vault", scope="sqlite")["results"][0]
+        assert hit["source"].startswith("facts.md:")  # cites the vault line, not a row id
+
+    again = runner.invoke(app, ["index", str(tmp_path)])
+    assert "0 new" in again.stdout

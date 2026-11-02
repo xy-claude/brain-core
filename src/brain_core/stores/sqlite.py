@@ -40,8 +40,8 @@ class SqliteStore:
                 f.content,
                 f.created_at.date(),
                 next((t.split(":", 1)[1] for t in f.tags if t.startswith("domain:")), ""),
-                f"sqlite://facts/{f.id}",
-                0,
+                f.metadata.get("path", f"sqlite://facts/{f.id}"),
+                int(f.metadata.get("line", 0)),
                 {"fact_id": str(f.id)},
             )
             for f in facts
@@ -55,7 +55,7 @@ class SqliteStore:
         rid = record_id(text)
         before = self.db.fetchone("SELECT COUNT(*) AS n FROM facts")
         tags = [f"domain:{domain}"] if domain else []
-        fact = structured.remember(self.db, text, kind=_KINDS[kind], tags=tags)
+        fact = structured.remember(self.db, text, kind=_KINDS[kind], tags=tags, metadata=extra)
         after = self.db.fetchone("SELECT COUNT(*) AS n FROM facts")
         grew = bool(before and after and after["n"] > before["n"])
         return WriteResult(self.name, rid, "written" if grew else "exists", f"facts/{fact.id}")

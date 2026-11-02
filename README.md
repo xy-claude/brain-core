@@ -20,7 +20,7 @@ Both. One Python package, three ways in:
 | Piece | What it is | Who uses it |
 |---|---|---|
 | `brain serve` | an MCP server that Claude Code starts from the agent's `.mcp.json` and that exposes five tools | the agent, every session, without you touching it |
-| `brain` command | a CLI: `brain init`, `brain doctor`, `brain hindsight install`, `brain cron install`, `brain daily`, `brain weekly` | you, once at setup, then cron |
+| `brain` command | a CLI: `brain init`, `brain doctor`, `brain index`, `brain hindsight install`, `brain cron install`, `brain daily`, `brain weekly` | you, once at setup, then cron |
 | `brain_core.Agent` | the Python library both of the above sit on | the eval runner, the demo script, your own scripts |
 
 To a Claude Code user: an MCP server with five memory tools and a one-line installer. To a Python developer: a memory library with an MCP front end.
