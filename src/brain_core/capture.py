@@ -2,9 +2,9 @@
 today's session file, incrementally and deduplicated.
 
 This is the floor under the agent's discipline, not a replacement for it: decisions,
-corrections, facts and patterns still need `brain_remember` with their kind. Hindsight gets
-the captures through the session queue when one is configured (drained at session end), so
-the hook never waits on the vector store; without a queue it writes there directly.
+corrections, facts and patterns still need `brain_remember` with their kind. The hook never
+talks to Hindsight: captures reach it through the session queue (drained at session end);
+without a queue they stay in the vault, where recall still finds them.
 """
 
 from __future__ import annotations
@@ -53,7 +53,7 @@ def capture(agent: Agent, transcript: Path, session_id: str = "") -> dict[str, A
                 items.append((text[:USER_CHARS], SAID))
     items = items[:MAX_ITEMS]
     queue = agent.config.session.queue
-    stores = [s for s in agent.stores if not (queue and isinstance(s, HindsightStore))]
+    stores = [s for s in agent.stores if not isinstance(s, HindsightStore)]
     written, duplicate, queued = 0, 0, []
     for text, section in items:
         try:

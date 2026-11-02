@@ -72,7 +72,9 @@ def test_capture_is_incremental_and_skips_tool_rows(tmp_path: Path) -> None:
     )
     with Agent.from_config(tmp_path / "brain.yaml") as agent:
         out = capture(agent, t, "s1")
-        assert out["written"] == 4 and out["duplicate"] == 0, out
+        assert out["written"] == 4 and out["duplicate"] == 0 and out["queued"] == 4, out
+        queue = (tmp_path / "data" / "hindsight_queue.jsonl").read_text().splitlines()
+        assert len(queue) == 4  # Hindsight is never called from the hook
         day = next((tmp_path / "vault" / "sessions").glob("*.md")).read_text()
         assert "deadline is 2026-12-01" in day and "URL https://docs.test/x" in day
         assert "ls -la" not in day and "total 0 files" not in day  # tool rows are not speech
