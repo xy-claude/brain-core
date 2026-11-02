@@ -75,8 +75,8 @@ def compute(agent: Agent, status: dict[str, Any], today: date | None = None) -> 
         "procedural_memory": _procedural(agent_dir, root / "procedures", today),
         "learning": _learning(root, today),
         "reasoning_planning": {"repeat_cascades": _cascades(by_session)},
-        "decision": _decision(vault, pending),
-        "metacognition": _metacognition(vault, root / agent.config.session.critique, today),
+        "decision": _decision(vault, pending, agent.data_dir, today),
+        "metacognition": _metacognition(vault, root / agent.config.session.critique, root, today),
         "execution": _execution(events, root, agent.config.session.brief, today),
         "goal_management": _goals(root / "goals" / "mission_queue.md", today),
         "user_model": _user_model(root, today),
@@ -250,19 +250,27 @@ def _cascades(by_session: dict[str, list[Any]]) -> dict[str, Any]:
     )
 
 
-def _decision(vault: VaultStore, pending: list[list[str]]) -> dict[str, dict[str, Any]]:
+def _decision(
+    vault: VaultStore, pending: list[list[str]], data_dir: Path, today: date
+) -> dict[str, dict[str, Any]]:
     decisions = vault.read("decision", limit=10_000)
     classified = sum(1 for r in decisions if r.extra.get("classification"))
     return {
         "classified": _ratio(classified, len(decisions), "decisions carrying a classification"),
         "pending": _cost(len(pending), "decisions waiting for the user"),
+        "pending_oldest_days": _cost(
+            max(pending_ages(data_dir, pending, today).values(), default=None),
+            "days the oldest pending decision has waited (brain daily keeps the dates)",
+        ),
         "reversals": _pending_signal(
             "reversal rate per classification cell, once outcomes are logged"
         ),
     }
 
 
-def _metacognition(vault: VaultStore, critique: Path, today: date) -> dict[str, dict[str, Any]]:
+def _metacognition(
+    vault: VaultStore, critique: Path, root: Path, today: date
+) -> dict[str, dict[str, Any]]:
     decisions = vault.read("decision", limit=10_000)
     levels = Counter(
         r.extra.get("confidence", "").lower() for r in decisions if r.extra.get("confidence")
@@ -277,9 +285,10 @@ def _metacognition(vault: VaultStore, critique: Path, today: date) -> dict[str, 
             "decisions whose confidence differs from the majority level; zero means decorative",
         ),
         "critique_age_days": _cost(upd, "days since the session critique was rewritten"),
-        "calibration": _pending_signal(
-            "Brier score of confidence against outcomes, once decisions resolve"
-        ),
+        "calibration_brier": calibration(
+            decisions, _corrections(_read(root / "corrections.md")), today
+        )
+        or _pending_signal("Brier score of confidence against outcomes, once decisions resolve"),
     }
 
 
@@ -299,20 +308,46 @@ def _execution(events: list[Any], root: Path, brief: str, today: date) -> dict[s
     }
 
 
-def _goals(path: Path, today: date) -> dict[str, dict[str, Any]]:
+def missions(path: Path) -> list[dict[str, str]]:
+    """Rows of goals/mission_queue.md as dicts (id, mission, priority, status, next, reviewed)."""
     rows = [r for r in _read(path).splitlines() if r.startswith("|") and not _is_table_chrome(r)]
-    missions = [[c.strip() for c in r.strip("|").split("|")] for r in rows]
-    missions = [m for m in missions if m and m[0] and m[0].lower() != "id"]
+    out = []
+    for r in rows:
+        c = [x.strip() for x in r.strip("|").split("|")]
+        if c and c[0] and c[0].lower() != "id":
+            c += [""] * (6 - len(c))
+            out.append(
+                {
+                    "id": c[0],
+                    "mission": c[1],
+                    "priority": c[2],
+                    "status": c[3],
+                    "next": c[4],
+                    "reviewed": c[5],
+                }
+            )
+    return out
+
+
+def stalled(path: Path, today: date) -> list[tuple[dict[str, str], int]]:
+    """Open missions not reviewed for STALLED_DAYS, with their age."""
+    out = []
+    for mi in missions(path):
+        if mi["status"].lower().startswith(("done", "complete")):
+            continue
+        d = _days_since(mi["reviewed"], today)
+        if d is not None and d > STALLED_DAYS:
+            out.append((mi, d))
+    return out
+
+
+def _goals(path: Path, today: date) -> dict[str, dict[str, Any]]:
     open_ = [
-        m for m in missions if len(m) >= 4 and not m[3].lower().startswith(("done", "complete"))
+        mi for mi in missions(path) if not mi["status"].lower().startswith(("done", "complete"))
     ]
-    stalled = 0
-    for m in open_:
-        d = _days_since(m[5], today) if len(m) >= 6 else None
-        stalled += 1 if d is not None and d > STALLED_DAYS else 0
     return {
         "missions_stalled": _ratio(
-            stalled,
+            len(stalled(path, today)),
             len(open_),
             f"open missions not reviewed for {STALLED_DAYS} days (lower is better)",
         ),
@@ -371,6 +406,74 @@ def _eval_slice(data_dir: Path, *types: str) -> dict[str, Any] | None:
         f"{t} {sl[t]['hits']}/{sl[t]['n']}" for t in types if t in sl
     )
     return _ratio(hits, n, note)
+
+
+def pending_ages(data_dir: Path, pending: list[list[str]], today: date) -> dict[str, int]:
+    """Days each pending decision has waited, from ``data/pending_seen.json`` (read only)."""
+    path = data_dir / "pending_seen.json"
+    if not path.exists():
+        return {}
+    try:
+        seen = json.loads(_read(path))
+    except ValueError:
+        return {}
+    out = {}
+    for r in pending:
+        key = r[0]
+        d = _days_since(seen.get(key), today)
+        if d is not None:
+            out[key] = d
+    return out
+
+
+_CONF = {"high": 0.9, "medium": 0.6, "low": 0.3}
+
+
+def calibration(
+    decisions: list[Any], corrections: list[tuple[date, str, dict[str, str]]], today: date
+) -> dict[str, Any] | None:
+    """Brier score of stated confidence against outcomes.
+
+    A decision is resolved bad when a later correction names it (title words in the correction
+    title or error), resolved good when it is STALE_DAYS old with no such correction; younger
+    unresolved decisions are censored, never counted as held.
+    """
+    rows: list[tuple[float, int]] = []
+    for r in decisions:
+        p = _CONF.get(r.extra.get("confidence", "").lower())
+        if p is None:
+            continue
+        words = _words(r.text)
+        if not words:
+            continue
+        hit = any(
+            d > r.date and _names(words, _words(t + " " + f.get("error", "")))
+            for d, t, f in corrections
+        )
+        if hit:
+            rows.append((p, 0))
+        elif (today - r.date).days >= STALE_DAYS:
+            rows.append((p, 1))
+    if not rows:
+        return None
+    brier = sum((p - o) ** 2 for p, o in rows) / len(rows)
+    return {
+        "value": round(brier, 2),
+        "n": len(rows),
+        "verdict": "defensible",
+        "better": "lower",
+        "note": "Brier score, confidence vs outcome, resolved decisions (0 perfect, 0.25 chance)",
+    }
+
+
+def _words(text: str) -> set[str]:
+    return set(re.findall(r"[a-z0-9]{4,}", text.lower()))
+
+
+def _names(words: set[str], other: set[str]) -> bool:
+    """Does a correction name a decision: two shared word stems, or every word of a short title."""
+    shared = sum(1 for w in words if any(o.startswith(w) or w.startswith(o) for o in other))
+    return shared >= min(2, len(words))
 
 
 # ── parsers ───────────────────────────────────────────────────────────────────

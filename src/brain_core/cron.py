@@ -8,6 +8,7 @@ Hindsight mental models. ``brain cron install`` registers both as launchd agents
 
 from __future__ import annotations
 
+import json
 import os
 import plistlib
 import re
@@ -54,6 +55,7 @@ def daily(agent: Agent, today: date | None = None) -> dict[str, Any]:
         _executive(vault.root / cfg.session.executive),
         _health(status),
         _traits(status.get("traits", {})),
+        _growth(agent, vault.root, today),
         _stale_knowledge(vault.root / "knowledge", today),
         _warmup(vault.root / "sessions"),
     ]
@@ -179,6 +181,58 @@ def _traits(tr: dict[str, Any]) -> str:
             shown += f" ({s['pct']}%)"
         lines.append(f"- {t['name']}: {shown} — {s['note']}")
     return "## Traits — evidence on disk\n\n" + "\n".join(lines) + "\n"
+
+
+def _growth(agent: Agent, root: Path, today: date) -> str:
+    """Three read-only nudges: rules not landing, missions stalled, decisions waiting too long."""
+    lines: list[str] = []
+    promoted: dict[str, tuple[date, int]] = {}
+    for d, _t, f in traits._corrections(_read(root / "corrections.md")):
+        th = f.get("theme", "").lower()
+        if f.get("promoted", "").lower().startswith("yes"):
+            promoted[th] = (min(promoted.get(th, (d, 0))[0], d), promoted.get(th, (d, 0))[1])
+    for d, _t, f in traits._corrections(_read(root / "corrections.md")):
+        th = f.get("theme", "").lower()
+        if th in promoted and d > promoted[th][0]:
+            promoted[th] = (promoted[th][0], promoted[th][1] + 1)
+    for th, (since, n) in promoted.items():
+        if n:
+            lines.append(
+                f"- theme `{th}` recurred {n}× since its rule was promoted on {since.isoformat()} "
+                "→ the rule is not landing; reread it at session start or rewrite it"
+            )
+    for mi, days in traits.stalled(root / "goals" / "mission_queue.md", today):
+        lines.append(
+            f"- {mi['id']} {mi['mission']} ({mi['status']}) not reviewed for {days} days "
+            "→ advance, block with a reason, or drop it"
+        )
+    pending = traits._pending_rows(_read(root / agent.config.session.executive))
+    ages = _track_pending(agent.data_dir, pending, today)
+    for key, days in sorted(ages.items(), key=lambda kv: -kv[1]):
+        if days >= traits.STALLED_DAYS:
+            lines.append(
+                f"- pending decision `{key[:60]}` has waited {days} days "
+                "→ ask again, or decide it is not needed"
+            )
+    if not lines:
+        return ""
+    return "## Growth — what the traits say to do today\n\n" + "\n".join(lines) + "\n"
+
+
+def _track_pending(data_dir: Path, pending: list[list[str]], today: date) -> dict[str, int]:
+    """Keep the first-seen date per pending decision in data/pending_seen.json; return ages."""
+    path = data_dir / "pending_seen.json"
+    try:
+        seen = json.loads(_read(path)) if path.exists() else {}
+    except ValueError:
+        seen = {}
+    keys = {r[0] for r in pending if r}
+    seen = {k: v for k, v in seen.items() if k in keys}
+    for k in keys:
+        seen.setdefault(k, today.isoformat())
+    data_dir.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(seen, indent=1, ensure_ascii=False), encoding="utf-8")
+    return {k: (today - date.fromisoformat(v)).days for k, v in seen.items()}
 
 
 def _stale_knowledge(kdir: Path, today: date) -> str:

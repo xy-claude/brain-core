@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import date
 from pathlib import Path
 
@@ -136,3 +137,41 @@ def test_one_line_and_brief_section(tmp_path: Path) -> None:
         section = cron._traits(st["traits"])
     assert "learning=1/1" in line and "authority=1/2" in line
     assert section.startswith("## Traits") and section.count("\n- ") == 12
+
+
+def test_calibration_scores_resolved_decisions_only() -> None:
+    from brain_core.stores.base import Record
+
+    def dec(text: str, conf: str, d: date) -> Record:
+        return Record("id-" + text, "decision", text, d, "", "", 0, {"confidence": conf})
+
+    decisions = [
+        dec("Deploy the fare engine on Friday", "high", date(2026, 9, 1)),  # old, no correction
+        dec("Skip the staging run", "high", date(2026, 10, 1)),  # named by a later correction
+        dec("Rename the module", "medium", date(2026, 10, 30)),  # too young: censored
+    ]
+    corrections = [
+        (
+            date(2026, 10, 5),
+            "Skipped the staging run and broke prod",
+            {"error": "staging run skipped"},
+        )
+    ]
+    out = traits.calibration(decisions, corrections, TODAY)
+    assert out is not None and out["n"] == 2 and out["better"] == "lower"
+    # (0.9-1)^2 = 0.01 for the good one, (0.9-0)^2 = 0.81 for the bad one -> 0.41
+    assert out["value"] == 0.41
+    assert traits.calibration(decisions[2:], corrections, TODAY) is None
+
+
+def test_missions_and_pending_ages_helpers(tmp_path: Path) -> None:
+    q = tmp_path / "mission_queue.md"
+    q.write_text(
+        "| ID | Mission | Priority | Status | Next step | Last reviewed |\n"
+        "|---|---|---|---|---|---|\n"
+        "| M-1 | a | P1 | done | - | 2026-01-01 |\n| M-2 | b | P2 | active | x | 2026-10-01 |\n"
+    )
+    assert [m["id"] for m in traits.missions(q)] == ["M-1", "M-2"]
+    assert [(m["id"], d) for m, d in traits.stalled(q, TODAY)] == [("M-2", 32)]
+    (tmp_path / "pending_seen.json").write_text(json.dumps({"x": "2026-10-20"}))
+    assert traits.pending_ages(tmp_path, [["x"], ["y"]], TODAY) == {"x": 13}

@@ -8,6 +8,7 @@ from this session's ``brain_remember`` events), and writes the clean-close marke
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -43,6 +44,7 @@ def session_start(agent: Agent, session_id: str | None = None) -> dict[str, Any]
         }
     agent.start_session(sid)
     agent.log_event("session_start", {"session_id": sid})
+    _snapshot_traits(agent, sid)
 
     out: dict[str, Any] = {"session_id": sid, "date": today.isoformat(), "recovery": recovery}
     if vault is None:
@@ -90,8 +92,12 @@ def session_end(
     out["queue_drained"] = _drain_queue(agent, cfg.queue)
     if vault is not None:
         kinds = ", ".join(f"{k}×{n}" for k, n in sorted(_count(writes).items())) or "none"
+        out["traits_moved"] = _traits_moved(agent, sid)
+        moved = f", {len(out['traits_moved'])} trait signal(s) moved" if out["traits_moved"] else ""
         hs = vault.write(
-            "note", f"Session {sid} closed {now}: {len(writes)} brain writes ({kinds})", when=today
+            "note",
+            f"Session {sid} closed {now}: {len(writes)} brain writes ({kinds}){moved}",
+            when=today,
         )
         out["hsam"] = hs.status
         out["executive_state"] = _put(
@@ -123,6 +129,50 @@ def session_end(
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
+
+
+def _trait_values(agent: Agent) -> dict[str, list[int]]:
+    """Defensible signals as {trait.signal: [value, n]}, from files only (no store probes)."""
+    from brain_core import traits
+    from brain_core.status import lint
+
+    vault = _vault(agent)
+    if vault is None:
+        return {}
+    st = {"knowledge": lint(vault.root)}
+    out: dict[str, list[int]] = {}
+    for tid, t in traits.compute(agent, st).items():
+        for sid, s in t["signals"].items():
+            if s["verdict"] == "defensible" and s.get("n"):
+                out[f"{tid}.{sid}"] = [s["value"], s["n"]]
+    return out
+
+
+def _snapshot_traits(agent: Agent, sid: str) -> None:
+    path = agent.data_dir / "traits_start.json"
+    with contextlib.suppress(Exception):  # a snapshot must never block a session start
+        path.write_text(json.dumps({"session_id": sid, "values": _trait_values(agent)}))
+
+
+def _traits_moved(agent: Agent, sid: str) -> list[str]:
+    path = agent.data_dir / "traits_start.json"
+    if not path.exists():
+        return []
+    try:
+        start = json.loads(_read(path))
+    except ValueError:
+        return []
+    if start.get("session_id") != sid:
+        return []
+    before, after = start.get("values", {}), _trait_values(agent)
+    moved = []
+    for key, (v, n) in after.items():
+        b = before.get(key)
+        if b is None or (b[0], b[1]) != (v, n):
+            moved.append(
+                f"{key}: {b[0]}/{b[1] if b else 0} → {v}/{n}" if b else f"{key}: new {v}/{n}"
+            )
+    return moved
 
 
 def _vault(agent: Agent) -> VaultStore | None:

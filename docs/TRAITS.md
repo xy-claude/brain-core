@@ -52,7 +52,12 @@ What is deliberately not a signal: artefact counts (facts written, pages compile
 
 ## What grows it
 
-The growth levers are already in the product. The correction pipeline that promotes a repeated theme into a rule is the training effect on procedural memory. The Fact-changed banner plus the leak check keeps semantic memory honest. The daily brief is working memory's diet. The eval, once stratified into single-hop, multi-hop, knowledge-update and abstention items, is the growth test for the three memory stores: the same vault at day one and after thirty days of sessions, where every defensible signal must move in its direction.
+The growth levers are in the product and run without the agent remembering to run them.
+
+- **The daily brief's Growth section.** Three read-only nudges written by `brain daily`: a correction theme that recurred since its rule was promoted (the rule is not landing), a mission not reviewed for fourteen days (advance it, block it with a reason, or drop it), and a pending decision that has waited fourteen days (ask again, or decide it is not needed). The brief keeps the first-seen date per pending decision in `data/pending_seen.json`, so age is real and not self-reported.
+- **Session deltas.** `brain_session('start')` snapshots every defensible signal; `brain_session('end')` returns `traits_moved`, the signals that changed during the session, and notes the count in the day's close line. A session that moved nothing is visible as such.
+- **Calibration.** Once decisions resolve, metacognition reports a Brier score of stated confidence against outcome. A later correction that names the decision is a miss, thirty days without one is a hold, younger decisions are censored and never counted as held. Zero is perfect, a quarter is chance.
+- **The pipeline itself.** The correction pipeline that promotes a repeated theme into a rule is the training effect on procedural memory. The Fact-changed banner plus the leak check keeps semantic memory honest. The stratified eval is the growth test for the three memory stores: the same vault at day one and after thirty days of sessions, where every defensible signal must move in its direction, and CI holds that line.
 
 ## Where the list came from
 

@@ -135,3 +135,22 @@ def test_end_refuses_secrets_in_files_and_drops_them_from_the_queue(tmp_path: Pa
     assert e["critique"].startswith("refused") and e["queue_drained"] == 1
     assert not (vault / "session_critique.md").exists(), "a refused body writes nothing"
     assert "ghp_" not in q.read_text() and "ghp_" not in json.dumps(fake.retained)
+
+
+def test_end_reports_which_trait_signals_moved(tmp_path: Path) -> None:
+    agent, vault, _ = make(tmp_path)
+    (vault / "decisions_log.md").write_text("---\ntype: log\n---\n# Decisions Log\n")
+    try:
+        agent.brain_session("start", "s7")
+        snap = json.loads((agent.data_dir / "traits_start.json").read_text())
+        assert snap["session_id"] == "s7"
+        agent.brain_remember("Ship it", "decision", title="Ship", confidence="high")
+        agent.brain_remember("Wait", "decision", title="Wait", confidence="low")
+        e = agent.brain_session("end")
+    finally:
+        agent.close()
+    moved = e["traits_moved"]
+    assert any(m.startswith("decision.classified:") for m in moved), moved
+    assert any(m.startswith("metacognition.confidence_spread:") for m in moved), moved
+    day = next((vault / "sessions").glob("*.md")).read_text()
+    assert "trait signal(s) moved" in day

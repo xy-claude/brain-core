@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import plistlib
 import subprocess
@@ -234,3 +235,42 @@ def test_weekly_removes_per_file_locks_left_by_old_versions(tmp_path: Path) -> N
     with agent:
         cron.consolidate(sdir, TODAY)
     assert not (sdir / ".2026-09-20.md.lock").exists()
+
+
+def test_growth_section_names_rules_missions_and_old_pending(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(cron, "_admin", lambda: None)
+    agent = make(tmp_path)
+    vault = tmp_path / "atlas" / "vault"
+    corr = vault / "corrections.md"
+    corr.write_text(
+        corr.read_text().replace(
+            "### [2026-10-25] Trusted a green test\n- **Error:** e\n- **Correction:** c\n"
+            "- **Implied rule:** r\n- **Theme:** verification\n- **Promoted:** No",
+            "### [2026-10-25] Trusted a green test\n- **Error:** e\n- **Correction:** c\n"
+            "- **Implied rule:** r\n- **Theme:** verification\n- **Promoted:** Yes",
+        )
+    )
+    (vault / "goals" / "mission_queue.md").write_text(
+        "---\ntype: log\n---\n# Mission Queue\n\n"
+        "| ID | Mission | Priority | Status | Next step | Last reviewed |\n"
+        "|---|---|---|---|---|---|\n"
+        "| M-001 | fresh | P1 | active | x | 2026-11-01 |\n"
+        "| M-002 | stalled | P2 | blocked | y | 2026-09-01 |\n"
+    )
+    (vault / "executive_state.md").write_text(
+        "---\ntype: log\n---\n# Executive State\n\n## Pending Decisions (Ada)\n"
+        "| Decision | Why | Classification |\n|---|---|---|\n"
+        "| buy the domain | money | irreversible × low-risk |\n"
+    )
+    seen = tmp_path / "atlas" / "data" / "pending_seen.json"
+    seen.parent.mkdir(parents=True, exist_ok=True)
+    seen.write_text(json.dumps({"buy the domain": "2026-10-01", "gone decision": "2026-09-01"}))
+    with agent:
+        brief = Path(cron.daily(agent, TODAY)["brief"]).read_text()
+    growth = brief.split("## Growth")[1].split("\n## ")[0]
+    assert "theme `verification` recurred 2× since its rule was promoted on 2026-10-25" in growth
+    assert "M-002 stalled (blocked) not reviewed for 62 days" in growth and "M-001" not in growth
+    assert "pending decision `buy the domain` has waited 32 days" in growth
+    assert json.loads(seen.read_text()) == {"buy the domain": "2026-10-01"}, "gone ones are dropped"
