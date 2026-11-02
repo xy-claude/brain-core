@@ -4,6 +4,8 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-11-02
+
 ### Added
 - The growth loops (M22): the daily brief gains a Growth section with three read-only nudges, a correction theme that recurred since its rule was promoted, a mission not reviewed for 14 days, a pending decision that has waited 14 days; `brain daily` keeps the first-seen date per pending decision in `data/pending_seen.json`; `brain_session('start')` snapshots the defensible trait signals and `brain_session('end')` reports which moved (`traits_moved`) and notes the count in the session's close line; metacognition gains a calibration signal, the Brier score of stated confidence against outcomes over resolved decisions (a later correction that names the decision is a miss, thirty days without one is a hold, younger ones are censored).
 - The growth eval (M23): the fixture recall set is stratified into single-hop, multi-hop, knowledge-update, abstention and temporal items (the LoCoMo and LongMemEval slices) and run three times, a hit only when all three hit (pass^3); `run_recall.py --out data/eval.json` records the slices and the two pending memory signals read them; a CI test asserts the fixture brain after thirty days of sessions scores higher than the same brain on day one on every defensible trait signal. Every signal now carries `better: higher|lower`.
