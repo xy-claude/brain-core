@@ -4,6 +4,8 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-02
+
 ### Added
 - Failure recall hook: the template's `settings.json` runs `brain recall --hook` on `PostToolUseFailure` for Bash. It takes the first line of the error, searches the transcript index, and returns up to three hits from earlier sessions as `additionalContext`, so a known error comes back with what was done about it last time. The current session is skipped; nothing is added when there is no hit. Zero always-loaded context; about 150 to 300 tokens per failing command that has a history.
 - `brain recall QUERY [--scope] [--limit] [--path]` prints `brain_recall` hits from the shell, one line each.
