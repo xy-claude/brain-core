@@ -36,8 +36,8 @@ Ratios are reported as counts until `n` reaches 20. One agent accumulates perhap
 | Trait | Defensible signal today | Direction |
 |---|---|---|
 | Working memory | sessions with writes that opened with `brain_session('start')` | higher |
-| Episodic memory | (pending) temporal recall items built from dated archives, run three times | higher |
-| Semantic memory | facts carrying a date; knowledge pages that cite a raw source | higher |
+| Episodic memory | the temporal slice of the recall eval (a question about a day surfaces that day's archive), from the last `run_recall.py --out data/eval.json` | higher |
+| Semantic memory | the single-hop, multi-hop, knowledge-update and abstention slices of the same eval; facts carrying a date; knowledge pages that cite a raw source | higher |
 | Procedural memory | procedures validated in the last 30 days | higher |
 | Learning | corrections on a theme after its rule was promoted; old values reappearing after a Fact-changed banner | lower |
 | Reasoning and planning | the same write repeated three times in a row in one session | lower |

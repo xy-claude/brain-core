@@ -14,6 +14,9 @@ updated: 2026-11-02
 - Two GitHub accounts are isolated with ssh aliases github-work and github-personal and a pre-push identity guard (2026-11-02)
 - Knowledge lint runs nightly via knowledge_tracker.py --lint and writes knowledge_stale.txt for the daily brief (2026-11-02)
 
+- Claude Code CLI is pinned at version 2.1.4 on the build machine (2026-10-20)
+- **⚠ Fact changed 2026-11-02:** Claude Code CLI is pinned at version 2.1.9 on the build machine (was: Claude Code CLI is pinned at version 2.1.4 on the build machine) (2026-11-02)
+
 ## Tools
 - defuddle parses a web page to markdown: npx -y defuddle parse <url> --markdown (2026-11-02)
 - yt-dlp lives at ~/.local/bin/yt-dlp and writes auto subtitles with --write-auto-sub --sub-lang en (2026-11-02)

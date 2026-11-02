@@ -1,4 +1,5 @@
 # Fixture recall set (CI). Synthetic vault under tests/eval/fixture/vault.
+# Types: single-hop (default), multi-hop, update, abstention, temporal. See run_recall.py.
 limit: 5
 tasks:
   - {q: hindsight self-hosted launchagent port, expect: ["8888"]}
@@ -21,3 +22,11 @@ tasks:
   - {q: vectorize account cancel, expect: ["vectorize.io"]}
   - {q: control plane dashboard port, expect: ["9999"]}
   - {q: llm wiki raw immutable compiled, expect: ["immutable"]}
+  - {q: northwind rideapp payment rails, expect: ["Northwind", "GCash"], type: multi-hop}
+  - {q: signalcopy monetisation broker terminal per user, expect: ["introducing-broker", "one broker terminal"], type: multi-hop}
+  - {q: claude code cli pinned version, expect: ["2.1.9"], reject: ["2.1.4"], type: update}
+  - {q: kubernetes cluster autoscaler nodes, expect: [], type: abstention}
+  - {q: stripe webhook retries, expect: [], type: abstention}
+  - {q: session fare quotes server invariants gitleaks slack token, date: "2026-10-27", type: temporal}
+  - {q: session pinned claude code cli statusline hook broke, date: "2026-10-20", type: temporal}
+  - {q: session hindsight migrated mac mini control plane, date: "2026-11-01", type: temporal}

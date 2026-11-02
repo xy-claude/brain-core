@@ -232,11 +232,12 @@ The eval is part of the test suite and runs in CI.
 
 | Set | Hits |
 |---|---|
-| 20 recall tasks on a synthetic fixture vault (CI) | 20 / 20 |
+| 28 recall tasks on a synthetic fixture vault (CI), stratified: 20 single-hop, 2 multi-hop, 1 knowledge-update, 2 abstention, 3 temporal, each run three times (pass^3) | 28 / 28 |
 | 20 tune + 10 held-out recall tasks on the author's real vault, 7 months of sessions | 20 / 20 and 10 / 10 |
 | 11 write scenarios: dedup, value-change banner, relation routing, secret refusal | 11 / 11 |
+| Growth: the fixture brain after thirty days of sessions scores higher than the same brain on day one on every defensible trait signal (CI) | holds |
 
-Recall takes about 1.7 s per query; Hindsight is the floor. A full start block is about 4 s and under 6k tokens.
+The slices are the ones the memory benchmarks (LoCoMo, LongMemEval) say a single hit-rate hides: a changed value must outrank the stale one, an unanswerable question must return nothing, a question about a day must surface that day's archive. Recall takes about 1.7 s per query with Hindsight; a full start block is about 4 s and under 6k tokens.
 
 ```bash
 python tests/eval/run_recall.py --config ~/Agents/Atlas/brain.yaml   # your own vault

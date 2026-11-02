@@ -94,6 +94,7 @@ def test_signals_move_with_the_evidence(tmp_path: Path) -> None:
         "value": 1,
         "n": 2,
         "verdict": "defensible",
+        "better": "higher",
         "note": "procedures validated within 30 days",
     }
     assert (
@@ -109,12 +110,13 @@ def test_signals_move_with_the_evidence(tmp_path: Path) -> None:
         "value": 1,
         "n": 1,
         "verdict": "defensible",
+        "better": "higher",
         "note": "sessions with writes that called brain_session('start') first",
     }
     assert s["reasoning_planning"]["repeat_cascades"]["value"] == 1, (
         "three identical writes in a row, even when deduped, is one cascade"
     )
-    assert s["metacognition"]["confidence_levels"]["value"] >= 2
+    assert s["metacognition"]["confidence_spread"]["value"] >= 1
     assert s["decision"]["classified"]["n"] >= 3
     assert tr["learning"]["grown"] and not tr["episodic_memory"]["grown"]
 

@@ -10,6 +10,7 @@ the stratified eval). Ratios are shown as counts until ``n`` reaches ``MIN_N``.
 
 from __future__ import annotations
 
+import json
 import re
 from collections import Counter, defaultdict
 from datetime import date
@@ -69,8 +70,8 @@ def compute(agent: Agent, status: dict[str, Any], today: date | None = None) -> 
             "sessions_opened": _opened(by_session),
             "context_tokens": _cost(ctx.get("tokens", 0), "always-loaded tokens"),
         },
-        "episodic_memory": _episodic(root / "sessions", today),
-        "semantic_memory": _semantic(vault, knowledge),
+        "episodic_memory": _episodic(root / "sessions", today, agent.data_dir),
+        "semantic_memory": _semantic(vault, knowledge, agent.data_dir),
         "procedural_memory": _procedural(agent_dir, root / "procedures", today),
         "learning": _learning(root, today),
         "reasoning_planning": {"repeat_cascades": _cascades(by_session)},
@@ -112,7 +113,14 @@ def one_line(traits: dict[str, Any]) -> str:
 
 
 def _ratio(hits: int, n: int, note: str, verdict: str = "defensible") -> dict[str, Any]:
-    out: dict[str, Any] = {"value": hits, "n": n, "verdict": verdict, "note": note}
+    better = "lower" if "lower is better" in note else "higher"
+    out: dict[str, Any] = {
+        "value": hits,
+        "n": n,
+        "verdict": verdict,
+        "better": better,
+        "note": note,
+    }
     if n >= MIN_N:
         out["pct"] = round(100 * hits / n)
     return out
@@ -138,20 +146,21 @@ def _opened(by_session: dict[str, list[Any]]) -> dict[str, Any]:
     )
 
 
-def _episodic(sdir: Path, today: date) -> dict[str, dict[str, Any]]:
+def _episodic(sdir: Path, today: date, data_dir: Path) -> dict[str, dict[str, Any]]:
     days = sorted(p.stem for p in sdir.glob("????-??-??.md")) if sdir.exists() else []
     archived = len(list((sdir / "archive").glob("*/*.md"))) if (sdir / "archive").exists() else 0
     last = _days_since(days[-1], today) if days else None
     return {
         "archives": _cost(len(days) + archived, "dated session files, live plus archived"),
         "days_since_last": _cost(last, "days since the newest session file"),
-        "temporal_recall": _pending_signal(
-            "temporal items from dated archives, pass^3 (the growth eval)"
-        ),
+        "temporal_recall": _eval_slice(data_dir, "temporal")
+        or _pending_signal("temporal items from dated archives, pass^3 (the growth eval)"),
     }
 
 
-def _semantic(vault: VaultStore, knowledge: dict[str, Any]) -> dict[str, dict[str, Any]]:
+def _semantic(
+    vault: VaultStore, knowledge: dict[str, Any], data_dir: Path
+) -> dict[str, dict[str, Any]]:
     facts = vault.read("fact", limit=10_000)
     dated = sum(1 for r in facts if r.extra.get("legacy") != "undated")
     pages = int(knowledge.get("pages", 0))
@@ -159,9 +168,10 @@ def _semantic(vault: VaultStore, knowledge: dict[str, Any]) -> dict[str, dict[st
     return {
         "facts_dated": _ratio(dated, len(facts), "facts carrying their date"),
         "pages_sourced": _ratio(pages - unsourced, pages, "knowledge pages that cite a raw source"),
-        "stratified_recall": _pending_signal(
-            "single-hop, multi-hop, update and abstention slices (the growth eval)"
-        ),
+        "stratified_recall": _eval_slice(
+            data_dir, "single-hop", "multi-hop", "update", "abstention"
+        )
+        or _pending_signal("single-hop, multi-hop, update and abstention slices (the growth eval)"),
     }
 
 
@@ -257,17 +267,15 @@ def _metacognition(vault: VaultStore, critique: Path, today: date) -> dict[str, 
     levels = Counter(
         r.extra.get("confidence", "").lower() for r in decisions if r.extra.get("confidence")
     )
-    distinct = len(levels)
-    flat = len(decisions) >= 5 and distinct <= 1
+    rated = sum(levels.values())
+    off_majority = rated - max(levels.values(), default=0)  # 0 when every decision says the same
     upd = _days_since(_frontmatter(critique).get("updated", ""), today)
     return {
-        "confidence_levels": {
-            "value": distinct,
-            "n": sum(levels.values()),
-            "verdict": "defensible",
-            "note": "distinct confidence levels used; one level everywhere means decorative"
-            + (" (flat)" if flat else ""),
-        },
+        "confidence_spread": _ratio(
+            off_majority,
+            rated,
+            "decisions whose confidence differs from the majority level; zero means decorative",
+        ),
         "critique_age_days": _cost(upd, "days since the session critique was rewritten"),
         "calibration": _pending_signal(
             "Brier score of confidence against outcomes, once decisions resolve"
@@ -343,6 +351,26 @@ def _authority(pending: list[list[str]]) -> dict[str, dict[str, Any]]:
             "requires-approval actions without a logged approval; needs the harness event log"
         ),
     }
+
+
+def _eval_slice(data_dir: Path, *types: str) -> dict[str, Any] | None:
+    """The last stratified eval (``run_recall.py --out <data_dir>/eval.json``), by slice."""
+    path = data_dir / "eval.json"
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(_read(path))
+    except ValueError:
+        return None
+    sl = data.get("by_type", {})
+    hits = sum(int(sl[t]["hits"]) for t in types if t in sl)
+    n = sum(int(sl[t]["n"]) for t in types if t in sl)
+    if n == 0:
+        return None
+    note = f"recall eval {data.get('date', '')} pass^{data.get('runs', 1)}: " + ", ".join(
+        f"{t} {sl[t]['hits']}/{sl[t]['n']}" for t in types if t in sl
+    )
+    return _ratio(hits, n, note)
 
 
 # ── parsers ───────────────────────────────────────────────────────────────────

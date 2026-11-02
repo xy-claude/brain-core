@@ -50,6 +50,7 @@ _STOP = frozenset(
 )
 # separators only inside a token: "commit." -> commit, "co-authored-by" and "127.0.0.1" stay whole
 _WORD = re.compile(r"[a-z0-9]+(?:[-_.][a-z0-9]+)*")
+_WAS = re.compile(r"\(was: (.+?)\)(?:\s*\(\d{4}-\d{2}-\d{2}\))?\s*$")
 
 
 def tokens(text: str) -> set[str]:
@@ -128,7 +129,18 @@ def brain_recall(
             continue
         report[store.name] = n
 
-    ordered = sorted(hits.values(), key=lambda h: (h[2], h[0].date), reverse=True)[:limit]
+    # a value a "Fact changed" banner superseded is kept on disk but ranks below the banner
+    superseded = {
+        normalize(m.group(1)).lower() for r, _s, _sc in hits.values() for m in _WAS.finditer(r.text)
+    }
+    ordered = sorted(
+        (
+            (r, s, sc * 0.5 if normalize(r.text).lower() in superseded else sc)
+            for r, s, sc in hits.values()
+        ),
+        key=lambda h: (h[2], h[0].date),
+        reverse=True,
+    )[:limit]
     results = [_item(r, s, sc, fmt) for r, s, sc in ordered]
     out: dict[str, Any] = {"query": query, "scope": scope, "stores": report, "results": results}
     while results and len(json.dumps(out)) // 4 > max_tokens:
