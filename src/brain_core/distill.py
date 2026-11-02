@@ -144,6 +144,8 @@ def _defuddle(url: str) -> tuple[str, dict[str, str]]:
             text=True,
             timeout=90,
         )
+        if md.returncode != 0:
+            return "", {}
         js = subprocess.run(
             ["npx", "-y", "defuddle", "parse", url, "--json"],
             capture_output=True,
@@ -151,8 +153,6 @@ def _defuddle(url: str) -> tuple[str, dict[str, str]]:
             timeout=90,
         )
     except (subprocess.TimeoutExpired, OSError):
-        return "", {}
-    if md.returncode != 0:
         return "", {}
     meta: dict[str, str] = {}
     try:

@@ -96,7 +96,7 @@ def migrate(db: Database) -> list[int]:
     for migration in pending:
         db.executescript(migration.sql)
         db.execute(
-            "INSERT INTO schema_version (version) VALUES (?)",
+            "INSERT OR IGNORE INTO schema_version (version) VALUES (?)",
             (migration.version,),
         )
         newly_applied.append(migration.version)

@@ -13,12 +13,11 @@ from __future__ import annotations
 
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from mcp.server.fastmcp import FastMCP
 
 from brain_core.agent import Agent
-from brain_core.mcp import tools
 
 _SESSION_PREFIX = "mcp-"
 
@@ -42,7 +41,7 @@ def build_server(agent: Agent) -> FastMCP:
         (sqlite|vault|hindsight|graph). `format='detailed'` adds ids, scores and store names
         for chained calls. `stores` in the reply shows hits per store or the error if one
         was unreachable."""
-        return tools.tool_brain_recall(agent, query, scope, format, limit)
+        return agent.brain_recall(query, scope=scope, fmt=format, limit=limit)
 
     @server.tool()
     def brain_remember(
@@ -63,7 +62,15 @@ def build_server(agent: Agent) -> FastMCP:
         store is never silent. `extra` carries kind-specific fields: decision → title, reason,
         classification, confidence; correction → title, error, correction, rule, theme;
         relation → subject, predicate, object (or text 'S —[p]→ O'); note → section."""
-        return tools.tool_brain_remember(agent, text, kind, domain, source, mission, force, extra)
+        return agent.brain_remember(
+            text,
+            kind,
+            domain=domain,
+            source=source,
+            mission=mission,
+            force=force,
+            **cast(dict[str, Any], extra or {}),
+        )
 
     @server.tool()
     def brain_session(
@@ -81,7 +88,9 @@ def build_server(agent: Agent) -> FastMCP:
         executive_state / session_critique / cross-agent sync from the text you pass (or writes
         a stub built from this session's brain_remember calls), and writes the clean-close
         marker. Pass `executive_state`, `critique` and `sync` as full markdown bodies."""
-        return tools.tool_brain_session(agent, phase, session_id, executive_state, critique, sync)
+        return agent.brain_session(
+            phase, session_id, executive_state=executive_state, critique=critique, sync=sync
+        )
 
     @server.tool()
     def brain_distill(
@@ -98,7 +107,9 @@ def build_server(agent: Agent) -> FastMCP:
         sha256 and word count; `status: exists` means the same source or body was captured
         before. A `note` says when the capture looks thin (JS or paywalled page) so you can
         fetch it in the browser and pass `text=`. Compiling the knowledge page is your job."""
-        return tools.tool_brain_distill(agent, source, text, title, author, published)
+        return agent.brain_distill(
+            source, text=text, title=title, author=author, published=published
+        )
 
     @server.tool()
     def brain_status() -> dict[str, Any]:
@@ -107,7 +118,7 @@ def build_server(agent: Agent) -> FastMCP:
         always-loaded context size in tokens per file, last session start/close ids with an
         `unclosed` flag, and the count of pending decisions in executive state. `ok` is false
         when any store is down or lint found issues."""
-        return tools.tool_brain_status(agent)
+        return agent.brain_status()
 
     return server
 

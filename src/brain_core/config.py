@@ -2,23 +2,16 @@
 
 Consumed by :class:`brain_core.agent.Agent` via ``Agent.from_config(path)``.
 
-Pydantic v2 validates the schema; field-level ``Literal`` types reject
-unknown capability names at load time instead of at first call.
+Pydantic v2 validates the schema; unknown fields fail at load time, not at first call.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal, Self
+from typing import Self
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-
-Capability = Literal["memory", "decisions", "reflection"]
-
-
-def _default_capabilities() -> list[Capability]:
-    return ["memory", "decisions", "reflection"]
 
 
 class WorkspaceConfig(BaseModel):
@@ -27,34 +20,6 @@ class WorkspaceConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     data_dir: Path = Path("./data")
-
-
-class HSAMConfig(BaseModel):
-    """HSAM (daily markdown archive) settings."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    enabled: bool = True
-    subdir: str = "hsam"
-
-
-class MemoryConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    hsam: HSAMConfig = Field(default_factory=HSAMConfig)
-
-
-class ReflectionConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    auto_on_session_end: bool = True
-
-
-class LoggingConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    level: Literal["debug", "info", "warning", "error"] = "info"
-    format: Literal["json", "plain"] = "json"
 
 
 class HindsightConfig(BaseModel):
@@ -135,12 +100,7 @@ class BrainConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str
-    version: str = "0.1.0"
     workspace: WorkspaceConfig = Field(default_factory=WorkspaceConfig)
-    capabilities: list[Capability] = Field(default_factory=_default_capabilities)
-    memory: MemoryConfig = Field(default_factory=MemoryConfig)
-    reflection: ReflectionConfig = Field(default_factory=ReflectionConfig)
-    logging: LoggingConfig = Field(default_factory=LoggingConfig)
     stores: StoresConfig = Field(default_factory=StoresConfig)
     session: SessionConfig = Field(default_factory=SessionConfig)
     status: StatusConfig = Field(default_factory=StatusConfig)

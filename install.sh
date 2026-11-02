@@ -26,6 +26,7 @@ done
 DIR="${DIR:-$HOME/Agents/$AGENT}"
 OS="$(uname -s)"
 case "$OS" in Darwin|Linux) ;; *) echo "install.sh supports macOS and Linux (got $OS)" >&2; exit 1;; esac
+case "$AGENT" in *[!A-Za-z0-9_-]*|"") echo "--agent must be letters, digits, '-' or '_' only (got '$AGENT')" >&2; exit 2;; esac
 
 step() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 have() { command -v "$1" >/dev/null 2>&1; }

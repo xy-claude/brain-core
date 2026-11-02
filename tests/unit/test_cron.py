@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import plistlib
+import subprocess
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -150,3 +152,85 @@ def test_daily_survives_a_typo_date_in_corrections(
     with agent:
         out = cron.daily(agent, TODAY)
     assert "[2026-11-01] Claimed done without output" in Path(out["brief"]).read_text()
+
+
+def test_backup_keeps_only_the_newest_n(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    admin = tmp_path / "hindsight-admin"
+    admin.write_text('#!/bin/sh\n: > "$2"\n')
+    admin.chmod(0o755)
+    monkeypatch.setattr(cron, "_admin", lambda: str(admin))
+    bk = tmp_path / "bk"
+    bk.mkdir()
+    for i, day in enumerate(("2026-10-28", "2026-10-29", "2026-10-30")):
+        p = bk / f"hindsight-{day}.zip"
+        p.write_text("old")
+        os.utime(p, (1_700_000_000 + i, 1_700_000_000 + i))
+    agent = make(tmp_path)
+    agent.config.cron.backup.dir = str(bk)
+    agent.config.cron.backup.keep = 2
+    with agent:
+        out = cron.backup(agent, TODAY)
+    assert out.startswith("ok") or "hindsight-2026-11-02.zip" in out
+    assert sorted(p.name for p in bk.glob("*.zip")) == [
+        "hindsight-2026-10-30.zip",
+        "hindsight-2026-11-02.zip",
+    ]
+
+
+def test_crontab_install_status_uninstall_on_linux(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("brain_core.cron.sys.platform", "linux")
+    tab = {"text": "0 3 * * * backup.sh\n"}
+
+    def fake_run(cmd: list[str], **kw: Any) -> subprocess.CompletedProcess[str]:
+        if cmd == ["crontab", "-l"]:
+            return subprocess.CompletedProcess(cmd, 0, stdout=tab["text"], stderr="")
+        if cmd == ["crontab", "-"]:
+            tab["text"] = kw["input"]
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+        raise AssertionError(cmd)
+
+    monkeypatch.setattr("brain_core.cron.subprocess.run", fake_run)
+    agent = make(tmp_path)
+    with agent:
+        lines = cron.install(agent)
+        assert len(lines) == 2 and tab["text"].startswith("0 3 * * * backup.sh\n")
+        assert tab["text"].count("# brain-core atlas") == 2
+        assert cron.status(agent) == {
+            "daily": "installed (crontab)",
+            "weekly": "installed (crontab)",
+        }
+        removed = cron.uninstall(agent)
+    assert len(removed) == 2 and tab["text"] == "0 3 * * * backup.sh\n"
+
+
+def test_cron_lines_quote_a_path_with_a_space() -> None:
+    lines = cron.cron_lines(Path("/h/My Agents/a"), "/b/brain", "A", "06:07", "Sun 07:13")
+    assert "daily '/h/My Agents/a' >> '/h/My Agents/a/data/logs/daily.log'" in lines[0]
+
+
+def test_launchd_install_and_uninstall_call_launchctl(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("brain_core.cron.sys.platform", "darwin")
+    calls: list[list[str]] = []
+    monkeypatch.setattr("brain_core.cron.subprocess.run", lambda cmd, **kw: calls.append(cmd))
+    agent = make(tmp_path)
+    la = tmp_path / "la"
+    with agent:
+        paths = cron.install(agent, launch_dir=la, load=True)
+        assert [c[1] for c in calls] == ["bootout", "bootstrap", "bootout", "bootstrap"]
+        assert cron.status(agent, la)["daily"].startswith("installed")
+        removed = cron.uninstall(agent, la)
+    assert removed == paths and not list(la.glob("*.plist"))
+    assert [c[1] for c in calls][4:] == ["bootout", "bootout"]
+
+
+def test_weekly_removes_per_file_locks_left_by_old_versions(tmp_path: Path) -> None:
+    agent = make(tmp_path)
+    sdir = tmp_path / "atlas" / "vault" / "sessions"
+    (sdir / ".2026-09-20.md.lock").write_text("")
+    with agent:
+        cron.consolidate(sdir, TODAY)
+    assert not (sdir / ".2026-09-20.md.lock").exists()

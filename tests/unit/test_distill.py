@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 import textwrap
 from pathlib import Path
 
@@ -95,3 +96,41 @@ def test_pdf_bytes_are_saved_next_to_a_stub(tmp_path: Path) -> None:
         out = a.brain_distill(str(pdf))
         assert out["status"] == "written" and "PDF bytes saved" in out["note"]
         assert any(p.suffix == ".pdf" for p in (tmp_path / "vault" / "raw").iterdir())
+
+
+def test_youtube_parses_subtitles_and_metadata(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("brain_core.distill.shutil.which", lambda name: "/x/yt-dlp")
+
+    def fake_run(cmd: list[str], **kw: object) -> subprocess.CompletedProcess[str]:
+        out_dir = Path(cmd[cmd.index("-o") + 1]).parent
+        (out_dir / "abc.en.vtt").write_text(
+            "WEBVTT\n\n1\n00:00:00.000 --> 00:00:02.000\n<c>hello</c> world\n\n"
+            "2\n00:00:02.000 --> 00:00:04.000\nhello world\n\n"
+            "3\n00:00:04.000 --> 00:00:06.000\nnext line\n"
+        )
+        return subprocess.CompletedProcess(cmd, 0, stdout="My Title\tUp\t20261102\n", stderr="")
+
+    monkeypatch.setattr("brain_core.distill.subprocess.run", fake_run)
+    body, meta, note = d._youtube("https://youtu.be/abc", "abc")
+    assert body == "hello world\nnext line" and note == ""
+    assert meta == {
+        "source": "https://youtu.be/abc",
+        "title": "My Title",
+        "author": "Up",
+        "published": "2026-11-02",
+    }
+
+
+def test_defuddle_runs_once_when_the_markdown_call_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("brain_core.distill.shutil.which", lambda name: "/x/npx")
+    calls: list[list[str]] = []
+
+    def fake_run(cmd: list[str], **kw: object) -> subprocess.CompletedProcess[str]:
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="boom")
+
+    monkeypatch.setattr("brain_core.distill.subprocess.run", fake_run)
+    assert d._defuddle("https://x.example/") == ("", {})
+    assert len(calls) == 1

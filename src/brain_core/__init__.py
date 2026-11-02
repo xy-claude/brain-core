@@ -1,7 +1,7 @@
 """brain-core — cognitive primitives for AI agents.
 
 Public API:
-    Agent       — composed entry point over memory/decisions/reflection
+    Agent       — the five brain_* operations over every configured store
     BrainConfig — brain.yaml schema (pydantic v2)
 """
 

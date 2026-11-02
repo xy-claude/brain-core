@@ -21,7 +21,7 @@ _BULLET = re.compile(r"^- (.+?)(?:\s*\((\d{4}-\d{2}-\d{2})\))?\s*$")
 _DECISION = re.compile(r"^## (\d{4}-\d{2}-\d{2}) — (.+?)\s*$")
 _CORRECTION = re.compile(r"^### \[(\d{4}-\d{2}-\d{2})\] (.+?)\s*$")
 _SECRET = re.compile(
-    r"hsk_[A-Za-z0-9]{8,}|(?i:bearer)\s+[A-Za-z0-9._-]{16,}|sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}"
+    r"hsk_[A-Za-z0-9]{8,}|(?i:bearer)\s+(?=[A-Za-z0-9._-]*\d)[A-Za-z0-9._-]{16,}|sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}"
     r"|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}"
 )
 
@@ -31,19 +31,6 @@ FILES: dict[Kind, str] = {
     "decision": "decisions_log.md",
     "correction": "corrections.md",
 }
-HSAM_SECTIONS = (
-    "What We Discussed",
-    "URLs & Links Shared",
-    "Decisions Made",
-    "Facts & Numbers",
-    "Ideas & Possibilities",
-    "Questions",
-    "Tools/Services/Products",
-    "Files & Resources",
-    "Mood & Context",
-    "Corrections & Feedback",
-    "Open loops",
-)
 
 
 class VaultStore:
@@ -378,7 +365,7 @@ class VaultStore:
 
     def _locked(self, path: Path) -> _Lock:
         path.parent.mkdir(parents=True, exist_ok=True)
-        return _Lock(path.with_name(f".{path.name}.lock"))
+        return _Lock(self.root / ".brain.lock")  # one lock per vault: nothing accumulates
 
     @staticmethod
     def _frontmatter(text: str) -> dict[str, str]:
@@ -427,6 +414,11 @@ def _bump_updated(text: str, when: date) -> str:
             + text[m.end(1) :]
         )
     return text
+
+
+def read_text(path: Path) -> str:
+    """A vault file as text, empty if missing; a stray non-UTF-8 byte never stops a read."""
+    return path.read_text(encoding="utf-8", errors="replace") if path.exists() else ""
 
 
 def _parse_date(value: str | None) -> date | None:

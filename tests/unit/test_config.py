@@ -21,9 +21,7 @@ def test_minimal_yaml(tmp_path: Path) -> None:
     path = write_yaml(tmp_path, "name: my-bot\n")
     cfg = BrainConfig.from_yaml(path)
     assert cfg.name == "my-bot"
-    assert cfg.capabilities == ["memory", "decisions", "reflection"]
-    assert cfg.memory.hsam.enabled is True
-    assert cfg.reflection.auto_on_session_end is True
+    assert cfg.session.brief == "daily_brief.md" and cfg.cron.backup.keep == 14
 
 
 def test_full_yaml_round_trip(tmp_path: Path) -> None:
@@ -31,33 +29,19 @@ def test_full_yaml_round_trip(tmp_path: Path) -> None:
         tmp_path,
         """
         name: journal-bot
-        version: 1.0.0
         workspace:
           data_dir: ./custom-data
-        capabilities:
-          - memory
-          - reflection
-        memory:
-          hsam:
-            enabled: false
-            subdir: archive
-        reflection:
-          auto_on_session_end: false
-        logging:
-          level: debug
-          format: plain
+        session:
+          mental_models: [active-priorities, user-style]
+        cron:
+          daily: "05:00"
         """,
     )
     cfg = BrainConfig.from_yaml(path)
     assert cfg.name == "journal-bot"
-    assert cfg.version == "1.0.0"
     assert cfg.workspace.data_dir == Path("./custom-data")
-    assert cfg.capabilities == ["memory", "reflection"]
-    assert cfg.memory.hsam.enabled is False
-    assert cfg.memory.hsam.subdir == "archive"
-    assert cfg.reflection.auto_on_session_end is False
-    assert cfg.logging.level == "debug"
-    assert cfg.logging.format == "plain"
+    assert cfg.session.mental_models == ["active-priorities", "user-style"]
+    assert cfg.cron.daily == "05:00"
 
 
 def test_missing_name_fails(tmp_path: Path) -> None:
@@ -72,39 +56,12 @@ def test_empty_name_fails(tmp_path: Path) -> None:
         BrainConfig.from_yaml(path)
 
 
-def test_unknown_capability_fails(tmp_path: Path) -> None:
-    path = write_yaml(
-        tmp_path,
-        """
-        name: x
-        capabilities:
-          - memory
-          - telepathy
-        """,
-    )
-    with pytest.raises(ValidationError):
-        BrainConfig.from_yaml(path)
-
-
 def test_unknown_top_level_field_fails(tmp_path: Path) -> None:
     path = write_yaml(
         tmp_path,
         """
         name: x
         garbage: stuff
-        """,
-    )
-    with pytest.raises(ValidationError):
-        BrainConfig.from_yaml(path)
-
-
-def test_invalid_log_level_fails(tmp_path: Path) -> None:
-    path = write_yaml(
-        tmp_path,
-        """
-        name: x
-        logging:
-          level: verbose
         """,
     )
     with pytest.raises(ValidationError):

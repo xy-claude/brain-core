@@ -9,6 +9,7 @@ from this session's ``brain_remember`` events), and writes the clean-close marke
 from __future__ import annotations
 
 import json
+import os
 import re
 import uuid
 from datetime import date, datetime
@@ -16,7 +17,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from brain_core.stores.hindsight import HindsightStore
-from brain_core.stores.vault import _SECRET, VaultStore
+from brain_core.stores.vault import _SECRET, VaultStore, _Lock
+from brain_core.stores.vault import read_text as _read
 
 if TYPE_CHECKING:
     from brain_core.agent import Agent
@@ -136,10 +138,6 @@ def _marker(agent: Agent) -> Path:
     return agent.resolve(m) if m else agent.data_dir / "last_close.txt"
 
 
-def _read(path: Path) -> str:
-    return path.read_text(encoding="utf-8") if path.exists() else ""
-
-
 def _sections(text: str, wanted: tuple[str, ...]) -> str:
     parts, keep = re.split(r"^(?=## )", text, flags=re.M), []
     for p in parts:
@@ -194,6 +192,11 @@ def _drain_queue(agent: Agent, queue: str | None) -> int:
     path = agent.resolve(queue)
     if not path.exists():
         return 0
+    with _Lock(path.with_name(f".{path.name}.lock")):
+        return _drain_locked(agent, path)
+
+
+def _drain_locked(agent: Agent, path: Path) -> int:
     h = _hindsight(agent)
     mine: list[str] = []
     others: list[str] = []
@@ -225,7 +228,9 @@ def _drain_queue(agent: Agent, queue: str | None) -> int:
             drained += 1
         except Exception:
             others.append(ln)
-    path.write_text("\n".join(others) + ("\n" if others else ""), encoding="utf-8")
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text("\n".join(others) + ("\n" if others else ""), encoding="utf-8")
+    os.replace(tmp, path)  # a crash mid-write must not truncate the queue
     return drained
 
 

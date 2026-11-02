@@ -9,6 +9,7 @@ files. An optional ``--profile DIR`` is copied over the result last, so a user's
 
 from __future__ import annotations
 
+import re
 import shutil
 from datetime import date
 from pathlib import Path
@@ -31,8 +32,9 @@ def init_agent(
 ) -> list[Path]:
     """Write the pack into ``path``; return the files written. ``typer.Exit(1)`` on error."""
     name = name.strip()
-    if not name:
-        typer.echo("Error: name must not be empty.", err=True)
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", name):
+        # it becomes a folder, a launchd label, a crontab tag and a Hindsight bank id
+        typer.echo("Error: name must be letters, digits, '-' or '_' only.", err=True)
         raise typer.Exit(code=1)
     target = path.resolve()
     if not force and any((target / f).exists() for f in _CORE):

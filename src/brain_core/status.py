@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 from brain_core.session import _marker, _sections
 from brain_core.stores.vault import VaultStore
+from brain_core.stores.vault import read_text as _read
 
 if TYPE_CHECKING:
     from brain_core.agent import Agent
@@ -98,10 +99,6 @@ def _context(agent: Agent) -> dict[str, Any]:
                 len(Path(f).read_bytes()) // 4
             )
     return {"tokens": sum(files.values()), "files": files}
-
-
-def _read(path: Path) -> str:
-    return path.read_text(encoding="utf-8", errors="replace") if path.exists() else ""
 
 
 def _frontmatter(path: Path) -> dict[str, str]:

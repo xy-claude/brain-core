@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from brain_core import __version__
@@ -75,9 +76,7 @@ def test_doctor_on_fresh_agent(tmp_path: Path) -> None:
     result = runner.invoke(app, ["doctor", str(tmp_path)])
     assert result.exit_code == 0, result.stdout
     assert "my-bot" in result.stdout
-    assert "facts" in result.stdout
-    assert "decisions" in result.stdout
-    assert "Health check: OK" in result.stdout
+    assert "store vault" in result.stdout and "Brain:" in result.stdout
 
 
 def test_doctor_missing_config(tmp_path: Path) -> None:
@@ -94,50 +93,7 @@ def test_doctor_invalid_config(tmp_path: Path) -> None:
 def test_doctor_reports_hsam_when_enabled(tmp_path: Path) -> None:
     runner.invoke(app, ["init", "my-bot", "--path", str(tmp_path)])
     result = runner.invoke(app, ["doctor", str(tmp_path)])
-    assert "HSAM" in result.stdout
-
-
-# ── export ───────────────────────────────────────────────────────────────────
-
-
-def test_export_empty_agent(tmp_path: Path) -> None:
-    runner.invoke(app, ["init", "my-bot", "--path", str(tmp_path)])
-    result = runner.invoke(app, ["export", str(tmp_path)])
-    assert result.exit_code == 0, result.stdout
-    assert "# my-bot" in result.stdout
-    assert "No facts" in result.stdout
-    assert "No decisions" in result.stdout
-    assert "No events" in result.stdout
-
-
-def test_export_with_data(tmp_path: Path) -> None:
-    # Scaffold
-    runner.invoke(app, ["init", "my-bot", "--path", str(tmp_path)])
-
-    # Write some state directly via Agent API (faster than running a full flow)
-    from brain_core import Agent
-
-    with Agent.from_config(tmp_path / "brain.yaml") as agent:
-        agent.remember("Ada prefers dark mode", kind="preference", tags=["ui"])
-        agent.remember("deploys on Tuesday", kind="constraint")
-        d = agent.decide(action="ship it", reversible=True, reasoning="tests green")
-        agent.complete(d.id)
-        agent.start_session("s-1")
-        agent.log_event(event_type="user_message", payload={"text": "hi"})
-
-    result = runner.invoke(app, ["export", str(tmp_path)])
-    assert result.exit_code == 0, result.stdout
-    out = result.stdout
-    assert "Ada prefers dark mode" in out
-    assert "ship it" in out
-    assert "user_message" in out
-    assert "[completed]" in out
-    assert "preference" in out  # section header for fact kind
-
-
-def test_export_missing_config(tmp_path: Path) -> None:
-    result = runner.invoke(app, ["export", str(tmp_path)])
-    assert result.exit_code == 1
+    assert "Brain:" in result.stdout
 
 
 def test_init_writes_the_whole_pack_with_user_and_profile(tmp_path: Path) -> None:
@@ -190,3 +146,60 @@ def test_init_writes_the_whole_pack_with_user_and_profile(tmp_path: Path) -> Non
     ):
         assert (out / "vault" / f).exists(), f
     assert (out / "data" / ".gitkeep").exists()
+
+
+# ── daily / weekly / cron / serve / hindsight wiring ─────────────────────────
+
+
+def test_init_rejects_a_name_that_is_not_a_safe_identifier(tmp_path: Path) -> None:
+    result = runner.invoke(app, ["init", "a/b", "--path", str(tmp_path)])
+    assert result.exit_code == 1 and not (tmp_path / "brain.yaml").exists()
+
+
+def test_daily_and_weekly_print_the_report(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    runner.invoke(app, ["init", "bot", "--path", str(tmp_path)])
+    monkeypatch.setattr(
+        "brain_core.cron.daily",
+        lambda agent: {"brief": "b.md", "brief_tokens": 12, "health": "h", "backup": "skipped"},
+    )
+    monkeypatch.setattr(
+        "brain_core.cron.weekly", lambda agent: {"archived": {}, "mental_models": {"m": "ok"}}
+    )
+    out = runner.invoke(app, ["daily", str(tmp_path)])
+    assert out.exit_code == 0 and "brief: b.md (~12 tokens)" in out.stdout
+    out = runner.invoke(app, ["weekly", str(tmp_path)])
+    assert out.exit_code == 0 and "archived: nothing" in out.stdout
+
+
+def test_cron_install_status_uninstall_via_cli(tmp_path: Path) -> None:
+    runner.invoke(app, ["init", "bot", "--path", str(tmp_path)])
+    la = str(tmp_path / "la")
+    out = runner.invoke(app, ["cron", "install", str(tmp_path), "--launch-dir", la, "--no-load"])
+    assert out.exit_code == 0 and out.stdout.count("wrote") == 2
+    out = runner.invoke(app, ["cron", "status", str(tmp_path), "--launch-dir", la])
+    assert "daily: installed" in out.stdout
+    out = runner.invoke(app, ["cron", "bogus", str(tmp_path)])
+    assert out.exit_code == 1
+
+
+def test_serve_needs_a_config_then_runs_the_server(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert runner.invoke(app, ["serve", str(tmp_path)]).exit_code == 1
+    runner.invoke(app, ["init", "bot", "--path", str(tmp_path)])
+    seen: list[Path] = []
+    monkeypatch.setattr("brain_core.mcp.server.run_server", lambda p: seen.append(p))
+    assert runner.invoke(app, ["serve", str(tmp_path)]).exit_code == 0
+    assert seen == [tmp_path / "brain.yaml"]
+
+
+def test_hindsight_command_reports_and_fails_on_unhealthy(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("brain_core.installer.health", lambda port: False)
+    out = runner.invoke(app, ["hindsight", "status"])
+    assert "DOWN" in out.stdout
+    monkeypatch.setattr(
+        "brain_core.installer.install_hindsight",
+        lambda **kw: {"api_key": "ANTHROPIC_API_KEY written", "service": "not healthy after 1s"},
+    )
+    out = runner.invoke(app, ["hindsight", "install", "--dry-run"])
+    assert out.exit_code == 1 and "api_key: ANTHROPIC_API_KEY written" in out.stdout

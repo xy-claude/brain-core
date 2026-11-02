@@ -9,8 +9,6 @@ import typer
 
 from brain_core import __version__
 from brain_core.agent import Agent
-from brain_core.cli.doctor import doctor_agent
-from brain_core.cli.export import export_agent
 from brain_core.cli.init import init_agent
 
 app = typer.Typer(
@@ -98,11 +96,8 @@ def cron_cmd(
             for p in cron.uninstall(agent, launch_dir):
                 typer.echo(f"  removed {p}")
         elif action == "status":
-            base = launch_dir or Path("~/Library/LaunchAgents").expanduser()
-            for suffix in ("daily", "weekly"):
-                plist = base / f"io.brain-core.{agent.name.lower()}.{suffix}.plist"
-                state = "installed" if plist.exists() else "not installed"
-                typer.echo(f"  {suffix}: {state} ({plist})")
+            for job, state in cron.status(agent, launch_dir).items():
+                typer.echo(f"  {job}: {state}")
         else:
             typer.echo("action must be install | uninstall | status", err=True)
             raise typer.Exit(code=1)
@@ -213,10 +208,9 @@ def doctor_cmd(
         typer.Argument(help="Path to agent directory (contains brain.yaml)."),
     ] = Path(),
 ) -> None:
-    """Health check: config, DB, then brain_status (stores, lint, context, session)."""
-    doctor_agent(path=path)
-    cfg = path if path.is_file() else path / "brain.yaml"
-    with Agent.from_config(cfg) as agent:
+    """Health check: brain_status in one call (stores, lint, context, session)."""
+    with _open(path) as agent:
+        typer.echo(f"Agent: {agent.name}  config: {agent.config_path}")
         st = agent.brain_status()
     for name, s in st["stores"].items():
         typer.echo(f"  store {name:9} {'OK  ' if s['ok'] else 'DOWN'} {s['detail'][:70]}")
@@ -234,29 +228,6 @@ def doctor_cmd(
     )
     typer.echo(f"  pending    {st.get('pending_decisions', 0)} decision(s)")
     typer.echo(f"Brain: {'OK' if st['ok'] else 'ATTENTION'}")
-
-
-@app.command("export")
-def export_cmd(
-    path: Annotated[
-        Path,
-        typer.Argument(help="Path to agent directory (contains brain.yaml)."),
-    ] = Path(),
-    fact_limit: Annotated[int, typer.Option("--fact-limit", help="Max facts to include.")] = 100,
-    decision_limit: Annotated[
-        int, typer.Option("--decision-limit", help="Max decisions to include.")
-    ] = 50,
-    event_limit: Annotated[
-        int, typer.Option("--event-limit", help="Max recent events to include.")
-    ] = 50,
-) -> None:
-    """Dump agent state to stdout as human-readable markdown."""
-    export_agent(
-        path=path,
-        fact_limit=fact_limit,
-        decision_limit=decision_limit,
-        event_limit=event_limit,
-    )
 
 
 @app.command("serve")

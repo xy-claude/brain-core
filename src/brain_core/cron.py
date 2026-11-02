@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import plistlib
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -23,6 +24,7 @@ from brain_core.session import _sections
 from brain_core.status import _frontmatter
 from brain_core.stores.hindsight import HindsightStore
 from brain_core.stores.vault import VaultStore
+from brain_core.stores.vault import read_text as _read
 
 if TYPE_CHECKING:
     from brain_core.agent import Agent
@@ -247,6 +249,8 @@ def weekly(agent: Agent, today: date | None = None) -> dict[str, Any]:
 def consolidate(sdir: Path, today: date) -> dict[str, int]:
     """Move session files older than ARCHIVE_DAYS into sessions/archive/YYYY-MM/ and index them."""
     moved: Counter[str] = Counter()
+    for stale in sdir.glob(".*.md.lock") if sdir.exists() else []:
+        stale.unlink()  # per-file locks from 0.2.2 and earlier
     for f in sorted(sdir.glob("????-??-??.md")) if sdir.exists() else []:
         try:
             d = date.fromisoformat(f.stem)
@@ -284,8 +288,10 @@ def cron_lines(
     weekday = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"].index(wday[:3].lower())
     log = agent_dir / "data" / "logs"
     tag = f"{CRON_TAG} {name.lower()}"
-    daily = f"{dm} {dh} * * * {brain_bin} daily {agent_dir} >> {log}/daily.log 2>&1 {tag} daily"
-    weekly = f"{wm} {wh} * * {weekday} {brain_bin} weekly {agent_dir} >> {log}/weekly.log 2>&1"
+    b, d = shlex.quote(brain_bin), shlex.quote(str(agent_dir))  # a space in $HOME is common
+    dl, wl = shlex.quote(str(log / "daily.log")), shlex.quote(str(log / "weekly.log"))
+    daily = f"{dm} {dh} * * * {b} daily {d} >> {dl} 2>&1 {tag} daily"
+    weekly = f"{wm} {wh} * * {weekday} {b} weekly {d} >> {wl} 2>&1"
     return [daily, f"{weekly} {tag} weekly"]
 
 
@@ -369,6 +375,24 @@ def install(agent: Agent, launch_dir: Path | None = None, load: bool = True) -> 
     return written
 
 
+def status(agent: Agent, launch_dir: Path | None = None) -> dict[str, str]:
+    """installed | not installed per job, from the crontab (Linux) or the plists (macOS)."""
+    if sys.platform != "darwin" and launch_dir is None:
+        cp = subprocess.run(["crontab", "-l"], capture_output=True, text=True)
+        tab = cp.stdout if cp.returncode == 0 else ""
+        tag = f"{CRON_TAG} {agent.name.lower()} "
+        return {
+            s: "installed (crontab)" if f"{tag}{s}" in tab else "not installed (crontab)"
+            for s in ("daily", "weekly")
+        }
+    base = launch_dir or Path("~/Library/LaunchAgents").expanduser()
+    out = {}
+    for s in ("daily", "weekly"):
+        p = base / f"io.brain-core.{agent.name.lower()}.{s}.plist"
+        out[s] = f"{'installed' if p.exists() else 'not installed'} ({p})"
+    return out
+
+
 def uninstall(agent: Agent, launch_dir: Path | None = None) -> list[str]:
     if sys.platform != "darwin" and launch_dir is None:
         cp = subprocess.run(["crontab", "-l"], capture_output=True, text=True)
@@ -397,10 +421,6 @@ def _vault(agent: Agent) -> VaultStore:
     if v is None:
         raise ValueError("brain daily/weekly need stores.vault in brain.yaml")
     return v
-
-
-def _read(path: Path) -> str:
-    return path.read_text(encoding="utf-8", errors="replace") if path.exists() else ""
 
 
 def now_stamp() -> str:

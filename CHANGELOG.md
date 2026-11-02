@@ -16,6 +16,20 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 - Recall deduplicates by the full text, so two "Fact changed" banners that share a prefix are both returned.
 - A mistyped date in a decision or correction heading no longer takes down `brain_recall` or `brain daily`.
 - The template bash guard now blocks `rm -rf ~/`, `rm -rf /*`, `rm -r -f /`, `rm -rf $HOME/`, `bash -c "rm -rf /"` and `curl … | sudo bash`, and the hook path is quoted so it runs from a folder with a space. The guard has a test.
+- Two processes applying the same new migration no longer crash the second one (`INSERT OR IGNORE`).
+- Session start tolerates a non-UTF-8 byte in a vault file, the same as cron and status already did; one shared reader.
+- Linux: crontab lines quote the agent path and log path, so a space in `$HOME` works; `brain cron status` reads the crontab instead of always saying "not installed".
+- `brain init` and `install.sh` reject an agent name that is not letters, digits, `-` or `_`; the name becomes a folder, a launchd label, a crontab tag and a bank id.
+- The Hindsight queue is drained under a lock and rewritten atomically, so a crash mid-drain cannot truncate it.
+- The `bearer` secret pattern needs a digit in the token, so "bearer authentication-header" is an ordinary sentence again.
+- `brain_distill` runs `npx defuddle` once, not twice, when the first call fails.
+- Vault writes take one lock file per vault (`.brain.lock`) instead of one per file; `brain weekly` removes the per-file locks older versions left in `sessions/`.
+
+### Removed
+- v0.1 code nothing in v0.2 reached: the `decisions`, `reflection` and `memory.hsam` modules, `brain export`, the `mcp/tools.py` wrappers, the v0.1 `Agent` methods (`remember`, `recall`, `supersede`, `append_today`, `decide`, `reverse`, `complete`, `list_decisions`, `gather_context`, `save_reflection`, `template_summary`), and the `capabilities`, `memory`, `reflection`, `logging` and `version` keys of `brain.yaml`. A `brain.yaml` that still has those keys fails to load: delete them. About 1,370 source lines gone; the `brain doctor` output is now the `brain_status` report only.
+
+### Added
+- Tests for the backup prune loop, crontab and launchctl install paths, `brain daily`, `weekly`, `cron`, `serve` and `hindsight` commands, the YouTube subtitle parser, and the migration race.
 
 ## [0.2.2] - 2026-11-02
 

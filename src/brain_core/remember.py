@@ -14,6 +14,7 @@ from typing import Any
 
 from brain_core.recall import tokens
 from brain_core.stores.base import Kind, Record, Store, WriteResult, record_id
+from brain_core.stores.graph import relation_text
 from brain_core.stores.vault import _SECRET
 
 ORDER = ("vault", "sqlite", "hindsight", "graph")
@@ -42,7 +43,7 @@ def brain_remember(
         and not text
         and all(extra.get(k) for k in ("subject", "predicate", "object"))
     ):
-        text = f"{extra['subject']} —[{extra['predicate']}]→ {extra['object']}"
+        text = relation_text(extra["subject"], extra["predicate"], extra["object"])
     if not text:
         raise ValueError("text must not be empty")
     if _SECRET.search(text):

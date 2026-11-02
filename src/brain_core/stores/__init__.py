@@ -2,7 +2,7 @@
 
 * :class:`VaultStore` — markdown vault (`agents/<NAME>/`), see ``docs/VAULT_SCHEMA.md``
 * :class:`HindsightStore` — self-hosted Hindsight over its MCP HTTP endpoint
-* :class:`GraphStore` — Kuzu entity graph via ``entity_graph.py``
+* :class:`GraphStore` — the ``relations`` table in brain.db
 * :class:`MemoryStore` — in-memory fake for tests
 """
 

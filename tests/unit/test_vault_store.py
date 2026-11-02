@@ -252,3 +252,10 @@ def test_raw_same_title_different_source_keeps_both(vault: VaultStore) -> None:
     assert (vault.root / b.detail).read_text().endswith("body of b")
     c = vault.write("raw", "body of c", title="日本語", source="https://c.example/")
     assert c.detail.endswith("-untitled.md")
+
+
+def test_bearer_guard_needs_a_digit(vault: VaultStore) -> None:
+    ok = vault.write("fact", "Use bearer authentication-header for the API", domain="System")
+    assert ok.status == "written"
+    bad = vault.write("fact", "token: bearer abcdef1234567890xyz", domain="System")
+    assert bad.status == "refused"
