@@ -102,3 +102,15 @@ def test_two_banners_sharing_a_prefix_are_both_returned() -> None:
     v.write("fact", f"{head} 8888 for MCP", when=date(2026, 11, 2))
     texts = [r["text"] for r in brain_recall([v], "hindsight port", today=TODAY)["results"]]
     assert any("8887" in t for t in texts) and any("8888" in t for t in texts)
+
+
+def test_transcript_line_ranks_below_written_memory_of_equal_relevance() -> None:
+    v = MemoryStore()
+    v.name = "vault"
+    v.write("fact", "launchctl kickstart restarts the Hindsight service", when=TODAY)
+    t = MemoryStore()
+    t.name = "transcripts"
+    t.write("transcript", "[user] launchctl kickstart restarts the Hindsight service?", when=TODAY)
+    out = brain_recall([t, v], "launchctl kickstart Hindsight", fmt="detailed", today=TODAY)
+    assert [r["kind"] for r in out["results"]] == ["fact", "transcript"]
+    assert out["results"][1]["score"] < out["results"][0]["score"]

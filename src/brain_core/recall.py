@@ -129,13 +129,20 @@ def brain_recall(
             continue
         report[store.name] = n
 
-    # a value a "Fact changed" banner superseded is kept on disk but ranks below the banner
+    # a value a "Fact changed" banner superseded is kept on disk but ranks below the banner;
+    # a transcript line is what was said, not what was decided, so written memory outranks it
     superseded = {
         normalize(m.group(1)).lower() for r, _s, _sc in hits.values() for m in _WAS.finditer(r.text)
     }
     ordered = sorted(
         (
-            (r, s, sc * 0.5 if normalize(r.text).lower() in superseded else sc)
+            (
+                r,
+                s,
+                sc
+                * (0.5 if normalize(r.text).lower() in superseded else 1.0)
+                * (0.7 if r.kind == "transcript" else 1.0),
+            )
             for r, s, sc in hits.values()
         ),
         key=lambda h: (h[2], h[0].date),

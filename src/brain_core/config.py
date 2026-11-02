@@ -45,6 +45,8 @@ class StoresConfig(BaseModel):
 
     vault: Path | None = None
     hindsight: HindsightConfig | None = None
+    transcripts: Path | None = None  # Claude Code projects root, e.g. ~/.claude/projects
+    transcripts_cwd: Path | None = None  # the folder Claude Code runs in; default: brain.yaml's
     graph: GraphConfig | None = None
 
 

@@ -43,8 +43,8 @@ def build_server(agent: Agent) -> FastMCP:
         scope: Annotated[
             str,
             Field(
-                description=f"'all' (default), one kind ({_KINDS}) or one store "
-                "(sqlite|vault|hindsight|graph)."
+                description=f"'all' (default), one kind ({_KINDS}|transcript) or one store "
+                "(sqlite|vault|hindsight|graph|transcripts)."
             ),
         ] = "all",
         format: Annotated[
@@ -57,9 +57,10 @@ def build_server(agent: Agent) -> FastMCP:
         limit: Annotated[int, Field(description="Max results after dedup; default 10.")] = 10,
     ) -> dict[str, Any]:
         """Search the agent's long-term memory: facts, patterns, decisions, corrections,
-        session notes, raw sources and entity relations across SQLite, the markdown vault,
-        Hindsight and the graph, returned as one deduplicated list ranked by relevance and
-        recency and capped at about 6k tokens.
+        session notes, raw sources, entity relations and the Claude Code session transcripts
+        of this folder, across SQLite, the markdown vault, Hindsight and the graph, returned
+        as one deduplicated list ranked by relevance and recency and capped at about 6k
+        tokens. scope='transcript' searches only what past sessions said and ran.
 
         Use it before answering anything about past sessions, earlier decisions or the user's
         preferences, and before brain_remember to avoid writing a duplicate. Not for health

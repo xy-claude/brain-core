@@ -4,6 +4,9 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+### Added
+- Transcript index: the Claude Code session files of the agent's folder (`~/.claude/projects/<cwd>/*.jsonl`) are indexed read-only into `brain.db` (FTS5), so `brain_recall` covers what past sessions said and ran before the agent remembered anything on purpose. `scope='transcript'` searches only them; `scope='all'` includes them. User and assistant text, Bash commands as `$ cmd`, other tool calls as `[Tool] target` and the first 400 characters of tool results are kept; thinking, images and hook chatter are not; key-shaped strings, the value after a password or token flag and bare 16-hex tokens are redacted before storage. Under `scope='all'` a transcript line ranks below written memory of the same relevance. Indexed on first recall in a process and by `brain daily`; a reindex reads only appended bytes. `stores.transcripts` in `brain.yaml` names the projects root; unset disables it.
+
 ## [0.2.6] - 2026-11-02
 
 ### Changed

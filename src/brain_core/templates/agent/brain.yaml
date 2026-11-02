@@ -6,6 +6,8 @@ stores:
   hindsight:                          # self-hosted Hindsight (episodic memory, vector recall)
     url: http://127.0.0.1:8888
     bank: $bank
+  transcripts: ~/.claude/projects       # Claude Code session files of this folder, indexed read-only
+  # transcripts_cwd: /path/claude/runs/in # only when brain.yaml is not in that folder
   # the entity graph is a table in data/brain.db; `graph:` only names a legacy Kuzu
   # graph for a one-time `brain graph import`
   # graph: {script: /path/to/entity_graph.py, python: python3}

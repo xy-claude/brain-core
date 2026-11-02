@@ -39,7 +39,14 @@ from brain_core.session import session_end, session_start
 from brain_core.status import brain_status
 from brain_core.storage.db import Database
 from brain_core.storage.migrator import migrate
-from brain_core.stores import GraphStore, HindsightStore, SqliteStore, Store, VaultStore
+from brain_core.stores import (
+    GraphStore,
+    HindsightStore,
+    SqliteStore,
+    Store,
+    TranscriptStore,
+    VaultStore,
+)
 from brain_core.stores.base import Kind
 
 
@@ -114,6 +121,13 @@ class Agent:
             if s.hindsight:
                 self._stores.append(HindsightStore(s.hindsight.url, s.hindsight.bank, self.name))
             self._stores.append(GraphStore(self._db))  # relations table in brain.db, always on
+            if s.transcripts and self.config_path:
+                cwd = (
+                    self.resolve(s.transcripts_cwd)
+                    if s.transcripts_cwd
+                    else self.config_path.parent
+                )
+                self._stores.append(TranscriptStore(self._db, s.transcripts, cwd))
         return self._stores
 
     def brain_recall(
@@ -170,8 +184,10 @@ class Agent:
         **extra: str,
     ) -> dict[str, Any]:
         """Write-through to every store with per-layer status. See :mod:`brain_core.remember`."""
-        if kind not in get_args(Kind):
-            raise ValueError(f"kind must be one of {'|'.join(get_args(Kind))}")
+        if kind not in get_args(Kind) or kind == "transcript":
+            raise ValueError(
+                f"kind must be one of {'|'.join(k for k in get_args(Kind) if k != 'transcript')}"
+            )
         out = brain_remember(
             self.stores,
             text,

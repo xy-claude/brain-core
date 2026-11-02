@@ -3,6 +3,7 @@
 * :class:`VaultStore` — markdown vault (`agents/<NAME>/`), see ``docs/VAULT_SCHEMA.md``
 * :class:`HindsightStore` — self-hosted Hindsight over its MCP HTTP endpoint
 * :class:`GraphStore` — the ``relations`` table in brain.db
+* :class:`TranscriptStore` — read-only FTS over the Claude Code session files of this folder
 * :class:`MemoryStore` — in-memory fake for tests
 """
 
@@ -11,6 +12,7 @@ from brain_core.stores.fakes import MemoryStore
 from brain_core.stores.graph import GraphStore
 from brain_core.stores.hindsight import HindsightStore
 from brain_core.stores.sqlite import SqliteStore
+from brain_core.stores.transcripts import TranscriptStore
 from brain_core.stores.vault import VaultStore
 
 __all__ = [
@@ -21,6 +23,7 @@ __all__ = [
     "Record",
     "SqliteStore",
     "Store",
+    "TranscriptStore",
     "VaultStore",
     "WriteResult",
 ]

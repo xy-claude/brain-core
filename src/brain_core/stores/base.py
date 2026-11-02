@@ -8,7 +8,17 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Literal, Protocol
 
-Kind = Literal["fact", "pattern", "decision", "correction", "note", "raw", "relation", "knowledge"]
+Kind = Literal[
+    "fact",
+    "pattern",
+    "decision",
+    "correction",
+    "note",
+    "raw",
+    "relation",
+    "knowledge",
+    "transcript",  # read-only: indexed from Claude Code session files, never written
+]
 
 _DATE_SUFFIX = re.compile(r"\s*\((\d{4}-\d{2}-\d{2})\)\s*$")
 _WS = re.compile(r"\s+")

@@ -25,6 +25,7 @@ from brain_core import traits
 from brain_core.session import _sections
 from brain_core.status import _frontmatter
 from brain_core.stores.hindsight import HindsightStore
+from brain_core.stores.transcripts import TranscriptStore
 from brain_core.stores.vault import VaultStore
 from brain_core.stores.vault import read_text as _read
 
@@ -78,6 +79,9 @@ def daily(agent: Agent, today: date | None = None) -> dict[str, Any]:
         "health": line[2:],
     }
     out["backup"] = backup(agent, today) if cfg.cron.backup.enabled else "disabled"
+    for s in agent.stores:
+        if isinstance(s, TranscriptStore):
+            out["transcripts"] = s.index()
     return out
 
 

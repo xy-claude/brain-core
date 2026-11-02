@@ -63,7 +63,7 @@ flowchart LR
 | Tool | One call does |
 |---|---|
 | `brain_session('start')` | the whole start block: daily brief, executive state, mental models, a recall per mission, inbox count, and a flag if the last session crashed |
-| `brain_recall(query)` | one query across every store, deduplicated, ranked by relevance and recency, capped at 6k tokens |
+| `brain_recall(query, scope)` | one query across every store, the Claude Code transcripts of this folder included, deduplicated, ranked by relevance and recency, capped at 6k tokens; `scope='transcript'` is what past sessions said and ran, useful on day one |
 | `brain_remember(text, kind)` | writes vault → SQLite → Hindsight → graph and reports each layer. Near-duplicates are skipped; a changed value gets a `⚠ Fact changed` banner and the old line stays |
 | `brain_distill(source)` | captures a URL, GitHub repo, YouTube video, PDF, file or pasted text into an immutable `raw/` folder for the agent to compile |
 | `brain_session('end')` | drains the queue, closes the day's session file, rewrites state and critique, writes the clean-close marker |
@@ -222,7 +222,7 @@ Say "thanks, we're done" and it runs `brain_session('end')`. Tomorrow at 06:07 `
 │   ├── sessions/             one file per day (HSAM)
 │   ├── knowledge/ raw/       the LLM-wiki: immutable sources, compiled pages
 │   └── executive_state.md    objective, missions, pending decisions
-└── data/brain.db             SQLite + FTS5 + relations
+└── data/brain.db             SQLite + FTS5 + relations + transcript index
 ```
 
 Everything is markdown or SQLite. Open the vault in Obsidian, grep it, commit it, delete a line. The agent will not mind.
