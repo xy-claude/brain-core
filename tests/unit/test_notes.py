@@ -8,7 +8,8 @@ from brain_core.stores.notes import NotesStore
 
 def test_notes_reads_sections_and_plain_memory_files(tmp_path: Path) -> None:
     shared, memory = tmp_path / "shared", tmp_path / "memory"
-    shared.mkdir(), memory.mkdir()
+    shared.mkdir()
+    memory.mkdir()
     (shared / "infrastructure.md").write_text(
         "---\nupdated: 2026-10-01\n---\n# Infrastructure\n\n## Hindsight\nruns on port 8888\n"
     )
