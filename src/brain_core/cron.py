@@ -86,18 +86,14 @@ def daily(agent: Agent, today: date | None = None) -> dict[str, Any]:
 
 
 def _agenda(path: Path) -> str:
-    rows = [
-        ln for ln in _read(path).splitlines() if ln.startswith("|") and not ln.startswith("|---")
-    ]
-    missions = [
-        r for r in rows[1:] if r.strip("| ").lower().split("|")[0].strip() not in ("id", "")
-    ]
+    missions = traits.missions(path)
     if not missions:
-        return "## Session Agenda\n\n_No missions in goals/mission_queue.md yet._\n"
-    body = "\n".join(
-        f"- {' · '.join(c.strip() for c in r.strip('|').split('|') if c.strip())}" for r in missions
-    )
-    return f"## Session Agenda — from mission_queue.md\n\n{body}\n"
+        return (
+            "## Session Agenda\n\n"
+            "_No missions yet (goals/mission_queue.md or goals/missions/*.md)._\n"
+        )
+    body = "\n".join(f"- {' · '.join(v for v in m.values() if v)}" for m in missions)
+    return f"## Session Agenda — missions\n\n{body}\n"
 
 
 def _hot_corrections(path: Path, today: date) -> str:

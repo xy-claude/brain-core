@@ -64,7 +64,7 @@ flowchart LR
 | Tool | One call does |
 |---|---|
 | `brain_session('start')` | the whole start block: daily brief, executive state, mental models, a recall per mission, inbox count, and a flag if the last session crashed |
-| `brain_recall(query, scope)` | one query across every store, the Claude Code transcripts of this folder included, deduplicated, ranked by relevance and recency, capped at 6k tokens; `scope='transcript'` is what past sessions said and ran, useful on day one |
+| `brain_recall(query, scope)` | one query across every store, the Claude Code transcripts of this folder and any `stores.notes` folders included, deduplicated, ranked by relevance and recency, capped at 6k tokens; `scope='transcript'` is what past sessions said and ran, useful on day one |
 | `brain_remember(text, kind)` | writes vault → SQLite → Hindsight → graph and reports each layer. Near-duplicates are skipped; a changed value gets a `⚠ Fact changed` banner and the old line stays |
 | `brain_distill(source)` | captures a URL, GitHub repo, YouTube video, PDF, file or pasted text into an immutable `raw/` folder for the agent to compile |
 | `brain_session('end')` | drains the queue, closes the day's session file, rewrites state and critique, writes the clean-close marker |
@@ -98,7 +98,7 @@ What it does, in order. Re-running skips what is already there, so after a failu
 == 1/8 Xcode command line tools      present
 == 2/8 Homebrew                      present
 == 3/8 uv, gh, gitleaks, node, Claude Code
-== 4/8 brain-core (v0.3.1)           installed with uv tool
+== 4/8 brain-core (v0.4.0)           installed with uv tool
 == 5/8 Agent Atlas at ~/Agents/Atlas  31 files written
 == 6/8 Hindsight (required store)    service: healthy
 == 7/8 Cron                          daily 06:07, weekly Sun 07:13
@@ -110,7 +110,7 @@ What it does, in order. Re-running skips what is already there, so after a failu
 | 1 | checks for `git` via the Xcode command line tools | macOS opens an install dialog; finish it, then re-run |
 | 2 | installs Homebrew if missing | Homebrew asks for your password itself |
 | 3 | installs `uv`, `gh`, `gitleaks`, `node` and Claude Code with Homebrew | anything already present is left alone |
-| 4 | installs the `brain` command from PyPI with `uv tool` | `--ref v0.3.1` pins a git tag instead |
+| 4 | installs the `brain` command from PyPI with `uv tool` | `--ref v0.4.0` pins a git tag instead |
 | 5 | runs `brain init` and writes the agent folder | an existing `brain.yaml` is never overwritten |
 | 6 | installs Hindsight as a launchd service on `127.0.0.1:8888` | first start downloads the embedding model; give it a few minutes |
 | 7 | installs `brain daily` and `brain weekly` as launchd agents | |
@@ -137,7 +137,7 @@ The installer prints a note if the key was not in your shell when it ran. If you
 | `--api-key-env VAR` | read the key from a variable other than `<PROVIDER>_API_KEY` |
 | `--profile DIR` | a folder copied over the generic rules last, for your own doctrine |
 | `--dashboard` | the Hindsight web UI on http://localhost:9999 |
-| `--ref v0.3.1` | pin a git tag instead of the PyPI release |
+| `--ref v0.4.0` | pin a git tag instead of the PyPI release |
 
 ### Linux
 
@@ -146,7 +146,7 @@ The same one line. It needs `git` and `curl` already present. It then installs `
 ### Manual, any platform
 
 ```bash
-uv tool install brain-core-mcp   # or: uv tool install git+https://github.com/xy-claude/brain-core@v0.3.1
+uv tool install brain-core-mcp   # or: uv tool install git+https://github.com/xy-claude/brain-core@v0.4.0
 brain init Atlas --path ~/Agents/Atlas --user Alex
 brain hindsight install          # launchd on macOS, systemd --user on Linux
 brain cron install ~/Agents/Atlas

@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Any
 import yaml
 
 from brain_core.status import _frontmatter, _is_table_chrome
-from brain_core.stores.vault import VaultStore
+from brain_core.stores.vault import VaultStore, frontmatter
 from brain_core.stores.vault import read_text as _read
 
 if TYPE_CHECKING:
@@ -309,7 +309,25 @@ def _execution(events: list[Any], root: Path, brief: str, today: date) -> dict[s
 
 
 def missions(path: Path) -> list[dict[str, str]]:
-    """Rows of goals/mission_queue.md as dicts (id, mission, priority, status, next, reviewed)."""
+    """Missions as dicts (id, mission, priority, status, next, reviewed): one file per mission
+    in goals/missions/*.md with frontmatter wins; else the rows of goals/mission_queue.md."""
+    files = sorted((path.parent / "missions").glob("*.md"))
+    if files:
+        out = []
+        for p in files:
+            fm = frontmatter(_read(p))
+            if fm.get("mission_id") or fm.get("id"):
+                out.append(
+                    {
+                        "id": fm.get("mission_id") or fm.get("id", ""),
+                        "mission": fm.get("title", p.stem),
+                        "priority": fm.get("priority", ""),
+                        "status": fm.get("status", ""),
+                        "next": fm.get("next_step", ""),
+                        "reviewed": fm.get("last_reviewed", ""),
+                    }
+                )
+        return out
     rows = [r for r in _read(path).splitlines() if r.startswith("|") and not _is_table_chrome(r)]
     out = []
     for r in rows:

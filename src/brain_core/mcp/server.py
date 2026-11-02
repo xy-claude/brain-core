@@ -44,7 +44,7 @@ def build_server(agent: Agent) -> FastMCP:
             str,
             Field(
                 description=f"'all' (default), one kind ({_KINDS}|transcript) or one store "
-                "(sqlite|vault|hindsight|graph|transcripts)."
+                "(sqlite|vault|hindsight|graph|transcripts|notes)."
             ),
         ] = "all",
         format: Annotated[

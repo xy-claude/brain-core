@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +24,8 @@ from brain_core.storage.db import Database
 from brain_core.stores.base import Kind, Record, WriteResult
 from brain_core.stores.sqlite import fts_query
 from brain_core.stores.vault import _SECRET
+
+RECENT_MINUTES = 10  # transcript lines younger than this are the running conversation
 
 _RESULT_CHARS = 400
 _TEXT_CHARS = 2_000
@@ -158,17 +160,22 @@ class TranscriptStore:
         q = fts_query(query) if query else ""
         if query and not q:
             return []
+        # a line younger than this is the conversation asking, not memory: skip it
+        cutoff = (datetime.now(UTC) - timedelta(minutes=RECENT_MINUTES)).strftime(
+            "%Y-%m-%dT%H:%M:%S"
+        )
         if q:
             rows = self.db.fetchall(
                 "SELECT t.id, t.session, t.ts, t.role, t.text FROM transcripts_fts f "
                 "JOIN transcripts t ON t.rowid = f.rowid WHERE transcripts_fts MATCH ? "
-                "ORDER BY bm25(transcripts_fts) LIMIT ?",
-                (q, limit),
+                "AND t.ts < ? ORDER BY bm25(transcripts_fts) LIMIT ?",
+                (q, cutoff, limit),
             )
         else:
             rows = self.db.fetchall(
-                "SELECT id, session, ts, role, text FROM transcripts ORDER BY ts DESC LIMIT ?",
-                (limit,),
+                "SELECT id, session, ts, role, text FROM transcripts WHERE ts < ? "
+                "ORDER BY ts DESC LIMIT ?",
+                (cutoff, limit),
             )
         return [
             Record(

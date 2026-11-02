@@ -4,6 +4,16 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-03
+
+### Added
+- `stores.notes` in `brain.yaml`: read-only markdown folders that `brain_recall` also searches, such as a vault `shared/` folder other agents write or Claude Code's own memory folder (`~/.claude/projects/<slug>/memory`). A file without `## ` sections is one record of its body.
+- Missions as one file each: `goals/missions/*.md` with frontmatter (`mission_id`, `title`, `priority`, `status`, `next_step`, `last_reviewed`) is read by the daily brief agenda, the stalled-mission nudge and the goal trait, and wins over the `mission_queue.md` table when present.
+
+### Changed
+- `brain_remember` no longer waits up to 30 s for Hindsight to finish a retain. It polls for one second so a fast failure is still reported, then returns `written` with the operation id and lets the server finish. A write that used to stall five seconds returns in one.
+- Recall skips transcript lines younger than ten minutes: they are the conversation asking, not memory, and used to come back as the top hit.
+
 ## [0.3.1] - 2026-11-02
 
 ### Added

@@ -120,3 +120,20 @@ def test_missing_project_folder_is_healthy_and_empty(db: Database, tmp_path: Pat
     assert store.read("fact", "anything") == []
     ok, detail = store.health()
     assert ok and detail.startswith("transcripts: no sessions yet")
+
+
+def test_recall_skips_lines_of_the_last_ten_minutes(db: Database, tmp_path: Path) -> None:
+    from datetime import UTC, datetime
+
+    agent_root = tmp_path / "agent"
+    folder = project_dir(tmp_path / "projects", agent_root)
+    folder.mkdir(parents=True)
+    now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    (folder / "live.jsonl").write_text(
+        _line("user", "old question about widgets", "u1")
+        + "\n"
+        + _line("user", "widgets again, asked just now", "u2", timestamp=now)
+    )
+    store = TranscriptStore(db, tmp_path / "projects", agent_root)
+    texts = [r.text for r in store.read("transcript", "widgets")]
+    assert texts == ["[user] old question about widgets"]

@@ -1,8 +1,9 @@
 """Self-hosted Hindsight adapter over its MCP streamable-HTTP endpoint.
 
 No API key: the server runs on this machine (``hindsight-api``, LaunchAgent). Retain is
-asynchronous on the server; ``write`` polls the operation so a failure is reported, never
-assumed. Customers run the same server with their own LLM provider key.
+asynchronous on the server and takes about five seconds; ``write`` polls for ``wait`` seconds
+so a fast failure is reported, then returns ``written`` with the operation id and lets the
+server finish. Customers run the same server with their own LLM provider key.
 """
 
 from __future__ import annotations
@@ -33,10 +34,12 @@ class HindsightStore:
     ranked = True  # the server orders by query
     whole = True  # one recall covers every kind; kind comes back in the tags
 
-    def __init__(self, url: str, bank: str, agent: str = "agent", *, timeout: float = 30.0) -> None:
+    def __init__(
+        self, url: str, bank: str, agent: str = "agent", *, timeout: float = 30.0, wait: float = 1.0
+    ) -> None:
         self.base = url.rstrip("/")
         self.mcp_url = f"{self.base}/mcp/{bank}/"
-        self.bank, self.agent, self.timeout = bank, agent.lower(), timeout
+        self.bank, self.agent, self.timeout, self.wait = bank, agent.lower(), timeout, wait
         self._session: str | None = None
         self._n = 0
 
@@ -104,18 +107,17 @@ class HindsightStore:
     # ── MCP plumbing ────────────────────────────────────────────────────────
 
     def _wait(self, op: str, rid: str) -> WriteResult:
-        deadline = time.monotonic() + self.timeout
-        while time.monotonic() < deadline:
+        deadline = time.monotonic() + self.wait
+        while True:
             st = self.call("get_operation", operation_id=op)
             status = st.get("status") if isinstance(st, dict) else None
             if status in ("completed", "succeeded"):
                 return WriteResult(self.name, rid, "written", f"op {op}")
             if status in ("failed", "cancelled"):
                 return WriteResult(self.name, rid, "failed", f"op {op}: {st.get('error', status)}")
+            if time.monotonic() >= deadline:
+                return WriteResult(self.name, rid, "written", f"op {op} accepted, finishing")
             time.sleep(0.5)
-        return WriteResult(
-            self.name, rid, "pending", f"op {op} still running after {self.timeout}s"
-        )
 
     def call(self, tool: str, **args: Any) -> Any:
         try:

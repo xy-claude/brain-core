@@ -14,7 +14,7 @@ class FakeHindsight(HindsightStore):
     """Replace the HTTP layer with a scripted server."""
 
     def __init__(self, ops: list[str]) -> None:
-        super().__init__("http://127.0.0.1:1", "test-bank", "ATLAS", timeout=2)
+        super().__init__("http://127.0.0.1:1", "test-bank", "ATLAS", wait=2)
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self.ops = ops  # statuses returned by successive get_operation calls
 
@@ -57,11 +57,12 @@ def test_hindsight_write_polls_until_completed() -> None:
     assert args["document_id"] == "session-2026-11-01" and args["metadata"]["impact"] == "high"
 
 
-def test_hindsight_write_reports_failed_and_pending() -> None:
+def test_hindsight_write_reports_failed_and_lets_a_slow_op_finish() -> None:
     assert FakeHindsight(["failed"]).write("fact", "x").status == "failed"
     slow = FakeHindsight(["pending"] * 50)
-    slow.timeout = 0.6
-    assert slow.write("fact", "y").status == "pending"
+    slow.wait = 0.6
+    r = slow.write("fact", "y")
+    assert r.status == "written" and "accepted" in r.detail
 
 
 def test_hindsight_read_maps_tags_to_record() -> None:
@@ -95,7 +96,7 @@ def test_call_reinitialises_once_after_the_server_forgets_the_session() -> None:
     import io
     import urllib.error
 
-    store = HindsightStore("http://127.0.0.1:1", "b", "A", timeout=1)
+    store = HindsightStore("http://127.0.0.1:1", "b", "A", wait=1)
     store._session = "stale"
     posts: list[str] = []
 

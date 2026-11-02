@@ -175,3 +175,28 @@ def test_missions_and_pending_ages_helpers(tmp_path: Path) -> None:
     assert [(m["id"], d) for m, d in traits.stalled(q, TODAY)] == [("M-2", 32)]
     (tmp_path / "pending_seen.json").write_text(json.dumps({"x": "2026-10-20"}))
     assert traits.pending_ages(tmp_path, [["x"], ["y"]], TODAY) == {"x": 13}
+
+
+def test_mission_files_with_frontmatter_win_over_the_table(tmp_path: Path) -> None:
+    goals = tmp_path / "goals"
+    (goals / "missions").mkdir(parents=True)
+    (goals / "mission_queue.md").write_text(
+        "| ID | Mission |\n|---|---|\n| M-9 | from the table |\n"
+    )
+    (goals / "missions" / "M-001.md").write_text(
+        '---\nmission_id: "M-001"\ntitle: "Ship it"\nstatus: active\npriority: 1\n'
+        "last_reviewed: 2026-09-01\nnext_step: tag v1\n---\n# Ship it\n"
+    )
+    (goals / "missions" / "README.md").write_text("no frontmatter, not a mission\n")
+    got = traits.missions(goals / "mission_queue.md")
+    assert got == [
+        {
+            "id": "M-001",
+            "mission": "Ship it",
+            "priority": "1",
+            "status": "active",
+            "next": "tag v1",
+            "reviewed": "2026-09-01",
+        }
+    ]
+    assert [m["id"] for m, _d in traits.stalled(goals / "mission_queue.md", TODAY)] == ["M-001"]

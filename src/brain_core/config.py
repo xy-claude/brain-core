@@ -48,6 +48,7 @@ class StoresConfig(BaseModel):
     transcripts: Path | None = None  # Claude Code projects root, e.g. ~/.claude/projects
     transcripts_cwd: Path | None = None  # the folder Claude Code runs in; default: brain.yaml's
     graph: GraphConfig | None = None
+    notes: list[Path] = Field(default_factory=list)  # read-only markdown folders recall searches
 
 
 class SessionConfig(BaseModel):

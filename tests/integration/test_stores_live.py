@@ -23,7 +23,7 @@ PY = Path("~/Projects/AI-ORG/venv/bin/python3").expanduser()
 
 @pytest.fixture
 def hindsight() -> HindsightStore:
-    h = HindsightStore(HS_URL, "brain-test", "brain-core", timeout=40)
+    h = HindsightStore(HS_URL, "brain-test", "brain-core", timeout=40, wait=40)
     if not h.health()[0]:
         pytest.skip("local Hindsight not running")
     return h

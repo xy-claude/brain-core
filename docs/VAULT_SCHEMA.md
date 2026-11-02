@@ -11,6 +11,7 @@ Root: `agents/<NAME>/` (one folder per agent). All files have YAML frontmatter w
 | `decision` | `decisions_log.md` | top-level, after the template block | `## YYYY-MM-DD — <title>` then `**Decision:** … / **Reason:** … / **Classification:** [reversible\|irreversible] × [low-risk\|high-risk] / **Confidence:** high\|medium\|low` | newest first |
 | `correction` | `corrections.md` | under `## Corrections` | `### [YYYY-MM-DD] <title>` then `- **Error:** / - **Correction:** / - **Implied rule:** / - **Theme:** / - **Promoted:**` | newest first |
 | `note` | `sessions/YYYY-MM-DD.md` | `## <Section>` from the HSAM list (What We Discussed, URLs & Links Shared, Decisions Made, Facts & Numbers, Ideas & Possibilities, Questions, Tools/Services/Products, Files & Resources, Mood & Context, Corrections & Feedback, Open loops) | `- <text>` | append |
+| mission (read-only) | `goals/missions/<ID>.md` | frontmatter `mission_id`, `title`, `priority`, `status`, `next_step`, `last_reviewed` | one file per mission; wins over the `goals/mission_queue.md` table when the folder has files | — |
 | `raw` | `raw/YYYY-MM-DD-<slug>.md` | whole file | frontmatter `type: raw, source, title, author, published, fetched, sha256, words, compiled_into` + body | immutable |
 
 Not handled by `VaultStore`: `knowledge/` pages (compiled by the LLM through `/distill`), `executive_state.md`, `session_critique.md`, `intelligence_dashboard.md` (whole-file rewrites by the agent).

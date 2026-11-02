@@ -11,6 +11,7 @@ stores:
   # the entity graph is a table in data/brain.db; `graph:` only names a legacy Kuzu
   # graph for a one-time `brain graph import`
   # graph: {script: /path/to/entity_graph.py, python: python3}
+  # notes: [~/.claude/projects/<slug>/memory, ../shared]  # read-only markdown folders recall also searches
 
 session:
   mental_models: [active-priorities]  # Hindsight mental models read at session start

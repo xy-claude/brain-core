@@ -42,6 +42,7 @@ from brain_core.storage.migrator import migrate
 from brain_core.stores import (
     GraphStore,
     HindsightStore,
+    NotesStore,
     SqliteStore,
     Store,
     TranscriptStore,
@@ -128,6 +129,8 @@ class Agent:
                     else self.config_path.parent
                 )
                 self._stores.append(TranscriptStore(self._db, s.transcripts, cwd))
+            if s.notes:
+                self._stores.append(NotesStore([self.resolve(p) for p in s.notes]))
         return self._stores
 
     def brain_recall(

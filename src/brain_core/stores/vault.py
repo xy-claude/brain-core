@@ -85,7 +85,7 @@ class VaultStore:
                 )
             ]
         if kind == "knowledge":
-            return self._parse_knowledge(text, rel, fallback)
+            return knowledge_records(text, rel, fallback)
         if kind == "note":
             fallback = _parse_date(path.stem) or fallback
         records: list[Record] = []
@@ -310,30 +310,6 @@ class VaultStore:
             self._save(path, head + body, when, bump=False)
         return WriteResult(self.name, sha, "written", str(path.relative_to(self.root)))
 
-    def _parse_knowledge(self, text: str, rel: str, when: date) -> list[Record]:
-        """One record per `## section` of a compiled page: title › heading: body. Read-only kind."""
-        title = next((ln[2:].strip() for ln in text.splitlines() if ln.startswith("# ")), rel)
-        records: list[Record] = []
-        heading, start = "", 0
-        body: list[str] = []
-        for n, line in enumerate(text.splitlines(), 1):
-            if line.startswith("## "):
-                if heading:
-                    records.append(self._knowledge_record(title, heading, body, rel, start, when))
-                heading, body, start = line[3:].strip(), [], n
-            elif heading and line.strip() and not line.startswith("---"):
-                body.append(line.strip())
-        if heading:
-            records.append(self._knowledge_record(title, heading, body, rel, start, when))
-        return records
-
-    def _knowledge_record(
-        self, title: str, heading: str, body: list[str], rel: str, line: int, when: date
-    ) -> Record:
-        joined = " ".join(body)
-        text = f"{title} › {heading}: {joined[:600]}"
-        return Record(record_id(f"{rel}#{heading}"), "knowledge", text, when, "", rel, line, {})
-
     # ── helpers ─────────────────────────────────────────────────────────────
 
     def _new_file(self, kind: Kind, when: date, header: str) -> str:
@@ -369,15 +345,7 @@ class VaultStore:
 
     @staticmethod
     def _frontmatter(text: str) -> dict[str, str]:
-        m = _FRONTMATTER.match(text)
-        if not m:
-            return {}
-        out: dict[str, str] = {}
-        for ln in m.group(1).splitlines():
-            if ":" in ln and not ln.startswith(" "):
-                k, _, v = ln.partition(":")
-                out[k.strip()] = v.strip().strip("'\"")
-        return out
+        return frontmatter(text)
 
     def health(self) -> tuple[bool, str]:
         if not self.root.is_dir():
@@ -426,3 +394,54 @@ def _parse_date(value: str | None) -> date | None:
         return date.fromisoformat(value) if value else None
     except ValueError:
         return None
+
+
+def knowledge_records(text: str, rel: str, when: date) -> list[Record]:
+    """One record per `## section` of a page: title › heading: body. A page without `## `
+    sections (a plain note, a Claude Code memory file) is one record of its body."""
+    fm = frontmatter(text)
+    m = _FRONTMATTER.match(text)
+    skip = m.group(0).count("\n") if m else 0  # frontmatter lines: never body, never a title
+    lines = text.splitlines()
+    title = next(
+        (ln[2:].strip() for ln in lines[skip:] if ln.startswith("# ")),
+        fm.get("title") or fm.get("name") or rel,
+    )
+    records: list[Record] = []
+    heading, start = "", 0
+    body: list[str] = []
+    for n, line in enumerate(lines, 1):
+        if line.startswith("## "):
+            if heading:
+                records.append(_knowledge_record(title, heading, body, rel, start, when))
+            heading, body, start = line[3:].strip(), [], n
+        elif heading and line.strip() and not line.startswith("---"):
+            body.append(line.strip())
+    if heading:
+        records.append(_knowledge_record(title, heading, body, rel, start, when))
+    if not records:
+        plain = [ln.strip() for ln in lines[skip:] if ln.strip() and ln[0] != "#"]
+        if plain:
+            records.append(_knowledge_record(title, "", plain, rel, 1, when))
+    return records
+
+
+def _knowledge_record(
+    title: str, heading: str, body: list[str], rel: str, line: int, when: date
+) -> Record:
+    joined = " ".join(body)
+    text = f"{title} › {heading}: {joined[:600]}" if heading else f"{title}: {joined[:600]}"
+    return Record(record_id(f"{rel}#{heading}"), "knowledge", text, when, "", rel, line, {})
+
+
+def frontmatter(text: str) -> dict[str, str]:
+    """Top-level `key: value` pairs of a YAML frontmatter block; quotes stripped."""
+    m = _FRONTMATTER.match(text)
+    if not m:
+        return {}
+    out: dict[str, str] = {}
+    for ln in m.group(1).splitlines():
+        if ":" in ln and not ln.startswith(" "):
+            k, _, v = ln.partition(":")
+            out[k.strip()] = v.strip().strip("'\"")
+    return out
