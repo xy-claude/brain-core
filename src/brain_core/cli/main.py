@@ -232,6 +232,43 @@ def index_cmd(
     typer.echo(f"indexed {written} new, {exists} already there")
 
 
+@app.command("capture")
+def capture_cmd(
+    path: Annotated[
+        Path, typer.Option("--path", "-p", help="Agent directory or brain.yaml.")
+    ] = Path(),
+    transcript: Annotated[
+        Path | None,
+        typer.Option(
+            "--transcript", help="Transcript .jsonl to scan; default: the hook JSON on stdin."
+        ),
+    ] = None,
+) -> None:
+    """Stop / PreCompact hook: file every user message and URL from the transcript into
+    today's session file (sections "Said (hook)" and "Links (hook)"), from where the last run
+    stopped, deduplicated."""
+    import json
+    import sys
+
+    from brain_core.capture import capture
+
+    sid = ""
+    if transcript is None:
+        payload = json.loads(sys.stdin.read() or "{}")
+        if payload.get("stop_hook_active") or not payload.get("transcript_path"):
+            return
+        transcript, sid = Path(str(payload["transcript_path"])), str(payload.get("session_id", ""))
+        with _open(path) as agent:
+            capture(agent, transcript.expanduser(), sid)
+        return  # a hook prints nothing; plain stdout would be ignored anyway
+    with _open(path) as agent:
+        out = capture(agent, transcript.expanduser(), sid)
+    typer.echo(
+        f"captured {out['written']} new, {out['duplicate']} already there, "
+        f"{out['scanned']} transcript lines scanned"
+    )
+
+
 @app.command("doctor")
 def doctor_cmd(
     path: Annotated[

@@ -33,7 +33,7 @@ Persist every URL, number, name, idea, preference, deadline, correction the mome
 | Topic, URL, question, idea | `brain_remember(kind='note', extra={section})` → today's session file |
 | New relationship between entities | `brain_remember(kind='relation', extra={subject, predicate, object})` |
 
-Write every 3–5 exchanges, not at the end. Compression is the enemy. `status: duplicate` means it was already there; `layers` with a `failed` entry means say so to $user, never assume the write landed.
+A Stop/PreCompact hook (`brain capture`) files every message $user sends and every URL into today's session file under *Said (hook)* and *Links (hook)*. That is the floor, not the ceiling: decisions, corrections, facts and patterns are still yours to write with their kind. Write every 3–5 exchanges, not at the end. Compression is the enemy. `status: duplicate` means it was already there; `layers` with a `failed` entry means say so to $user, never assume the write landed.
 
 **Citation discipline:** a claim like "we decided X" or "you said Y" must cite the `source` a `brain_recall` returned (file path and date). No source → say "I don't have that on disk" and offer to search. Confabulated recall is worse than admitted amnesia.
 

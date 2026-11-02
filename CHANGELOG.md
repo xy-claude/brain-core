@@ -4,6 +4,9 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+### Added
+- `brain capture`: a Stop / PreCompact hook that files every user message and every URL from the live transcript into today's session file under "Said (hook)" and "Links (hook)", from where the last run stopped, deduplicated, secrets redacted. The template `settings.json` wires it. Hindsight receives the captures through the session queue when one is configured, so the hook never waits on the vector store.
+
 ## [0.4.3] - 2026-11-03
 
 ### Added
