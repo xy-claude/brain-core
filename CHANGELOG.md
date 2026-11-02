@@ -4,8 +4,13 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-11-03
+
 ### Added
 - `session.peers` in `brain.yaml`: globs of other agents' sync files (`last_standalone_session.md`). `brain_session('start')` returns them as `peers`, newest first, first 15 lines each, the agent's own file skipped, and marks a peer idle after 7 days. Rule 04 step 5 reads it.
+
+### Changed
+- Docs and the legacy-graph live test no longer point at a private workspace; the test reads `BRAIN_LEGACY_GRAPH` and `BRAIN_LEGACY_PYTHON`.
 
 ## [0.4.1] - 2026-11-03
 

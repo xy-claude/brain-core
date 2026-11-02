@@ -20,7 +20,7 @@ Not handled by `VaultStore`: `knowledge/` pages (compiled by the LLM through `/d
 
 - **Dated or legacy.** A bullet without a trailing `(YYYY-MM-DD)` is read with the file's `updated` date and flagged by lint. New writes always carry the date.
 - **Idempotent.** The record id is the SHA-256 of the normalised text (whitespace collapsed, date stripped). A write whose id already exists in the target file is a no-op that returns the existing record. Retries after a failed later layer never duplicate.
-- **Append-only, atomic.** Writes go to a temp file then `os.replace`, under a `.lock` sidecar (`fcntl.flock`). Two agents writing the same shared file serialise; iCloud's EDEADLK is retried with backoff (same approach as AI-ORG `resilient_write`).
+- **Append-only, atomic.** Writes go to a temp file then `os.replace`, under a `.lock` sidecar (`fcntl.flock`). Two agents writing the same shared file serialise; iCloud's EDEADLK is retried with backoff.
 - **Contradiction banner.** When a `fact` write names an existing fact's subject with a different value (caller passes `supersedes=<id>`), the old line is kept and the new line is prefixed `**⚠ Fact changed YYYY-MM-DD:**`. Nothing is deleted.
 - **No secrets.** Text matching the gitleaks rules (`hsk_`, bearer tokens, keys) is refused before it touches disk.
 

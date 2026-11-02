@@ -2,7 +2,7 @@
 
 **Status:** approved 2026-11-02; M9–M19 shipped the same week.
 **Goal:** one local MCP that is the whole front door to an agent's memory, dogfooded on the reference agent (the author's own assistant) until it runs every session, then packaged the way Hindsight was self-hosted: local, no bill, no login.
-**Design constraints:** `AI-ORG` vault page `knowledge/tool-design-for-agents.md` (Anthropic, 2025-09). Few consolidated workflow tools, namespaced, concise by default, capped responses with steering text, names not UUIDs, descriptions written for a newcomer, an eval before v1.
+**Design constraints:** Anthropic, "Writing effective tools for AI agents" (2025-09). Few consolidated workflow tools, namespaced, concise by default, capped responses with steering text, names not UUIDs, descriptions written for a newcomer, an eval before v1.
 
 ## 1. What v0.1 has and what is wrong with it
 
@@ -37,11 +37,11 @@ stores:
     url: http://127.0.0.1:8888               # self-hosted; MCP path /mcp/<bank>/
     bank: atlas-brain
   graph:
-    script: ~/Projects/AI-ORG/scripts/python/entity_graph.py   # Kuzu via its CLI
-    python: ~/Projects/AI-ORG/venv/bin/python3
+    script: ~/Agents/scripts/entity_graph.py   # legacy Kuzu graph via its CLI
+    python: ~/Agents/venv/bin/python3
 ```
 
-Hindsight is talked to over its MCP streamable-HTTP endpoint (the `Mcp` client in `AI-ORG/scripts/python/hindsight_export.py` already does initialize → tools/call; reuse it). No vectorize.io, no token. Customers install `hindsight-api` with their own Anthropic key for the LLM provider; the `claude-code` provider is personal-use only under Anthropic's terms and is not part of the install story.
+Hindsight is talked to over its MCP streamable-HTTP endpoint (a small client that does initialize → tools/call). No vectorize.io, no token. Customers install `hindsight-api` with their own Anthropic key for the LLM provider; the `claude-code` provider is personal-use only under Anthropic's terms and is not part of the install story.
 
 ## 4. Eval before v1
 

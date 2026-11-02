@@ -17,8 +17,8 @@ from brain_core.stores.graph import GraphStore
 from brain_core.stores.hindsight import HindsightStore
 
 HS_URL = os.environ.get("HINDSIGHT_URL", "http://127.0.0.1:8888")
-GRAPH = Path("~/Projects/AI-ORG/scripts/python/entity_graph.py").expanduser()
-PY = Path("~/Projects/AI-ORG/venv/bin/python3").expanduser()
+GRAPH = Path(os.environ.get("BRAIN_LEGACY_GRAPH", "~/Agents/scripts/entity_graph.py")).expanduser()
+PY = Path(os.environ.get("BRAIN_LEGACY_PYTHON", "~/Agents/venv/bin/python3")).expanduser()
 
 
 @pytest.fixture
@@ -44,7 +44,8 @@ def test_hindsight_round_trip(hindsight: HindsightStore) -> None:
 
 
 @pytest.mark.skipif(
-    not (GRAPH.exists() and PY.exists()), reason="AI-ORG entity graph not on this machine"
+    not (GRAPH.exists() and PY.exists()),
+    reason="legacy entity graph not on this machine",
 )
 def test_graph_import_from_legacy_kuzu_dump(tmp_path: Path) -> None:
     import subprocess

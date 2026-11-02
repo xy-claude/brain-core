@@ -30,7 +30,7 @@ class HindsightConfig(BaseModel):
 
 
 class GraphConfig(BaseModel):
-    """Legacy Kuzu graph (AI-ORG ``entity_graph.py``), used only by ``brain graph import``."""
+    """Legacy Kuzu graph (external ``entity_graph.py`` CLI); only ``brain graph import`` uses it."""
 
     model_config = ConfigDict(extra="forbid")
 
