@@ -47,14 +47,10 @@ name = "brain-core-mcp"
 version = "0.2.2"
 source = { editable = "." }
 dependencies = [
+    { name = "mcp" },
     { name = "pydantic" },
     { name = "pyyaml" },
     { name = "typer" },
-]
-
-[package.optional-dependencies]
-mcp = [
-    { name = "mcp" },
 ]
 
 [package.dev-dependencies]
@@ -70,12 +66,11 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.0" },
+    { name = "mcp", specifier = ">=1.0" },
     { name = "pydantic", specifier = ">=2.9" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "typer", specifier = ">=0.15" },
 ]
-provides-extras = ["mcp"]
 
 [package.metadata.requires-dev]
 dev = [

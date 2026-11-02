@@ -57,6 +57,8 @@ def init_agent(
         rel = src.relative_to(PACK)
         # stored as _gitignore so the pack's own ignore rules do not apply inside this repo
         dest = target / (rel.with_name(".gitignore") if rel.name == "_gitignore" else rel)
+        if rel.parts[0] == "vault" and dest.exists():
+            continue  # --force refreshes rules and skills, never the user's memory
         dest.parent.mkdir(parents=True, exist_ok=True)
         if src.suffix in _TEXT:
             dest.write_text(

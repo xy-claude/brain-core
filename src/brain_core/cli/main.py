@@ -266,23 +266,13 @@ def serve_cmd(
         typer.Argument(help="Path to agent directory (contains brain.yaml)."),
     ] = Path(),
 ) -> None:
-    """Run the MCP server for the agent at ``path``.
-
-    Requires the ``mcp`` extra: ``pip install brain-core[mcp]``.
-    """
+    """Run the MCP server for the agent at ``path``."""
     config_path = path if path.is_file() else path / "brain.yaml"  # a dir, or a yaml file
     if not config_path.exists():
         typer.echo(f"ERROR: no brain.yaml at {config_path}", err=True)
         raise typer.Exit(code=1)
 
-    try:
-        from brain_core.mcp.server import run_server
-    except ImportError as e:
-        typer.echo(
-            "ERROR: MCP extras not installed. Run: pip install 'brain-core[mcp]'",
-            err=True,
-        )
-        raise typer.Exit(code=1) from e
+    from brain_core.mcp.server import run_server
 
     run_server(config_path)
 

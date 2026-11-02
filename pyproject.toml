@@ -20,14 +20,10 @@ classifiers = [
     "Topic :: Software Development :: Libraries",
 ]
 dependencies = [
+    "mcp>=1.0",
     "pydantic>=2.9",
     "pyyaml>=6.0",
     "typer>=0.15",
-]
-
-[project.optional-dependencies]
-mcp = [
-    "mcp>=1.0",
 ]
 
 [project.scripts]

@@ -52,11 +52,14 @@ def test_init_refuses_to_overwrite_without_force(tmp_path: Path) -> None:
     assert "already exist" in second.stdout or "already exist" in (second.stderr or "")
 
 
-def test_init_force_overwrites(tmp_path: Path) -> None:
+def test_init_force_overwrites_rules_but_keeps_the_vault(tmp_path: Path) -> None:
     runner.invoke(app, ["init", "one", "--path", str(tmp_path)])
+    facts = tmp_path / "vault" / "facts.md"
+    facts.write_text(facts.read_text() + "\n- the one fact that must survive (2026-11-02)\n")
     result = runner.invoke(app, ["init", "two", "--path", str(tmp_path), "--force"])
     assert result.exit_code == 0
     assert "name: two" in (tmp_path / "brain.yaml").read_text()
+    assert "the one fact that must survive" in facts.read_text()
 
 
 def test_init_rejects_empty_name(tmp_path: Path) -> None:

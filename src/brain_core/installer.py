@@ -33,12 +33,7 @@ def hindsight_plist(
     port: int = 8888,
     provider: str = "anthropic",
     model: str = "claude-sonnet-5-5",
-    api_key_env: str | None = None,
 ) -> dict[str, Any]:
-    if api_key_env is None and provider != "claude-code":
-        api_key_env = (
-            "ANTHROPIC_API_KEY" if provider == "anthropic" else f"{provider.upper()}_API_KEY"
-        )
     env = {
         "PATH": f"/opt/homebrew/bin:{home}/.local/bin:/usr/local/bin:/usr/bin:/bin",
         "HOME": str(home),
@@ -52,13 +47,16 @@ def hindsight_plist(
         "HINDSIGHT_API_EMBEDDINGS_LOCAL_FORCE_CPU": "true",
         "HINDSIGHT_API_DATABASE_URL": "pg0://hindsight",
     }
-    if api_key_env:
-        # the key itself never lands in the plist: the service reads it from the keychain shim
-        env["HINDSIGHT_API_LLM_API_KEY"] = f"${{{api_key_env}}}"
+    # The key never lands in the plist: launchd does not expand ${VAR}, so the service sources
+    # the 0600 env file written by write_env_file() and execs the real binary.
     log = home / "Library" / "Logs" / "hindsight" / "api.log"
     return {
         "Label": LABEL,
-        "ProgramArguments": [api_bin],
+        "ProgramArguments": [
+            "/bin/sh",
+            "-c",
+            f'set -a; . "{env_file(home)}"; set +a; exec "{api_bin}"',
+        ],
         "EnvironmentVariables": env,
         "RunAtLoad": True,
         "KeepAlive": True,
@@ -92,9 +90,32 @@ def hindsight_unit(api_bin: str, env: dict[str, str]) -> str:
     lines = "\n".join(f'Environment="{k}={v}"' for k, v in env.items())
     return (
         "[Unit]\nDescription=Hindsight memory server (brain-core)\nAfter=network.target\n\n"
-        f"[Service]\nExecStart={api_bin}\nRestart=always\nRestartSec=3\n{lines}\n\n"
+        f"[Service]\nExecStart={api_bin}\nRestart=always\nRestartSec=3\n{lines}\n"
+        "EnvironmentFile=-%h/.config/hindsight/env\n\n"
         "[Install]\nWantedBy=default.target\n"
     )
+
+
+def env_file(home: Path) -> Path:
+    return home / ".config" / "hindsight" / "env"
+
+
+def write_env_file(home: Path, api_key_env: str | None) -> str:
+    """Write the 0600 env file the service sources. Returns a one-line status for the report."""
+    path = env_file(home)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    key = os.environ.get(api_key_env, "") if api_key_env else ""
+    if key:
+        body, status = f"HINDSIGHT_API_LLM_API_KEY={key}\n", f"{api_key_env} written"
+    elif api_key_env:
+        body = f"# export {api_key_env}=... then re-run: brain hindsight install\n"
+        status = f"{api_key_env} is not set in this shell; Hindsight cannot reason until it is"
+    else:
+        body, status = "# no key needed for this provider\n", "not needed"
+    if not (path.exists() and path.read_text(encoding="utf-8") == body):
+        path.write_text(body, encoding="utf-8")
+    path.chmod(0o600)
+    return status
 
 
 def install_hindsight(
@@ -115,6 +136,11 @@ def install_hindsight(
     launch_dir.mkdir(parents=True, exist_ok=True)
     (home / "Library" / "Logs" / "hindsight").mkdir(parents=True, exist_ok=True)
     out: dict[str, str] = {}
+    if api_key_env is None and provider != "claude-code":
+        api_key_env = (
+            "ANTHROPIC_API_KEY" if provider == "anthropic" else f"{provider.upper()}_API_KEY"
+        )
+    out["api_key"] = write_env_file(home, api_key_env)
 
     api_bin = shutil.which("hindsight-api") or str(home / ".local" / "bin" / "hindsight-api")
     if run and not Path(api_bin).exists():
@@ -140,9 +166,7 @@ def install_hindsight(
     if sys.platform != "darwin":
         unit_dir = home / ".config" / "systemd" / "user"
         unit_dir.mkdir(parents=True, exist_ok=True)
-        body = hindsight_plist(
-            home, api_bin, port=port, provider=provider, model=model, api_key_env=api_key_env
-        )
+        body = hindsight_plist(home, api_bin, port=port, provider=provider, model=model)
         unit = unit_dir / "hindsight.service"
         unit.write_text(hindsight_unit(api_bin, body["EnvironmentVariables"]), encoding="utf-8")
         out["unit"] = str(unit)
@@ -162,11 +186,7 @@ def install_hindsight(
 
     plist = launch_dir / f"{LABEL}.plist"
     plist.write_bytes(
-        plistlib.dumps(
-            hindsight_plist(
-                home, api_bin, port=port, provider=provider, model=model, api_key_env=api_key_env
-            )
-        )
+        plistlib.dumps(hindsight_plist(home, api_bin, port=port, provider=provider, model=model))
     )
     out["plist"] = str(plist)
     if dashboard:

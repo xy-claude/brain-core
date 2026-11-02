@@ -119,8 +119,8 @@ What it does, in order. Re-running skips what is already there, so after a failu
 Two things the installer cannot do for you:
 
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-...     # add it to ~/.zshrc too; Hindsight reads it from the service environment
-brain hindsight install                 # safe to re-run: restarts the service with the key
+export ANTHROPIC_API_KEY=sk-ant-...     # add it to ~/.zshrc too
+brain hindsight install                 # copies the key into ~/.config/hindsight/env (mode 600) and restarts the service
 claude                                  # sign in to Claude Code once
 ```
 
@@ -164,7 +164,7 @@ It prints the agent name, the config path, row counts per table, and `Health che
 | `brain: command not found` | the `uv tool` bin folder is not on your PATH | `uv tool update-shell`, then open a new terminal |
 | `ERROR: no brain.yaml at ...` | wrong path | pass the agent folder, or the `brain.yaml` inside it |
 | `hindsight unreachable at http://127.0.0.1:8888` | the service is still starting, or not installed | wait a minute; still down, run `brain hindsight install` |
-| installer note `ANTHROPIC_API_KEY is not set in this shell` | the key was exported after the service was installed | export it, then `brain hindsight install` again |
+| installer note `ANTHROPIC_API_KEY is not set in this shell` | the key was not in the shell when the service was installed | export it, then `brain hindsight install` again; it rewrites `~/.config/hindsight/env` |
 | Claude Code shows no `brain` tools | it was started outside the agent folder | `cd ~/Agents/Atlas && claude`, then `/mcp` to confirm |
 
 ## First session

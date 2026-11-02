@@ -73,7 +73,7 @@ fi
 
 step "6/8 Hindsight (required store)"
 HS_ARGS=(hindsight install --provider "$PROVIDER"); [ -n "$KEY_ENV" ] && HS_ARGS+=(--api-key-env "$KEY_ENV"); [ "$DASHBOARD" = 1 ] && HS_ARGS+=(--dashboard)
-if [ "$PROVIDER" != "claude-code" ]; then KEY_VAR="${KEY_ENV:-$(echo "$PROVIDER" | tr a-z A-Z)_API_KEY}"; [ -n "${!KEY_VAR:-}" ] || echo "note: $KEY_VAR is not set in this shell; Hindsight needs it to reason. Export it, then restart the service (brain hindsight install is safe to re-run)."; fi
+if [ "$PROVIDER" != "claude-code" ]; then KEY_VAR="${KEY_ENV:-$(echo "$PROVIDER" | tr a-z A-Z)_API_KEY}"; [ -n "${!KEY_VAR:-}" ] || echo "note: $KEY_VAR is not set in this shell; Hindsight needs it to reason. Export it, then re-run: brain hindsight install (it writes the key to ~/.config/hindsight/env, mode 600, and restarts the service)."; fi
 brain "${HS_ARGS[@]}"
 
 step "7/8 Cron (brain daily 06:07, brain weekly Sun 07:13)"

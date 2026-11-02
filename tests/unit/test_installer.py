@@ -37,22 +37,35 @@ def test_dry_run_writes_the_service_plists_only(
         env["HINDSIGHT_API_EMBEDDINGS_PROVIDER"] == "local"
         and env["HINDSIGHT_API_DATABASE_URL"] == "pg0://hindsight"
     )
-    assert env["HINDSIGHT_API_LLM_API_KEY"] == "${ANTHROPIC_API_KEY}", "default reads the env var"
-    personal = installer.hindsight_plist(home, "/x/hindsight-api", provider="claude-code")
-    assert "HINDSIGHT_API_LLM_API_KEY" not in personal["EnvironmentVariables"]
-    assert api["ProgramArguments"] == [str(home / ".local" / "bin" / "hindsight-api")]
+    assert "HINDSIGHT_API_LLM_API_KEY" not in env, "the key never lands in the plist"
+    api_bin = str(home / ".local" / "bin" / "hindsight-api")
+    assert api["ProgramArguments"] == [
+        "/bin/sh",
+        "-c",
+        f'set -a; . "{home}/.config/hindsight/env"; set +a; exec "{api_bin}"',
+    ]
+    assert out["api_key"].startswith("ANTHROPIC_API_KEY is not set")
+    assert (home / ".config" / "hindsight" / "env").read_text().startswith("# export")
     cp = plistlib.loads(Path(out["dashboard_plist"]).read_bytes())
     assert cp["ProgramArguments"][1:] == ["--port", "9999", "--api-url", "http://127.0.0.1:8888"]
     assert (home / "Library" / "Logs" / "hindsight").is_dir()
 
 
-def test_customer_provider_never_embeds_the_key(tmp_path: Path) -> None:
-    p = installer.hindsight_plist(
-        tmp_path, "/x/hindsight-api", provider="anthropic", api_key_env="ANTHROPIC_API_KEY"
+def test_key_goes_to_a_private_env_file_not_the_plist(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-123")
+    assert installer.write_env_file(tmp_path, "ANTHROPIC_API_KEY") == "ANTHROPIC_API_KEY written"
+    env_file = tmp_path / ".config" / "hindsight" / "env"
+    assert env_file.read_text() == "HINDSIGHT_API_LLM_API_KEY=sk-ant-test-123\n"
+    assert oct(env_file.stat().st_mode & 0o777) == "0o600"
+    plist = installer.hindsight_plist(tmp_path, "/x/hindsight-api", provider="anthropic")
+    assert (
+        "sk-ant" not in str(plist)
+        and plist["EnvironmentVariables"]["HINDSIGHT_API_LLM_PROVIDER"] == "anthropic"
     )
-    env = p["EnvironmentVariables"]
-    assert env["HINDSIGHT_API_LLM_PROVIDER"] == "anthropic"
-    assert env["HINDSIGHT_API_LLM_API_KEY"] == "${ANTHROPIC_API_KEY}"
+    assert installer.write_env_file(tmp_path, None) == "not needed"
+    assert env_file.read_text().startswith("# no key")
 
 
 def test_install_sh_parses_and_refuses_without_agent() -> None:
@@ -69,7 +82,8 @@ def test_systemd_unit_carries_the_environment(tmp_path: Path) -> None:
     unit = installer.hindsight_unit("/x/hindsight-api", plist["EnvironmentVariables"])
     assert "ExecStart=/x/hindsight-api" in unit and "Restart=always" in unit
     assert 'Environment="HINDSIGHT_API_DATABASE_URL=pg0://hindsight"' in unit
-    assert 'Environment="HINDSIGHT_API_LLM_API_KEY=${ANTHROPIC_API_KEY}"' in unit
+    assert "HINDSIGHT_API_LLM_API_KEY" not in unit
+    assert "EnvironmentFile=-%h/.config/hindsight/env" in unit
     assert unit.endswith("WantedBy=default.target\n")
 
 
