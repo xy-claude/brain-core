@@ -4,6 +4,8 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+## [0.2.5] - 2026-11-02
+
 ### Fixed
 - `mcp` is pinned below 2. A clean `pip install brain-core-mcp` resolved `mcp` 2.x, whose FastMCP import no longer matches the 1.x API, so `brain serve` failed on every fresh install of 0.2.2 through 0.2.4 while CI stayed green on the lock file. CI now also installs the built wheel into a clean environment and introspects the stdio server.
 
