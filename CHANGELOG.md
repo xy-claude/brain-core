@@ -4,6 +4,9 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+### Added
+- `brain adopt <agent-dir> --vault PATH [--bank NAME] [--user NAME] [--peers GLOB] …`: puts an existing Claude Code agent folder on brain-core without touching its CLAUDE.md, skills or vault. Writes `brain.yaml`, adds the `brain` MCP server to `.mcp.json`, merges the four hooks into `settings.local.json` (or `settings.json`), renders the memory rule from the template, and backfills the SQLite index. Idempotent: every step reports written or kept. Without `--bank` the agent runs lite.
+
 ## [0.4.6] - 2026-11-03
 
 ### Added

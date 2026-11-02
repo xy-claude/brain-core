@@ -146,6 +146,14 @@ The installer prints a note if the key was not in your shell when it ran. If you
 | `--dashboard` | the Hindsight web UI on http://localhost:9999 |
 | `--ref v0.4.0` | pin a git tag instead of the PyPI release |
 
+### Already have an agent?
+
+```bash
+brain adopt ~/Agents/Atlas --vault ~/Agents/Atlas/vault --bank atlas-brain --user Alex
+```
+
+Adds `brain.yaml`, the `brain` MCP server, the four hooks and the memory rule to an existing Claude Code folder, then indexes its facts. CLAUDE.md, skills and the vault are left alone; omit `--bank` to run lite.
+
 ### Linux
 
 The same one line. It needs `git` and `curl` already present. It then installs `uv` from astral.sh, installs Claude Code with npm when node is present, runs Hindsight as a `systemd --user` service, and writes the two jobs into your user crontab as tagged lines it can find and replace on re-run.

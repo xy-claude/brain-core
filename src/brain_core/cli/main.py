@@ -49,6 +49,79 @@ def init_cmd(
     init_agent(name=name, path=path, force=force, user=user, profile=profile, lite=lite)
 
 
+@app.command("adopt")
+def adopt_cmd(
+    path: Annotated[Path, typer.Argument(help="Existing agent folder (has a CLAUDE.md).")],
+    vault: Annotated[Path, typer.Option("--vault", help="The agent's markdown vault folder.")],
+    name: Annotated[
+        str | None, typer.Option("--name", help="Agent name; default: folder name.")
+    ] = None,
+    user: Annotated[
+        str, typer.Option("--user", help="How the agent addresses its user.")
+    ] = "the user",
+    bank: Annotated[
+        str | None, typer.Option("--bank", help="Hindsight bank; omit for lite.")
+    ] = None,
+    hindsight_url: Annotated[str, typer.Option("--hindsight-url")] = "http://127.0.0.1:8888",
+    mental_model: Annotated[
+        list[str] | None, typer.Option("--mental-model", help="Repeatable.")
+    ] = None,
+    peers: Annotated[
+        str | None, typer.Option("--peers", help="Glob of other agents' sync files.")
+    ] = None,
+    queue: Annotated[str | None, typer.Option("--queue", help="Hindsight queue file.")] = None,
+    marker: Annotated[str | None, typer.Option("--marker", help="Clean-close marker file.")] = None,
+    transcripts: Annotated[str, typer.Option("--transcripts")] = "~/.claude/projects",
+    rules: Annotated[
+        str, typer.Option("--rules", help="Template rule files to render, comma-separated.")
+    ] = "04-memory.md",
+    force: Annotated[
+        bool, typer.Option("--force", help="Rewrite brain.yaml, the MCP entry and the rules.")
+    ] = False,
+) -> None:
+    """Put an existing agent folder on brain-core: brain.yaml, the `brain` MCP server, the four
+    hooks, the memory rule, then `brain index`. CLAUDE.md, skills and the vault are not touched."""
+    from brain_core.cli.adopt import adopt_agent
+    from brain_core.stores.vault import VaultStore as _VS
+
+    out = adopt_agent(
+        path,
+        name=name or path.resolve().name,
+        user=user,
+        vault=vault.expanduser().resolve(),
+        bank=bank,
+        hindsight_url=hindsight_url,
+        mental_models=mental_model,
+        peers=peers,
+        queue=queue,
+        marker=marker,
+        transcripts=transcripts,
+        rules=[r.strip() for r in rules.split(",") if r.strip()],
+        force=force,
+    )
+    for k, v in out.items():
+        typer.echo(f"  {k:22} {v}")
+    with _open(path) as agent:
+        v = next((s for s in agent.stores if isinstance(s, _VS)), None)
+        sq = agent.stores[0]
+        n = 0
+        if v is not None:
+            for kind in ("fact", "pattern"):
+                for r in v.read(kind, limit=1_000_000):
+                    res = sq.write(kind, r.text, domain=r.domain, path=r.path, line=str(r.line))
+                    if res.status == "written":
+                        agent.db.execute(
+                            "UPDATE facts SET created_at = ?, updated_at = ? WHERE id = ?",
+                            (f"{r.date} 00:00:00", f"{r.date} 00:00:00", res.detail.split("/")[1]),
+                        )
+                        n += 1
+        st = agent.brain_status()
+    up = sum(1 for s in st["stores"].values() if s["ok"])
+    typer.echo(f"  index                  {n} new rows")
+    tokens = st["context"]["tokens"]
+    typer.echo(f"  stores                 {up}/{len(st['stores'])} OK · context {tokens} tokens")
+
+
 @app.command("daily")
 def daily_cmd(
     path: Annotated[Path, typer.Argument(help="Agent directory or brain.yaml.")] = Path(),
