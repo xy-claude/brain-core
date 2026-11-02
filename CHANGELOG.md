@@ -4,6 +4,9 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+### Added
+- The twelve traits (M21): `traits.yaml` ships in the agent pack; `brain_status()["traits"]` scores each from evidence on disk with signals marked defensible, cost or pending and counts instead of percentages below n=20; `brain daily` writes a Traits section into the brief and one line into `health_log.md`; `brain doctor` prints how many traits have grown. Taxonomy and signals in `docs/TRAITS.md`.
+
 ## [0.2.3] - 2026-11-02
 
 ### Fixed

@@ -242,6 +242,21 @@ Recall takes about 1.7 s per query; Hindsight is the floor. A full start block i
 python tests/eval/run_recall.py --config ~/Agents/Atlas/brain.yaml   # your own vault
 ```
 
+## Twelve traits, innate and grown
+
+A brain-core agent is born with twelve traits and grows them with experience. Innate is what `brain init` ships and what survives a cold start with the vault wiped; grown is what accumulates in the vault. `brain_status()` scores each from evidence on disk, and `brain daily` logs one line a day so the curve shows over weeks.
+
+| Memory | Control | Social |
+|---|---|---|
+| Working memory | Learning | User model |
+| Episodic memory | Reasoning and planning | Authority |
+| Semantic memory | Decision | |
+| Procedural memory | Metacognition | |
+| | Execution | |
+| | Goal management | |
+
+A trait never gets one number. It gets signals, each with a sample size and a verdict: defensible when the answer key comes from a file the agent did not write that session, cost when it is a size or an age, pending when the evidence does not exist yet. Artefact counts and self-written scores are not signals. The list and the research behind it: [`docs/TRAITS.md`](docs/TRAITS.md).
+
 ## How memory is organised
 
 | Kind | Lives in | Written as |

@@ -227,6 +227,10 @@ def doctor_cmd(
         f"last close {ses['last_close'] or '-'}{flag}"
     )
     typer.echo(f"  pending    {st.get('pending_decisions', 0)} decision(s)")
+    grown = [t["name"] for t in st.get("traits", {}).values() if t["grown"]]
+    typer.echo(
+        f"  traits     {len(grown)}/{len(st.get('traits', {}))} grown: {', '.join(grown) or '-'}"
+    )
     typer.echo(f"Brain: {'OK' if st['ok'] else 'ATTENTION'}")
 
 

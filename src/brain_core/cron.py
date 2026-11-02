@@ -20,6 +20,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from brain_core import traits
 from brain_core.session import _sections
 from brain_core.status import _frontmatter
 from brain_core.stores.hindsight import HindsightStore
@@ -52,6 +53,7 @@ def daily(agent: Agent, today: date | None = None) -> dict[str, Any]:
         _lessons(vault.root / cfg.session.critique),
         _executive(vault.root / cfg.session.executive),
         _health(status),
+        _traits(status.get("traits", {})),
         _stale_knowledge(vault.root / "knowledge", today),
         _warmup(vault.root / "sessions"),
     ]
@@ -61,7 +63,7 @@ def daily(agent: Agent, today: date | None = None) -> dict[str, Any]:
     line = (
         f"- {today.isoformat()} ok={status['ok']} stores={up}/{len(status['stores'])} "
         f"lint={status['knowledge']['issue_count']} context={status['context']['tokens']} "
-        f"unclosed={status['session']['unclosed']}"
+        f"unclosed={status['session']['unclosed']} {traits.one_line(status.get('traits', {}))}"
     )
     log = vault.root / "health_log.md"
     if not log.exists():
@@ -160,6 +162,23 @@ def _health(st: dict[str, Any]) -> str:
         + (" — **UNCLOSED, recover first**" if st["session"]["unclosed"] else "")
         + f"\n- Pending decisions: {st.get('pending_decisions', 0)}\n"
     )
+
+
+def _traits(tr: dict[str, Any]) -> str:
+    """One line per trait: the first defensible signal, or the first cost signal."""
+    if not tr:
+        return ""
+    lines = []
+    for t in tr.values():
+        sig = t["signals"]
+        s = next((s for s in sig.values() if s["verdict"] == "defensible"), None) or next(
+            iter(sig.values())
+        )
+        shown = f"{s['value']}/{s['n']}" if s.get("n") else f"{s['value']}"
+        if "pct" in s:
+            shown += f" ({s['pct']}%)"
+        lines.append(f"- {t['name']}: {shown} — {s['note']}")
+    return "## Traits — evidence on disk\n\n" + "\n".join(lines) + "\n"
 
 
 def _stale_knowledge(kdir: Path, today: date) -> str:

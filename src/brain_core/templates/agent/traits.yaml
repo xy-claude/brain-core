@@ -1,0 +1,77 @@
+# The twelve innate traits of this brain. Innate = ships with `brain init` and survives a
+# cold start with the vault wiped. Grown = what accumulates in the vault with experience.
+# `brain_status()["traits"]` scores each from evidence on disk; `brain daily` logs the line.
+# Taxonomy: CoALA (memory stores), Miyake & Friedman / Diamond (separable control),
+# Nelson & Narens / Fleming & Lau (metacognition measurement). See docs/TRAITS.md.
+
+- id: working_memory
+  name: Working memory
+  kind: memory
+  innate: brain_session('start') and the memory rule that fixes what loads; rules always in context
+  grown: the daily brief, the last sessions' warmup, the facts the start block pulls
+
+- id: episodic_memory
+  name: Episodic memory
+  kind: memory
+  innate: brain_session('end') writes the dated archive; the weekly archive job; the HSAM section schema
+  grown: vault/sessions/YYYY-MM-DD.md and the monthly summaries
+
+- id: semantic_memory
+  name: Semantic memory
+  kind: memory
+  innate: the vault schema (facts, decisions, knowledge), brain_remember, brain_recall, the SQLite and vector indexes
+  grown: facts, knowledge pages, decisions, vector-store entries
+
+- id: procedural_memory
+  name: Procedural memory
+  kind: memory
+  innate: the five rule files (identity, doctrine, authority, memory, system) and the tool schemas
+  grown: vault/procedures, skills, rules promoted from corrections
+
+- id: learning
+  name: Learning
+  kind: control
+  innate: dedup and contradiction rules, the correction format with themes, brain_distill
+  grown: corrections and their themes, Fact-changed banners, promoted rules
+
+- id: reasoning_planning
+  name: Reasoning and planning
+  kind: control
+  innate: the reasoning checklist in the identity rule; model weights
+  grown: mission decompositions on disk; little else persists
+
+- id: decision
+  name: Decision
+  kind: control
+  innate: the classification matrix and decision checklist in the doctrine rule
+  grown: decision log entries with classification and confidence
+
+- id: metacognition
+  name: Metacognition
+  kind: control
+  innate: the confidence field on decisions, the citation rule, the session-critique template
+  grown: decisions paired with outcomes, session critiques
+
+- id: execution
+  name: Execution
+  kind: control
+  innate: the tool schemas, the brain_remember journal, the handoff format
+  grown: per-layer write history, handoff entries and reports, cron output
+
+- id: goal_management
+  name: Goal management
+  kind: control
+  innate: the mission queue schema and the priority order in the doctrine rule
+  grown: the mission queue, executive state, proposals and their verdicts
+
+- id: user_model
+  name: User model
+  kind: social
+  innate: the user-profile template and the output-style rule
+  grown: the user profile, preferences, format and tone corrections
+
+- id: authority
+  name: Authority
+  kind: social
+  innate: the authority rule file (the boundary and the escalation format)
+  grown: the pending-decisions queue, logged approvals, the trust level

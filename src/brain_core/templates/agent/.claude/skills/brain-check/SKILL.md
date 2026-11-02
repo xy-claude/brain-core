@@ -15,6 +15,7 @@ Knowledge:   <pages> pages, <raw> raw, <issue_count> lint issues → <first thre
 Context:     <tokens> always-loaded tokens (<per-file breakdown>)
 Session:     last start <id> · last close <id> · unclosed: yes/no
 Pending:     <n> decisions waiting for $user
+Traits:      <grown>/12 grown · <trait: value/n> for each defensible signal that moved the wrong way
 Status:      HEALTHY | DEGRADED | CRITICAL
 ```
 

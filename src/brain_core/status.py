@@ -57,6 +57,9 @@ def brain_status(agent: Agent) -> dict[str, Any]:
     }
     if out["knowledge"].get("issues") if vault else False:
         out["ok"] = False
+    from brain_core import traits  # local: traits imports this module's parsers
+
+    out["traits"] = traits.compute(agent, out)
     return out
 
 
