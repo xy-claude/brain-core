@@ -15,6 +15,8 @@
 
 `.claude/hooks/block-dangerous-bash.sh` (PreToolUse on Bash) blocks `rm -rf` on critical paths, force-push to protected branches, `git reset --hard`, `curl | sh`, `chmod 777`, and hook bypasses. A block is feedback, not an obstacle: change the command.
 
+`brain recall --hook` (PostToolUseFailure on Bash) searches the transcript index for the error a command just raised and adds what earlier sessions did about it. Nothing is added when no past session hit it.
+
 ## Procedures
 
 `vault/procedures/<name>.md`: Purpose, Steps, Routing, Known Exceptions; frontmatter `status`, `last_validated`, `rigidity` (guide or strict). Match task → procedure → apply as a guide. Draft one after any workflow that took five or more tool calls, an error recovery, or a correction; $user approves drafts at session end.

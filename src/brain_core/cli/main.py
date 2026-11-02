@@ -234,6 +234,63 @@ def doctor_cmd(
     typer.echo(f"Brain: {'OK' if st['ok'] else 'ATTENTION'}")
 
 
+@app.command("recall")
+def recall_cmd(
+    query: Annotated[str, typer.Argument(help="Free-text search; keywords beat sentences.")] = "",
+    scope: Annotated[str, typer.Option("--scope", help="all, a kind, or a store.")] = "all",
+    limit: Annotated[int, typer.Option("--limit", help="Max results after dedup.")] = 10,
+    path: Annotated[
+        Path, typer.Option("--path", "-p", help="Agent directory or brain.yaml.")
+    ] = Path(),
+    hook: Annotated[
+        bool,
+        typer.Option(
+            "--hook",
+            help="PostToolUseFailure mode: read the hook JSON from stdin, search the transcripts "
+            "for the error, print additionalContext JSON when past sessions hit it.",
+        ),
+    ] = False,
+) -> None:
+    """brain_recall from the shell: one line per hit, `[kind] date source: text`."""
+    import json
+    import sys
+
+    if hook:
+        payload = json.loads(sys.stdin.read() or "{}")
+        # "Exit code 1\nModuleNotFoundError: ..." -> the first line that says what went wrong
+        lines = [ln.strip() for ln in str(payload.get("error", "")).splitlines()]
+        query = next((ln for ln in lines if ln and not ln.startswith("Exit code")), "")[:200]
+        scope, limit = "transcripts", 3  # the store, so no other store is asked
+    if not query.strip():
+        if hook:
+            return
+        typer.echo("ERROR: query is empty", err=True)
+        raise typer.Exit(code=1)
+    with _open(path) as agent:
+        out = agent.brain_recall(query, scope=scope, fmt="detailed", limit=limit)
+    hits = out["results"]
+    if hook:
+        # the failure that just happened is in this session's transcript too; skip it
+        hits = [h for h in hits if h["extra"].get("session") != payload.get("session_id")]
+        if hits:
+            body = "\n".join(f"{h['date']} {h['text'][:300]}" for h in hits)
+            typer.echo(
+                json.dumps(
+                    {
+                        "hookSpecificOutput": {
+                            "hookEventName": "PostToolUseFailure",
+                            "additionalContext": f"Past sessions hit this error:\n{body}",
+                        }
+                    }
+                )
+            )
+        return
+    for h in hits:
+        typer.echo(f"[{h['kind']}] {h['date']} {h['source']}: {h['text']}")
+    if not hits:
+        typer.echo(out.get("note", "no hits"))
+
+
 @app.command("serve")
 def serve_cmd(
     path: Annotated[

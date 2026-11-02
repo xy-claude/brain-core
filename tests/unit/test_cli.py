@@ -203,3 +203,48 @@ def test_hindsight_command_reports_and_fails_on_unhealthy(monkeypatch: pytest.Mo
     )
     out = runner.invoke(app, ["hindsight", "install", "--dry-run"])
     assert out.exit_code == 1 and "api_key: ANTHROPIC_API_KEY written" in out.stdout
+
+
+# ── recall / failure hook ────────────────────────────────────────────────────
+
+
+def test_recall_prints_hits_and_the_failure_hook_adds_context(tmp_path: Path) -> None:
+    import json
+
+    from brain_core.stores.transcripts import project_dir
+
+    out = tmp_path / "agent"
+    assert runner.invoke(app, ["init", "Atlas", "--path", str(out)]).exit_code == 0
+    yaml = out / "brain.yaml"
+    yaml.write_text(
+        yaml.read_text().replace("transcripts: ~/.claude/projects", f"transcripts: {tmp_path}/p")
+    )
+    folder = project_dir(tmp_path / "p", out)
+    folder.mkdir(parents=True)
+    line = {
+        "type": "user",
+        "uuid": "u1",
+        "sessionId": "old-session",
+        "timestamp": "2026-10-03T10:00:00Z",
+        "message": {"content": "ModuleNotFoundError: No module named mcp, fixed by uv sync"},
+    }
+    (folder / "old-session.jsonl").write_text(json.dumps(line) + "\n")
+
+    r = runner.invoke(
+        app, ["recall", "ModuleNotFoundError mcp", "--scope", "transcripts", "--path", str(out)]
+    )
+    assert r.exit_code == 0 and r.stdout.startswith("[transcript] 2026-10-03 transcript://old-")
+    assert runner.invoke(app, ["recall", "", "--path", str(out)]).exit_code == 1
+
+    payload = {"session_id": "new-session", "error": "Exit code 1\nModuleNotFoundError: mcp"}
+    r = runner.invoke(app, ["recall", "--hook", "--path", str(out)], input=json.dumps(payload))
+    assert r.exit_code == 0, r.stdout
+    ctx = json.loads(r.stdout)["hookSpecificOutput"]
+    assert ctx["hookEventName"] == "PostToolUseFailure"
+    assert "fixed by uv sync" in ctx["additionalContext"]
+    # the error that just happened is not its own precedent; no history means no output
+    payload["session_id"] = "old-session"
+    r = runner.invoke(app, ["recall", "--hook", "--path", str(out)], input=json.dumps(payload))
+    assert r.exit_code == 0 and r.stdout == ""
+    r = runner.invoke(app, ["recall", "--hook", "--path", str(out)], input='{"error": ""}')
+    assert r.exit_code == 0 and r.stdout == ""

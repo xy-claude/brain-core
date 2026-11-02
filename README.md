@@ -216,6 +216,7 @@ Say "thanks, we're done" and it runs `brain_session('end')`. Tomorrow at 06:07 `
 │   ├── rules/                01-identity 02-doctrine 03-authority 04-memory 05-system
 │   ├── skills/               distill, session-end, brain-check
 │   └── hooks/                block-dangerous-bash.sh (rm -rf, force-push, curl|sh …)
+│                             + recall of past sessions when a command fails
 ├── .mcp.json                 brain serve . + Hindsight
 ├── brain.yaml                stores, session files, cron schedule
 ├── vault/                    facts.md patterns.md decisions_log.md corrections.md
