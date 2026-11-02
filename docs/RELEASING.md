@@ -22,10 +22,10 @@ sed -i '' 's/^__version__ = ".*"/__version__ = "0.2.2"/' src/brain_core/__init__
 # 2. verify like CI does
 uv run ruff check src tests && uv run ruff format --check src tests && uv run mypy && uv run pytest -q
 # 3. commit, tag, push the tag
-git commit -am "Release 0.2.2" && git tag v0.2.2 && git push origin main v0.2.2
+git commit -am "Release 0.2.2: what changed" && git tag v0.2.2 && git push origin main v0.2.2
 ```
 
-The workflow refuses a tag whose version does not match `pyproject.toml`. Release notes are the matching CHANGELOG section.
+Convention: one commit per release, subject `Release X.Y.Z: what changed`, and the tag sits on that commit, never on a later one. Release runs are titled `Release vX.Y.Z` from the tag; test runs are titled by the commit subject. The workflow refuses a tag whose version does not match `pyproject.toml`. Release notes are the matching CHANGELOG section.
 
 ## Checking
 

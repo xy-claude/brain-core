@@ -1,4 +1,6 @@
 name: test
+# the run is titled by the commit, even when GitHub cannot resolve head_commit
+run-name: ${{ github.event.head_commit.message || github.ref_name }}
 
 on:
   pull_request:

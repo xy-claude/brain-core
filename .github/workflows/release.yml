@@ -1,4 +1,5 @@
 name: release
+run-name: Release ${{ github.ref_name }}
 
 # Tag v* → build sdist+wheel → publish to PyPI (trusted publishing, no token) → GitHub Release.
 # One-time setup on PyPI: add a "pending publisher" for xy-claude/brain-core, workflow
