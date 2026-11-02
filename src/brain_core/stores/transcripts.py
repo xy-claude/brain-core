@@ -42,8 +42,13 @@ _WS = re.compile(r"\s+")
 
 
 def project_dir(projects_root: Path, agent_root: Path) -> Path:
-    """Claude Code's folder for a cwd: every non-alphanumeric character becomes a dash."""
-    return projects_root.expanduser() / re.sub(r"[^A-Za-z0-9]", "-", str(agent_root.resolve()))
+    """Claude Code's folder for a cwd: every non-alphanumeric character becomes a dash. Older
+    versions kept underscores; that folder is used when it exists and the new one does not."""
+    root = projects_root.expanduser()
+    full = str(agent_root.resolve())
+    new = root / re.sub(r"[^A-Za-z0-9]", "-", full)
+    legacy = root / re.sub(r"[^A-Za-z0-9_]", "-", full)
+    return legacy if not new.is_dir() and legacy.is_dir() else new
 
 
 def index(db: Database, projects_root: Path, agent_root: Path) -> dict[str, int]:

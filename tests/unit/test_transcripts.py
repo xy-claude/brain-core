@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from brain_core.recall import brain_recall
@@ -137,3 +138,18 @@ def test_recall_skips_lines_of_the_last_ten_minutes(db: Database, tmp_path: Path
     store = TranscriptStore(db, tmp_path / "projects", agent_root)
     texts = [r.text for r in store.read("transcript", "widgets")]
     assert texts == ["[user] old question about widgets"]
+
+
+def test_project_dir_falls_back_to_the_legacy_underscore_folder(tmp_path: Path) -> None:
+    from brain_core.stores.transcripts import project_dir
+
+    agent = tmp_path / "Agents" / "WEB_AI"
+    agent.mkdir(parents=True)
+    root = tmp_path / "projects"
+    dashed = root / re.sub(r"[^A-Za-z0-9]", "-", str(agent.resolve()))
+    legacy = root / re.sub(r"[^A-Za-z0-9_]", "-", str(agent.resolve()))
+    assert project_dir(root, agent) == dashed  # neither exists: the current naming
+    legacy.mkdir(parents=True)
+    assert project_dir(root, agent) == legacy  # only the old folder exists
+    dashed.mkdir(parents=True)
+    assert project_dir(root, agent) == dashed  # the new one wins once it exists
