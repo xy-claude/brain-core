@@ -38,3 +38,10 @@ jobs:
 
       - name: Tests (pytest)
         run: uv run pytest --cov
+
+      - name: Wheel installs clean and the stdio server lists five tools
+        run: |
+          uv build
+          python3 -m venv /tmp/clean
+          /tmp/clean/bin/pip install -q dist/*.whl
+          python3 tests/smoke_stdio.py /tmp/clean/bin/brain

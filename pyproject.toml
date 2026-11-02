@@ -20,7 +20,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries",
 ]
 dependencies = [
-    "mcp>=1.0",
+    "mcp>=1.0,<2",  # the server is written against the 1.x FastMCP API
     "pydantic>=2.9",
     "pyyaml>=6.0",
     "typer>=0.15",
