@@ -4,6 +4,11 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+## [0.4.8] - 2026-11-06
+
+### Added
+- `brain lessons`: past corrections that match a request. It compares the prompt with `corrections.md` by words alone (no model, no network), needs at least two shared subject words and a minimum tf-idf score, returns at most two, and stays silent otherwise. `brain lessons "<request>"` prints the matches and the words they matched on. As a hook it injects each correction once per session and logs a `lessons_injected` event. It is not wired by `brain init` or `brain adopt`; to turn it on, add a `UserPromptSubmit` hook: `{"hooks": [{"type": "command", "command": "brain lessons --hook --path <agent-dir> 2>/dev/null || true", "timeout": 5}]}`.
+
 ## [0.4.7] - 2026-11-06
 
 ### Added

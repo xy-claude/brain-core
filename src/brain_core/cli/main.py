@@ -415,6 +415,73 @@ def capture_cmd(
     )
 
 
+@app.command("lessons")
+def lessons_cmd(
+    prompt: Annotated[str, typer.Argument(help="The request to match corrections against.")] = "",
+    path: Annotated[
+        Path, typer.Option("--path", "-p", help="Agent directory or brain.yaml.")
+    ] = Path(),
+    hook: Annotated[
+        bool,
+        typer.Option(
+            "--hook",
+            help="UserPromptSubmit mode: read the hook JSON from stdin and print the matching "
+            "corrections as additionalContext, each one once per session.",
+        ),
+    ] = False,
+) -> None:
+    """Past corrections that match a request: the one or two from corrections.md that share
+    enough words with it. Not wired by default; add it as a UserPromptSubmit hook to turn it
+    on. Without --hook it prints the matches and why, for tuning."""
+    import json
+    import sys
+
+    from brain_core.lessons import lessons, render
+    from brain_core.stores.vault import FILES
+
+    payload = json.loads(sys.stdin.read() or "{}") if hook else {}
+    sid = str(payload.get("session_id", ""))
+    if hook:
+        prompt = str(payload.get("prompt", ""))
+    with _open(path) as agent:
+        vault = next((s for s in agent.stores if isinstance(s, VaultStore)), None)
+        source = (vault.root / FILES["correction"]) if vault else None
+        text = source.read_text(encoding="utf-8") if source and source.exists() else ""
+        hits = lessons(text, prompt)
+        if hook and sid:  # a thread on one subject would otherwise repeat the lesson every turn
+            told = {
+                t
+                for e in agent.recent_events(session_id=sid, event_type="lessons_injected")
+                for t in e.payload.get("titles", [])
+            }
+            hits = [h for h in hits if h["title"] not in told]
+        if hook and hits:
+            agent.log_event(
+                "lessons_injected",
+                {"titles": [h["title"] for h in hits], "scores": [h["score"] for h in hits]},
+                session_id=sid or None,
+            )
+    if not hook:
+        for h in hits:
+            typer.echo(
+                f"{h['score']:.3f} [{h['date']}] {h['title']} (shared: {', '.join(h['shared'])})"
+            )
+        if not hits:
+            typer.echo("no correction matches")
+        return
+    if hits:
+        typer.echo(
+            json.dumps(
+                {
+                    "hookSpecificOutput": {
+                        "hookEventName": "UserPromptSubmit",
+                        "additionalContext": render(hits),
+                    }
+                }
+            )
+        )
+
+
 @app.command("doctor")
 def doctor_cmd(
     path: Annotated[
