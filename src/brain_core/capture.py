@@ -5,6 +5,10 @@ This is the floor under the agent's discipline, not a replacement for it: decisi
 corrections, facts and patterns still need `brain_remember` with their kind. The hook never
 talks to Hindsight: captures reach it through the session queue (drained at session end);
 without a queue they stay in the vault, where recall still finds them.
+
+`checkpoint` is the other half: after a compaction the SessionStart hook reads the stretch
+that was just summarised and puts the user's last requests, the files edited and the last
+reply back into context.
 """
 
 from __future__ import annotations
@@ -25,6 +29,71 @@ USER_CHARS = 500
 SAID, LINKS = "Said (hook)", "Links (hook)"
 _LOCAL = re.compile(r"https?://(127\.0\.0\.1|localhost|0\.0\.0\.0)(?::\d+)?(/|$)")
 _NOISE = (".svg", ".png", ".gif", ".ico")
+REQUESTS, FILES = 3, 6  # how many of each a checkpoint keeps, newest last
+REQUEST_CHARS, REPLY_CHARS = 200, 240
+STRETCH_LINES = 4000  # a compacted stretch is read back at most this far
+_EDIT = re.compile(r"^\[(?:Edit|Write|MultiEdit|NotebookEdit)\] (\S.*)$")
+
+
+def checkpoint(transcript: Path) -> str:
+    """After a compaction: what the user last asked, which files were edited and where the
+    agent stopped, read from the stretch of the transcript the compaction just summarised.
+    A summary keeps the gist; this keeps the exact words and paths. Empty when the
+    transcript has no compaction in it."""
+    try:
+        lines = transcript.read_text(encoding="utf-8").splitlines()
+    except (OSError, ValueError):
+        return ""
+    # shortcut: relies on compaction appending to the same transcript file, upgrade to a
+    # PreCompact-written checkpoint if a Claude Code release starts a new file instead.
+    cuts = [
+        i
+        for i, raw in enumerate(lines)
+        if "compact_boundary" in raw and _meta(raw).get("subtype") == "compact_boundary"
+    ]
+    if not cuts:
+        return ""
+    end = cuts[-1]
+    start = max(cuts[-2] + 1 if len(cuts) > 1 else 0, end - STRETCH_LINES)
+    asked: list[str] = []
+    files: list[str] = []
+    reply = ""
+    for raw in lines[start:end]:
+        if "isCompactSummary" in raw and _meta(raw).get("isCompactSummary"):
+            continue  # the previous compaction's summary is not something the user said
+        for _rid, _sess, _ts, role, text in _rows(raw.encode("utf-8"), transcript.stem):
+            edit = _EDIT.match(text)
+            if edit and role == "assistant":
+                files = [f for f in files if f != edit.group(1)] + [edit.group(1)]
+            elif text.startswith(("$ ", "[", "→")):
+                continue  # tool rows are not speech
+            elif role == "user":
+                asked.append(_cut(text, REQUEST_CHARS))
+            else:
+                reply = _cut(text, REPLY_CHARS)
+    if not (asked or files or reply):
+        return ""
+    out = ["Task checkpoint (brain-core, read from the transcript before this compaction):"]
+    if asked:
+        out.append("Last requests from the user, oldest first:")
+        out += [f"- {a}" for a in asked[-REQUESTS:]]
+    if files:
+        out.append("Files edited: " + ", ".join(files[-FILES:]))
+    if reply:
+        out.append(f"Last reply before the compaction: {reply}")
+    return "\n".join(out)
+
+
+def _meta(raw: str) -> dict[str, Any]:
+    try:
+        obj = json.loads(raw)
+    except ValueError:
+        return {}
+    return obj if isinstance(obj, dict) else {}
+
+
+def _cut(text: str, limit: int) -> str:
+    return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
 def capture(agent: Agent, transcript: Path, session_id: str = "") -> dict[str, Any]:

@@ -92,3 +92,115 @@ def test_capture_is_incremental_and_skips_tool_rows(tmp_path: Path) -> None:
     assert r.exit_code == 0 and r.stdout == ""  # hook mode is silent
     r = runner.invoke(app, ["capture", "--path", str(tmp_path), "--transcript", str(t)])
     assert r.exit_code == 0 and r.stdout.startswith("captured 0 new")
+
+
+# ── checkpoint: what a compaction summary loses, read back from the transcript ──
+
+
+def boundary() -> str:
+    return json.dumps({"type": "system", "subtype": "compact_boundary", "sessionId": "s1"})
+
+
+def summary() -> str:
+    obj = json.loads(
+        line("user", "This session is being continued from a previous conversation.", "sum")
+    )
+    return json.dumps({**obj, "isCompactSummary": True})
+
+
+def compacted(tmp_path: Path) -> Path:
+    t = tmp_path / "s1.jsonl"
+    t.write_text(
+        "\n".join(
+            [
+                line("user", "first task: rename the config loader to load_settings", "u0"),
+                boundary(),
+                summary(),
+                line("user", "now add retry with backoff to the uploader, three attempts", "u1"),
+                line(
+                    "assistant",
+                    [
+                        {"type": "text", "text": "Reading the uploader before changing it."},
+                        {"type": "tool_use", "name": "Edit", "input": {"file_path": "/r/up.py"}},
+                        {"type": "tool_use", "name": "Bash", "input": {"command": "pytest -q"}},
+                    ],
+                    "a1",
+                ),
+                line("user", [{"type": "tool_result", "content": "3 passed in 0.2s today"}], "r1"),
+                line("user", "the log says compact_boundary twice, is that expected?", "u2"),
+                line("user", "my token is hsk_abcdefghijklmnop1234 keep it out", "u3"),
+                line("user", "use exponential backoff, base two seconds, " + "jitter " * 40, "u4"),
+                line(
+                    "assistant",
+                    [
+                        {"type": "tool_use", "name": "Write", "input": {"file_path": "/r/t_up.py"}},
+                        {"type": "tool_use", "name": "Edit", "input": {"file_path": "/r/up.py"}},
+                        {"type": "tool_use", "name": "Read", "input": {"file_path": "/r/other.py"}},
+                        {"type": "text", "text": "Retry is in; the backoff test still fails."},
+                    ],
+                    "a2",
+                ),
+                boundary(),
+                summary(),
+                line("user", "this was said after the compaction", "u5"),
+            ]
+        )
+        + "\n"
+    )
+    return t
+
+
+def test_checkpoint_reads_only_the_stretch_just_compacted(tmp_path: Path) -> None:
+    from brain_core.capture import REQUEST_CHARS, checkpoint
+
+    cp = checkpoint(compacted(tmp_path))
+    asked = [ln[2:] for ln in cp.splitlines() if ln.startswith("- ")]
+    # the newest three requests, oldest first; the fourth-newest is dropped
+    assert len(asked) == 3 and asked[0].startswith("the log says compact_boundary"), cp
+    assert "retry with backoff" not in cp
+    assert asked[2].endswith("…") and len(asked[2]) == REQUEST_CHARS
+    assert "[redacted]" in asked[1] and "hsk_abcdefghijklmnop1234" not in cp
+    # nothing from before the previous compaction, its summary, or after this one
+    assert "rename the config loader" not in cp and "being continued" not in cp
+    assert "after the compaction" not in cp
+    # edited files once each, most recently touched last; a file only read is not listed
+    assert "Files edited: /r/t_up.py, /r/up.py" in cp and "other.py" not in cp
+    assert "pytest -q" not in cp and "3 passed" not in cp  # tool rows are not speech
+    assert "Last reply before the compaction: Retry is in; the backoff test still fails." in cp
+
+
+def test_checkpoint_is_empty_without_a_compaction(tmp_path: Path) -> None:
+    from brain_core.capture import checkpoint
+
+    t = tmp_path / "s2.jsonl"
+    said = ["please fix the flaky upload test", "the log says compact_boundary twice, expected?"]
+    t.write_text("\n".join(line("user", s, f"u{i}") for i, s in enumerate(said)) + "\n")
+    assert checkpoint(t) == ""  # a quoted word is not a boundary
+    assert checkpoint(tmp_path / "missing.jsonl") == ""
+
+
+def test_brief_hook_adds_the_checkpoint_only_after_a_compaction(tmp_path: Path) -> None:
+    runner.invoke(app, ["init", "bot", "--path", str(tmp_path), "--lite"])
+    t = compacted(tmp_path)
+
+    def hook(source: str) -> str:
+        payload = {"session_id": "s1", "transcript_path": str(t), "source": source}
+        r = runner.invoke(
+            app, ["brief", "--hook", "--path", str(tmp_path)], input=json.dumps(payload)
+        )
+        assert r.exit_code == 0, r.stdout
+        return r.stdout
+
+    brief = tmp_path / "vault" / "daily_brief.md"
+    brief.unlink(missing_ok=True)
+    assert hook("startup") == ""  # no brief, no compaction: the hook stays silent
+    alone = json.loads(hook("compact"))["hookSpecificOutput"]["additionalContext"]
+    assert alone.startswith("Task checkpoint") and "Daily brief" not in alone
+
+    brief.write_text("# Daily Brief — 2026-11-03\n\n- x\n")
+    both = json.loads(hook("compact"))["hookSpecificOutput"]["additionalContext"]
+    assert both.startswith("Task checkpoint") and "Daily Brief — 2026-11-03" in both
+    fresh = json.loads(hook("startup"))["hookSpecificOutput"]["additionalContext"]
+    assert "Task checkpoint" not in fresh and "Daily Brief — 2026-11-03" in fresh
+    with Agent.from_config(tmp_path / "brain.yaml") as agent:
+        assert len(agent.recent_events(event_type="checkpoint_injected")) == 2

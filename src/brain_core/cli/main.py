@@ -333,30 +333,45 @@ def brief_cmd(
     ] = False,
 ) -> None:
     """Print the daily brief. With --hook it is injected into context at SessionStart and
-    `brain_session('start')` then omits it instead of repeating it."""
+    `brain_session('start')` then omits it instead of repeating it. When the session start
+    follows a compaction, a task checkpoint read from the transcript goes in first."""
     import json
     import sys
 
+    from brain_core.capture import checkpoint
+
     payload = json.loads(sys.stdin.read() or "{}") if hook else {}
+    resume = ""
+    if payload.get("source") == "compact" and payload.get("transcript_path"):
+        resume = checkpoint(Path(str(payload["transcript_path"])).expanduser())
     with _open(path) as agent:
         vault = next((s for s in agent.stores if isinstance(s, VaultStore)), None)
         brief = (vault.root / agent.config.session.brief) if vault else None
         text = brief.read_text(encoding="utf-8") if brief and brief.exists() else ""
-        if not text.strip():
+        if not text.strip() and not resume:
             return
         if not hook:
             typer.echo(text)
             return
-        agent.log_event(
-            "brief_injected",
-            {"session_id": str(payload.get("session_id", "")), "brief": str(brief)},
-        )
+        if text.strip():
+            agent.log_event(
+                "brief_injected",
+                {"session_id": str(payload.get("session_id", "")), "brief": str(brief)},
+            )
+        if resume:
+            agent.log_event(
+                "checkpoint_injected",
+                {"session_id": str(payload.get("session_id", "")), "chars": len(resume)},
+            )
+    parts = [resume]
+    if text.strip():
+        parts.append(f"Daily brief (injected by brain brief --hook):\n{text}")
     typer.echo(
         json.dumps(
             {
                 "hookSpecificOutput": {
                     "hookEventName": "SessionStart",
-                    "additionalContext": f"Daily brief (injected by brain brief --hook):\n{text}",
+                    "additionalContext": "\n\n".join(p for p in parts if p),
                 }
             }
         )

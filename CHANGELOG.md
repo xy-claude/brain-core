@@ -4,8 +4,14 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+## [0.4.7] - 2026-11-06
+
 ### Added
+- Task checkpoint after a compaction: when SessionStart fires with `source: compact`, `brain brief --hook` reads the stretch of the transcript that was just summarised and injects, ahead of the brief, the user's last three requests, the files edited with Edit or Write, and the last reply. It is stateless (nothing is written before the compaction), needs no new hook entry, logs a `checkpoint_injected` event, and stays silent when the transcript holds no compaction. Files changed through shell commands are not listed.
 - `brain adopt <agent-dir> --vault PATH [--bank NAME] [--user NAME] [--peers GLOB] …`: puts an existing Claude Code agent folder on brain-core without touching its CLAUDE.md, skills or vault. Writes `brain.yaml`, adds the `brain` MCP server to `.mcp.json`, merges the four hooks into `settings.local.json` (or `settings.json`), renders the memory rule from the template, and backfills the SQLite index. Idempotent: every step reports written or kept. Without `--bank` the agent runs lite.
+
+### Fixed
+- Transcript index: an agent folder whose Claude Code project directory uses the older underscore naming is found again instead of indexing nothing.
 
 ## [0.4.6] - 2026-11-03
 
