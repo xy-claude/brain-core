@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -55,3 +56,35 @@ def test_blocked(cmd: str) -> None:
 )
 def test_allowed(cmd: str) -> None:
     assert run(cmd) == 0, cmd
+
+
+# ── the SessionStart command: every hook is silent on failure, so this one says why ──
+
+
+def session_start(path_dir: str) -> subprocess.CompletedProcess[str]:
+    settings = json.loads((PACK / ".claude" / "settings.json").read_text())
+    cmd = settings["hooks"]["SessionStart"][0]["hooks"][0]["command"]
+    return subprocess.run(
+        ["/bin/sh", "-c", cmd],
+        env={"PATH": path_dir, "CLAUDE_PROJECT_DIR": "/nowhere"},
+        text=True,
+        capture_output=True,
+    )
+
+
+def fake_brain(tmp_path: Path, body: str) -> str:
+    exe = tmp_path / "brain"
+    exe.write_text(f"#!/bin/sh\n{body}\n")
+    exe.chmod(0o755)
+    return str(tmp_path)
+
+
+def test_session_start_says_so_when_brain_is_not_on_path(tmp_path: Path) -> None:
+    missing = session_start(str(tmp_path))  # an empty folder: no brain anywhere on PATH
+    assert missing.returncode == 0 and "not on PATH" in missing.stdout
+
+    broken = session_start(fake_brain(tmp_path, "exit 1"))  # found, but it failed: stay quiet
+    assert broken.returncode == 0 and broken.stdout == ""
+
+    working = session_start(fake_brain(tmp_path, "echo the-brief"))
+    assert working.returncode == 0 and working.stdout == "the-brief\n"

@@ -4,6 +4,11 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+## [0.4.10] - 2026-11-07
+
+### Fixed
+- An agent made by `brain init` calls `brain` in its hooks, and every hook is silent on failure, so when `brain` was not on PATH (Claude Code started from a shell without the `uv tool` bin folder) the brief, capture and recall hooks did nothing and said nothing. The `SessionStart` hook now prints one line into the session when the command is missing, with the fix. `brain adopt` writes the same warning for a program path that has since disappeared. Existing agents: copy the `SessionStart` command from the template's `.claude/settings.json` into your own. `brain init --force` applies it too, but it also rewrites `brain.yaml`, `CLAUDE.md`, the rules and the settings (never the vault).
+
 ## [0.4.9] - 2026-11-07
 
 ### Fixed

@@ -20,6 +20,12 @@ HOOKS: dict[str, str] = {
     "PreCompact": "capture",
     "PostToolUseFailure": "recall --hook",
 }
+# every hook is silent on failure, so SessionStart says so when the program itself is gone
+_MISSING = (
+    "brain-core: the brain program these hooks call was not found, so the brief, capture and "
+    "recall hooks are not running. Tell the user. Fix: install brain-core again, or correct "
+    "the path in the .claude settings of this folder."
+)
 
 
 def adopt_agent(
@@ -79,7 +85,12 @@ def adopt_agent(
     hooks = settings.setdefault("hooks", {})
     added = []
     for event, sub in HOOKS.items():
-        cmd = f'"{binary}" {sub} --path "{cfg}" 2>/dev/null || true'
+        tail = (
+            f"command -v \"{binary}\" >/dev/null || echo '{_MISSING}'"
+            if event == "SessionStart"
+            else "true"
+        )
+        cmd = f'"{binary}" {sub} --path "{cfg}" 2>/dev/null || {tail}'
         groups = hooks.setdefault(event, [])
         if any(
             f" {sub} " in h.get("command", "") and "brain" in h.get("command", "")

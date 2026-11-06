@@ -61,3 +61,35 @@ def test_adopt_is_additive_and_idempotent(tmp_path: Path) -> None:
     assert again.exit_code == 0 and "kept" in again.stdout and "0 new rows" in again.stdout
     hooks = json.loads((agent_dir / ".claude" / "settings.json").read_text())["hooks"]
     assert len(hooks["Stop"]) == 2  # no duplicate hook on the second run
+
+
+def test_adopted_session_start_says_so_when_the_program_is_gone(tmp_path: Path) -> None:
+    import subprocess
+
+    from brain_core.cli.adopt import adopt_agent
+
+    agent_dir, exe = tmp_path / "Atlas", tmp_path / "bin" / "brain"
+    agent_dir.mkdir()
+    (tmp_path / "vault").mkdir()
+    adopt_agent(
+        agent_dir,
+        name="Atlas",
+        user="Alex",
+        vault=tmp_path / "vault",
+        bank=None,
+        brain_bin=str(exe),
+    )
+    hooks = json.loads((agent_dir / ".claude" / "settings.json").read_text())["hooks"]
+    assert hooks["Stop"][0]["hooks"][0]["command"].endswith("|| true")  # only SessionStart speaks
+
+    def start() -> subprocess.CompletedProcess[str]:
+        cmd = hooks["SessionStart"][0]["hooks"][0]["command"]
+        return subprocess.run(["/bin/sh", "-c", cmd], text=True, capture_output=True)
+
+    gone = start()
+    assert gone.returncode == 0 and "was not found" in gone.stdout
+    exe.parent.mkdir()
+    exe.write_text("#!/bin/sh\nexit 1\n")
+    exe.chmod(0o755)
+    broken = start()  # found, but it failed: stay quiet
+    assert broken.returncode == 0 and broken.stdout == ""

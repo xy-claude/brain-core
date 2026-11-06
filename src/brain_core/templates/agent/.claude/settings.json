@@ -47,7 +47,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "brain brief --hook --path \"$CLAUDE_PROJECT_DIR\" 2>/dev/null || true"
+            "command": "brain brief --hook --path \"$CLAUDE_PROJECT_DIR\" 2>/dev/null || command -v brain >/dev/null || echo 'brain-core: the brain command is not on PATH in this session, so its hooks (brief, capture, recall) are not running. Tell the user. Fix: run uv tool update-shell, then restart Claude Code.'"
           }
         ]
       }
