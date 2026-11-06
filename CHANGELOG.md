@@ -4,6 +4,11 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+## [0.4.9] - 2026-11-07
+
+### Fixed
+- The task checkpoint (0.4.7) never appeared after a real compaction. Claude Code writes the compaction boundary to the transcript after the `SessionStart` hook has run, so the checkpoint looked for a boundary that was not on disk yet and returned nothing. It now reads the tail of the transcript, which is the stretch just summarised, and steps back one stretch only when the boundary has already landed. Witnessed on a real `/compact`.
+
 ## [0.4.8] - 2026-11-06
 
 ### Added

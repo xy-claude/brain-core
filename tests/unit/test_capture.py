@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from brain_core.agent import Agent
@@ -108,7 +109,16 @@ def summary() -> str:
     return json.dumps({**obj, "isCompactSummary": True})
 
 
-def compacted(tmp_path: Path) -> Path:
+def compacted(tmp_path: Path, landed: bool = False) -> Path:
+    """A session compacted once before, at the moment SessionStart fires for the second
+    compaction. Claude Code writes that second boundary after the hook; `landed` adds it,
+    with the summary and the /compact echo that follow it, in case that order ever changes."""
+    after = [
+        boundary(),
+        summary(),
+        line("user", "<command-name>/compact</command-name>", "c1"),
+        line("user", "<local-command-stdout>Compacted</local-command-stdout>", "c2"),
+    ]
     t = tmp_path / "s1.jsonl"
     t.write_text(
         "\n".join(
@@ -140,43 +150,46 @@ def compacted(tmp_path: Path) -> Path:
                     ],
                     "a2",
                 ),
-                boundary(),
-                summary(),
-                line("user", "this was said after the compaction", "u5"),
             ]
+            + (after if landed else [])
         )
         + "\n"
     )
     return t
 
 
-def test_checkpoint_reads_only_the_stretch_just_compacted(tmp_path: Path) -> None:
+@pytest.mark.parametrize("landed", [False, True])
+def test_checkpoint_reads_only_the_stretch_just_compacted(tmp_path: Path, landed: bool) -> None:
     from brain_core.capture import REQUEST_CHARS, checkpoint
 
-    cp = checkpoint(compacted(tmp_path))
+    cp = checkpoint(compacted(tmp_path, landed))
     asked = [ln[2:] for ln in cp.splitlines() if ln.startswith("- ")]
     # the newest three requests, oldest first; the fourth-newest is dropped
     assert len(asked) == 3 and asked[0].startswith("the log says compact_boundary"), cp
     assert "retry with backoff" not in cp
     assert asked[2].endswith("…") and len(asked[2]) == REQUEST_CHARS
     assert "[redacted]" in asked[1] and "hsk_abcdefghijklmnop1234" not in cp
-    # nothing from before the previous compaction, its summary, or after this one
+    # nothing from before the previous compaction, its summary, or the /compact echo
     assert "rename the config loader" not in cp and "being continued" not in cp
-    assert "after the compaction" not in cp
+    assert "command-name" not in cp and "Compacted" not in cp
     # edited files once each, most recently touched last; a file only read is not listed
     assert "Files edited: /r/t_up.py, /r/up.py" in cp and "other.py" not in cp
     assert "pytest -q" not in cp and "3 passed" not in cp  # tool rows are not speech
     assert "Last reply before the compaction: Retry is in; the backoff test still fails." in cp
 
 
-def test_checkpoint_is_empty_without_a_compaction(tmp_path: Path) -> None:
+def test_checkpoint_reads_the_whole_file_at_a_first_compaction(tmp_path: Path) -> None:
     from brain_core.capture import checkpoint
 
+    # the first compaction of a session: no boundary is on disk yet when the hook runs
     t = tmp_path / "s2.jsonl"
     said = ["please fix the flaky upload test", "the log says compact_boundary twice, expected?"]
     t.write_text("\n".join(line("user", s, f"u{i}") for i, s in enumerate(said)) + "\n")
-    assert checkpoint(t) == ""  # a quoted word is not a boundary
+    asked = [ln[2:] for ln in checkpoint(t).splitlines() if ln.startswith("- ")]
+    assert asked == said  # and a quoted word is not a boundary
     assert checkpoint(tmp_path / "missing.jsonl") == ""
+    (tmp_path / "s3.jsonl").write_text(boundary() + "\n" + summary() + "\n")
+    assert checkpoint(tmp_path / "s3.jsonl") == ""  # no speech anywhere
 
 
 def test_brief_hook_adds_the_checkpoint_only_after_a_compaction(tmp_path: Path) -> None:

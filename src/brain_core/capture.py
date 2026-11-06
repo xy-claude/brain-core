@@ -38,39 +38,25 @@ _EDIT = re.compile(r"^\[(?:Edit|Write|MultiEdit|NotebookEdit)\] (\S.*)$")
 def checkpoint(transcript: Path) -> str:
     """After a compaction: what the user last asked, which files were edited and where the
     agent stopped, read from the stretch of the transcript the compaction just summarised.
-    A summary keeps the gist; this keeps the exact words and paths. Empty when the
-    transcript has no compaction in it."""
+    A summary keeps the gist; this keeps the exact words and paths. Call it only from
+    SessionStart with ``source: compact``; empty when the transcript holds no speech."""
     try:
         lines = transcript.read_text(encoding="utf-8").splitlines()
     except (OSError, ValueError):
         return ""
-    # shortcut: relies on compaction appending to the same transcript file, upgrade to a
-    # PreCompact-written checkpoint if a Claude Code release starts a new file instead.
     cuts = [
         i
         for i, raw in enumerate(lines)
         if "compact_boundary" in raw and _meta(raw).get("subtype") == "compact_boundary"
     ]
-    if not cuts:
-        return ""
-    end = cuts[-1]
-    start = max(cuts[-2] + 1 if len(cuts) > 1 else 0, end - STRETCH_LINES)
-    asked: list[str] = []
-    files: list[str] = []
-    reply = ""
-    for raw in lines[start:end]:
-        if "isCompactSummary" in raw and _meta(raw).get("isCompactSummary"):
-            continue  # the previous compaction's summary is not something the user said
-        for _rid, _sess, _ts, role, text in _rows(raw.encode("utf-8"), transcript.stem):
-            edit = _EDIT.match(text)
-            if edit and role == "assistant":
-                files = [f for f in files if f != edit.group(1)] + [edit.group(1)]
-            elif text.startswith(("$ ", "[", "→")):
-                continue  # tool rows are not speech
-            elif role == "user":
-                asked.append(_cut(text, REQUEST_CHARS))
-            else:
-                reply = _cut(text, REPLY_CHARS)
+    # Claude Code writes this compaction's boundary after the SessionStart hook has run (seen
+    # live, 2026-11-06), so the stretch just summarised is the tail of the file. A tail with
+    # no speech means the boundary did land first: step back one stretch.
+    last = cuts[-1] if cuts else -1
+    asked, files, reply = _stretch(lines[last + 1 :], transcript.stem)
+    if cuts and not (asked or files or reply):
+        before = cuts[-2] + 1 if len(cuts) > 1 else 0
+        asked, files, reply = _stretch(lines[before:last], transcript.stem)
     if not (asked or files or reply):
         return ""
     out = ["Task checkpoint (brain-core, read from the transcript before this compaction):"]
@@ -82,6 +68,27 @@ def checkpoint(transcript: Path) -> str:
     if reply:
         out.append(f"Last reply before the compaction: {reply}")
     return "\n".join(out)
+
+
+def _stretch(lines: list[str], stem: str) -> tuple[list[str], list[str], str]:
+    """The user's requests, the files edited and the last reply in `lines`."""
+    asked: list[str] = []
+    files: list[str] = []
+    reply = ""
+    for raw in lines[-STRETCH_LINES:]:
+        if "isCompactSummary" in raw and _meta(raw).get("isCompactSummary"):
+            continue  # the previous compaction's summary is not something the user said
+        for _rid, _sess, _ts, role, text in _rows(raw.encode("utf-8"), stem):
+            edit = _EDIT.match(text)
+            if edit and role == "assistant":
+                files = [f for f in files if f != edit.group(1)] + [edit.group(1)]
+            elif text.startswith(("$ ", "[", "→")):
+                continue  # tool rows are not speech
+            elif role == "user":
+                asked.append(_cut(text, REQUEST_CHARS))
+            else:
+                reply = _cut(text, REPLY_CHARS)
+    return asked, files, reply
 
 
 def _meta(raw: str) -> dict[str, Any]:
