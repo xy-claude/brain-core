@@ -25,8 +25,16 @@ Both. One Python package, three ways in:
 
 To a Claude Code user: an MCP server with five memory tools and a one-line installer. To a Python developer: a memory library with an MCP front end.
 
+macOS and Linux:
+
 ```
 curl -fsSL https://raw.githubusercontent.com/xy-claude/brain-core/main/install.sh | bash -s -- --agent Atlas --user Alex
+```
+
+Windows (PowerShell):
+
+```
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/xy-claude/brain-core/main/install.ps1))) -Agent Atlas -User Alex
 ```
 
 <img src="docs/img/demo.gif" alt="brain init, brain doctor, then a real session: remember, a changed fact with its banner, recall" width="900">
