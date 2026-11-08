@@ -567,6 +567,34 @@ def _install_crontab(agent: Agent, agent_dir: Path, brain_bin: str) -> list[str]
     return lines
 
 
+# ── Task Scheduler (Windows) ──────────────────────────────────────────────────
+
+
+def schtasks_commands(
+    agent_dir: Path, brain_bin: str, name: str, daily_at: str, weekly_at: str
+) -> dict[str, list[str]]:
+    """Two ``schtasks /Create`` argv lists, keyed by task name (brain-core.<agent>.daily|weekly)."""
+    wday, wtime = weekly_at.split()
+    task = f"brain-core.{name.lower()}"
+    log = agent_dir / "data" / "logs"
+
+    def run(sub: str) -> str:
+        # cmd strips the outer pair of quotes, which is what lets the inner ones quote paths
+        return f'cmd /c ""{brain_bin}" {sub} "{agent_dir}" >> "{log / f"{sub}.log"}" 2>&1"'
+
+    create = ["schtasks", "/Create", "/F"]
+    daily = [*create, "/SC", "DAILY", "/ST", daily_at]
+    weekly = [*create, "/SC", "WEEKLY", "/D", wday[:3].upper(), "/ST", wtime]
+    return {
+        f"{task}.daily": [*daily, "/TN", f"{task}.daily", "/TR", run("daily")],
+        f"{task}.weekly": [*weekly, "/TN", f"{task}.weekly", "/TR", run("weekly")],
+    }
+
+
+def _task_installed(task: str) -> bool:
+    return subprocess.run(["schtasks", "/Query", "/TN", task], capture_output=True).returncode == 0
+
+
 # ── launchd ───────────────────────────────────────────────────────────────────
 
 
@@ -605,6 +633,13 @@ def install(agent: Agent, launch_dir: Path | None = None, load: bool = True) -> 
     agent_dir = agent.config_path.parent if agent.config_path else Path.cwd()
     brain_bin = shutil.which("brain") or str(Path(sys.executable).with_name("brain"))
     (agent_dir / "data" / "logs").mkdir(parents=True, exist_ok=True)
+    if sys.platform == "win32" and launch_dir is None:
+        c = agent.config.cron
+        tasks = schtasks_commands(agent_dir, brain_bin, agent.name, c.daily, c.weekly)
+        if load:
+            for cmd in tasks.values():
+                subprocess.run(cmd, capture_output=True, check=True)
+        return list(tasks)
     if sys.platform != "darwin" and launch_dir is None:
         return (
             _install_crontab(agent, agent_dir, brain_bin)
@@ -632,7 +667,17 @@ def install(agent: Agent, launch_dir: Path | None = None, load: bool = True) -> 
 
 
 def status(agent: Agent, launch_dir: Path | None = None) -> dict[str, str]:
-    """installed | not installed per job, from the crontab (Linux) or the plists (macOS)."""
+    """installed | not installed per job: Task Scheduler, crontab (Linux) or plists (macOS)."""
+    if sys.platform == "win32" and launch_dir is None:
+        out = {}
+        for s in ("daily", "weekly"):
+            state = (
+                "installed"
+                if _task_installed(f"brain-core.{agent.name.lower()}.{s}")
+                else "not installed"
+            )
+            out[s] = f"{state} (Task Scheduler)"
+        return out
     if sys.platform != "darwin" and launch_dir is None:
         cp = subprocess.run(["crontab", "-l"], capture_output=True, text=True)
         tab = cp.stdout if cp.returncode == 0 else ""
@@ -650,6 +695,12 @@ def status(agent: Agent, launch_dir: Path | None = None) -> dict[str, str]:
 
 
 def uninstall(agent: Agent, launch_dir: Path | None = None) -> list[str]:
+    if sys.platform == "win32" and launch_dir is None:
+        tasks = [f"brain-core.{agent.name.lower()}.{s}" for s in ("daily", "weekly")]
+        removed = [t for t in tasks if _task_installed(t)]
+        for t in removed:
+            subprocess.run(["schtasks", "/Delete", "/F", "/TN", t], capture_output=True, check=True)
+        return removed
     if sys.platform != "darwin" and launch_dir is None:
         cp = subprocess.run(["crontab", "-l"], capture_output=True, text=True)
         before = cp.stdout if cp.returncode == 0 else ""

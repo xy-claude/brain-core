@@ -249,7 +249,7 @@ def _pdf_stub(vault: VaultStore, data: bytes, stem: str) -> tuple[str, str]:
     dest = vault.root / "raw" / f"{date.today().isoformat()}-{slug}.pdf"
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_bytes(data)
-    rel = dest.relative_to(vault.root)
+    rel = dest.relative_to(vault.root).as_posix()
     return (
         f"PDF saved at {rel} ({len(data)} bytes). Compile from the PDF with Read.",
         f"PDF bytes saved to {rel}; text extraction is the agent's job (Read)",

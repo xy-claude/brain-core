@@ -47,3 +47,24 @@ jobs:
           python3 -m venv /tmp/clean
           /tmp/clean/bin/pip install -q dist/*.whl
           python3 tests/smoke_stdio.py /tmp/clean/bin/brain
+
+  windows:
+    # the Windows path: Task Scheduler cron, msvcrt vault lock, uv-installed brain.exe; lint and
+    # types are checked once above
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv sync --all-extras
+      - run: uv run pytest -q
+        env:
+          PYTHONUTF8: 1  # the fixtures write files with the default encoding; brain-core itself always names utf-8
+      - name: brain.exe from uv tool installs, inits a lite agent, lists its tools
+        shell: pwsh
+        run: |
+          uv tool install --from . brain-core-mcp
+          $bin = uv tool dir --bin  # setup-uv moves the tool bin dir off %USERPROFILE%
+          uv run python tests/smoke_stdio.py "$bin\brain.exe"

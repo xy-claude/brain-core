@@ -6,14 +6,19 @@ dated, idempotent, append-only forms the schema defines.
 
 from __future__ import annotations
 
-import fcntl
 import os
 import re
+import sys
 import time
 from datetime import date
 from pathlib import Path
 
 from brain_core.stores.base import Kind, Record, WriteResult, record_id
+
+if sys.platform == "win32":
+    import msvcrt
+else:
+    import fcntl
 
 _FRONTMATTER = re.compile(r"^---\n(.*?)\n---\n", re.S)
 _HEADING = re.compile(r"^(#{1,3}) (.+?)\s*$")
@@ -70,7 +75,7 @@ class VaultStore:
         text = path.read_text(encoding="utf-8")
         fm = self._frontmatter(text)
         fallback = _parse_date(fm.get("updated")) or date.fromtimestamp(path.stat().st_mtime)
-        rel = str(path.relative_to(self.root))
+        rel = path.relative_to(self.root).as_posix()
         if kind == "raw":
             return [
                 Record(
@@ -239,7 +244,7 @@ class VaultStore:
                 else self._new_file(kind, when, create_header)
             )
             if rid in {r.id for r in self._parse(kind, path)} if path.exists() else False:
-                return WriteResult(self.name, rid, "exists", str(path.relative_to(self.root)))
+                return WriteResult(self.name, rid, "exists", path.relative_to(self.root).as_posix())
             lines = text.rstrip("\n").split("\n")
             heading = f"## {section}"
             idx = next((i for i, ln in enumerate(lines) if ln.strip() == heading), None)
@@ -254,7 +259,9 @@ class VaultStore:
                     end -= 1
                 lines.insert(end, line)
             self._save(path, "\n".join(lines) + "\n", when)
-        return WriteResult(self.name, rid, "written", f"{path.relative_to(self.root)} › {section}")
+        return WriteResult(
+            self.name, rid, "written", f"{path.relative_to(self.root).as_posix()} › {section}"
+        )
 
     def _insert_entry(
         self, path: Path, rid: str, block: str, when: date, after_heading: str | None
@@ -264,7 +271,7 @@ class VaultStore:
             if not path.exists():
                 self._save(path, self._new_file(kind, when, ""), when)
             if rid in {r.id for r in self._parse(kind, path)}:
-                return WriteResult(self.name, rid, "exists", str(path.relative_to(self.root)))
+                return WriteResult(self.name, rid, "exists", path.relative_to(self.root).as_posix())
             text = path.read_text(encoding="utf-8")
             lines = text.split("\n")
             if after_heading:
@@ -277,7 +284,7 @@ class VaultStore:
                 anchor = next((i for i, ln in enumerate(lines) if _DECISION.match(ln)), len(lines))
             lines[anchor:anchor] = ["", *block.rstrip("\n").split("\n")]
             self._save(path, "\n".join(lines).rstrip("\n") + "\n", when)
-        return WriteResult(self.name, rid, "written", str(path.relative_to(self.root)))
+        return WriteResult(self.name, rid, "written", path.relative_to(self.root).as_posix())
 
     def _write_raw(self, body: str, when: date, meta: dict[str, str]) -> WriteResult:
         slug = re.sub(r"[^a-z0-9]+", "-", meta.get("title", "untitled").lower()).strip("-")[:60]
@@ -308,7 +315,7 @@ class VaultStore:
         path.parent.mkdir(parents=True, exist_ok=True)
         with self._locked(path):
             self._save(path, head + body, when, bump=False)
-        return WriteResult(self.name, sha, "written", str(path.relative_to(self.root)))
+        return WriteResult(self.name, sha, "written", path.relative_to(self.root).as_posix())
 
     # ── helpers ─────────────────────────────────────────────────────────────
 
@@ -366,11 +373,19 @@ class _Lock:
 
     def __enter__(self) -> _Lock:
         self.fd = os.open(self.path, os.O_CREAT | os.O_RDWR)
-        fcntl.flock(self.fd, fcntl.LOCK_EX)
+        if sys.platform == "win32":
+            # shortcut: LK_LOCK retries once a second for 10 s then raises, upgrade to a retry
+            # loop if a Windows user ever reports a lock error
+            msvcrt.locking(self.fd, msvcrt.LK_LOCK, 1)
+        else:
+            fcntl.flock(self.fd, fcntl.LOCK_EX)
         return self
 
     def __exit__(self, *exc: object) -> None:
-        fcntl.flock(self.fd, fcntl.LOCK_UN)
+        if sys.platform == "win32":
+            msvcrt.locking(self.fd, msvcrt.LK_UNLCK, 1)
+        else:
+            fcntl.flock(self.fd, fcntl.LOCK_UN)
         os.close(self.fd)
 
 

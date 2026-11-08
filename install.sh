@@ -1,5 +1,5 @@
 #!/bin/bash
-# brain-core one-line installer (macOS and Linux).
+# brain-core one-line installer (macOS and Linux; Windows uses install.ps1).
 #
 #   curl -fsSL https://raw.githubusercontent.com/xy-claude/brain-core/main/install.sh | bash -s -- --agent NAME [--user Alex] [--dir ~/Agents/NAME] [--provider anthropic|openai|claude-code] [--profile DIR] [--lite] [--dashboard] [--ref v0.4.0]
 #
@@ -26,7 +26,7 @@ done
 [ -n "$AGENT" ] || { echo "usage: install.sh --agent NAME [--user Alex] [--dir PATH] [--provider anthropic|openai|claude-code] [--api-key-env VAR] [--profile DIR] [--lite] [--dashboard] [--ref TAG]" >&2; exit 2; }
 DIR="${DIR:-$HOME/Agents/$AGENT}"
 OS="$(uname -s)"
-case "$OS" in Darwin|Linux) ;; *) echo "install.sh supports macOS and Linux (got $OS)" >&2; exit 1;; esac
+case "$OS" in Darwin|Linux) ;; *) echo "install.sh supports macOS and Linux (got $OS). Windows: install.ps1, see the README" >&2; exit 1;; esac
 case "$AGENT" in *[!A-Za-z0-9_-]*|"") echo "--agent must be letters, digits, '-' or '_' only (got '$AGENT')" >&2; exit 2;; esac
 
 step() { printf '\n\033[1m== %s\033[0m\n' "$*"; }

@@ -83,4 +83,4 @@ def test_file_not_found(tmp_path: Path) -> None:
 def test_notes_folders_are_a_list_of_paths(tmp_path: Path) -> None:
     (tmp_path / "brain.yaml").write_text("name: A\nstores:\n  notes: [~/shared, ./memory]\n")
     cfg = BrainConfig.from_yaml(tmp_path / "brain.yaml")
-    assert [str(p) for p in cfg.stores.notes] == ["~/shared", "memory"]
+    assert [p.as_posix() for p in cfg.stores.notes] == ["~/shared", "memory"]

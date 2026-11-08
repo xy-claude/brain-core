@@ -54,6 +54,7 @@ def test_real_hindsight_unreachable_is_failed_with_detail() -> None:
     assert (
         "Connection" in out["layers"]["hindsight"]["detail"]
         or "refused" in out["layers"]["hindsight"]["detail"]
+        or "timed out" in out["layers"]["hindsight"]["detail"]  # Windows: closed port times out
     )
 
 

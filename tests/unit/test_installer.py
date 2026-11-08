@@ -5,15 +5,20 @@ from __future__ import annotations
 import plistlib
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
 from brain_core import installer
+from tests.conftest import BASH
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="compares a /bin/sh launchd plist against a POSIX home path"
+)
 def test_dry_run_writes_the_service_plists_only(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -58,7 +63,7 @@ def test_key_goes_to_a_private_env_file_not_the_plist(
     assert installer.write_env_file(tmp_path, "ANTHROPIC_API_KEY") == "ANTHROPIC_API_KEY written"
     env_file = tmp_path / ".config" / "hindsight" / "env"
     assert env_file.read_text() == "HINDSIGHT_API_LLM_API_KEY=sk-ant-test-123\n"
-    assert oct(env_file.stat().st_mode & 0o777) == "0o600"
+    assert sys.platform == "win32" or oct(env_file.stat().st_mode & 0o777) == "0o600"
     plist = installer.hindsight_plist(tmp_path, "/x/hindsight-api", provider="anthropic")
     assert (
         "sk-ant" not in str(plist)
@@ -70,11 +75,30 @@ def test_key_goes_to_a_private_env_file_not_the_plist(
 
 def test_install_sh_parses_and_refuses_without_agent() -> None:
     script = ROOT / "install.sh"
-    assert subprocess.run(["bash", "-n", str(script)]).returncode == 0
-    r = subprocess.run(["bash", str(script)], capture_output=True, text=True)
+    assert subprocess.run([BASH, "-n", str(script)]).returncode == 0
+    r = subprocess.run([BASH, str(script)], capture_output=True, text=True)
     assert r.returncode == 2 and "usage:" in r.stderr
     if shutil.which("shellcheck"):
         assert subprocess.run(["shellcheck", "-S", "warning", str(script)]).returncode == 0
+
+
+def test_hindsight_install_declines_on_windows(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("brain_core.installer.sys.platform", "win32")
+    monkeypatch.setattr("brain_core.installer.subprocess.run", lambda *a, **k: pytest.fail(str(a)))
+    assert installer.install_hindsight()["hindsight"].startswith("not supported on Windows")
+
+
+def test_install_ps1_parses_and_refuses_a_bad_agent_name() -> None:
+    pwsh = shutil.which("pwsh") or shutil.which("powershell")
+    if pwsh is None:
+        pytest.skip("no PowerShell on this host")
+    script = ROOT / "install.ps1"
+    r = subprocess.run(
+        [pwsh, "-NoProfile", "-File", str(script), "-Agent", "bad name"],
+        capture_output=True,
+        text=True,
+    )
+    assert r.returncode == 2 and "-Agent must be" in r.stderr + r.stdout
 
 
 def test_systemd_unit_carries_the_environment(tmp_path: Path) -> None:

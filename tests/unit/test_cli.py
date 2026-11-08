@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -130,7 +131,7 @@ def test_init_writes_the_whole_pack_with_user_and_profile(tmp_path: Path) -> Non
         "session-end",
     ]
     hook = out / ".claude" / "hooks" / "block-dangerous-bash.sh"
-    assert hook.stat().st_mode & 0o111, "hook must be executable"
+    assert sys.platform == "win32" or hook.stat().st_mode & 0o111, "hook must be executable"
     assert "$CMD" in hook.read_text(), "shell variables untouched by substitution"
     assert "bank: atlas-brain" in (out / "brain.yaml").read_text()
     md = (out / "CLAUDE.md").read_text()

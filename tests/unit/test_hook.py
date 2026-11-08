@@ -5,11 +5,13 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
 from brain_core.cli.init import PACK
+from tests.conftest import BASH
 
 HOOK = PACK / ".claude" / "hooks" / "block-dangerous-bash.sh"
 needs_jq = pytest.mark.skipif(shutil.which("jq") is None, reason="sed fallback cannot unescape")
@@ -17,7 +19,7 @@ needs_jq = pytest.mark.skipif(shutil.which("jq") is None, reason="sed fallback c
 
 def run(cmd: str) -> int:
     payload = json.dumps({"tool_input": {"command": cmd}})
-    proc = subprocess.run(["bash", str(HOOK)], input=payload, text=True, capture_output=True)
+    proc = subprocess.run([BASH, str(HOOK)], input=payload, text=True, capture_output=True)
     return proc.returncode
 
 
@@ -79,6 +81,7 @@ def fake_brain(tmp_path: Path, body: str) -> str:
     return str(tmp_path)
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="/bin/sh with a fake PATH")
 def test_session_start_says_so_when_brain_is_not_on_path(tmp_path: Path) -> None:
     missing = session_start(str(tmp_path))  # an empty folder: no brain anywhere on PATH
     assert missing.returncode == 0 and "not on PATH" in missing.stdout

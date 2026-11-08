@@ -6,6 +6,7 @@ import json
 import os
 import plistlib
 import subprocess
+import sys
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -119,6 +120,7 @@ def test_weekly_archives_old_sessions_and_refreshes_models(tmp_path: Path) -> No
     assert summary.startswith("# 2026-09 — 1 session files") and "- ancient topic" in summary
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX paths in launchd plists")
 def test_cron_install_writes_launchd_plists(tmp_path: Path) -> None:
     agent = make(tmp_path)
     with agent:
@@ -135,6 +137,7 @@ def test_cron_install_writes_launchd_plists(tmp_path: Path) -> None:
     assert daily["StandardOutPath"].endswith("data/logs/daily.log")
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX paths in crontab lines")
 def test_cron_lines_and_crontab_merge(tmp_path: Path) -> None:
     lines = cron.cron_lines(tmp_path / "a", "/usr/local/bin/brain", "Atlas", "06:07", "Sun 07:13")
     assert lines[0].startswith(f"7 6 * * * /usr/local/bin/brain daily {tmp_path / 'a'}")
@@ -159,6 +162,7 @@ def test_daily_survives_a_typo_date_in_corrections(
     assert "[2026-11-01] Claimed done without output" in Path(out["brief"]).read_text()
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="runs a #!/bin/sh stand-in for hindsight-admin")
 def test_backup_keeps_only_the_newest_n(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     admin = tmp_path / "hindsight-admin"
     admin.write_text('#!/bin/sh\n: > "$2"\n')
@@ -210,11 +214,59 @@ def test_crontab_install_status_uninstall_on_linux(
     assert len(removed) == 2 and tab["text"] == "0 3 * * * backup.sh\n"
 
 
+def test_task_scheduler_install_status_uninstall_on_windows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("brain_core.cron.sys.platform", "win32")
+    tasks: dict[str, str] = {}
+
+    def fake_run(cmd: list[str], **kw: Any) -> subprocess.CompletedProcess[str]:
+        name = cmd[cmd.index("/TN") + 1]
+        if cmd[1] == "/Create":
+            tasks[name] = cmd[cmd.index("/TR") + 1]
+        elif cmd[1] == "/Delete":
+            del tasks[name]
+        return subprocess.CompletedProcess(cmd, 0 if name in tasks else 1, stdout="", stderr="")
+
+    monkeypatch.setattr("brain_core.cron.subprocess.run", fake_run)
+    monkeypatch.setattr("brain_core.cron.shutil.which", lambda _: r"C:\b\brain.exe")
+    agent = make(tmp_path)
+    with agent:
+        names = cron.install(agent)
+        assert names == ["brain-core.atlas.daily", "brain-core.atlas.weekly"]
+        assert (
+            tasks["brain-core.atlas.daily"].startswith('cmd /c ""')
+            and ' daily "' in tasks["brain-core.atlas.daily"]
+        )
+        assert cron.status(agent) == {
+            "daily": "installed (Task Scheduler)",
+            "weekly": "installed (Task Scheduler)",
+        }
+        removed = cron.uninstall(agent)
+    assert removed == names and tasks == {}
+
+
+def test_schtasks_commands_carry_the_schedule() -> None:
+    cmds = cron.schtasks_commands(
+        Path(r"C:\Agents\My A"), r"C:\b\brain.exe", "A", "06:07", "Sun 07:13"
+    )
+    daily, weekly = cmds["brain-core.a.daily"], cmds["brain-core.a.weekly"]
+    assert daily[daily.index("/ST") + 1] == "06:07" and "DAILY" in daily
+    assert weekly[weekly.index("/D") + 1] == "SUN" and weekly[weekly.index("/ST") + 1] == "07:13"
+    # the log path joins with the host separator, so only its ends are pinned here
+    assert daily[-1].startswith(
+        'cmd /c ""C:\\b\\brain.exe" daily "C:\\Agents\\My A" >> "C:\\Agents\\My A'
+    )
+    assert daily[-1].endswith('daily.log" 2>&1"')
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX quoting")
 def test_cron_lines_quote_a_path_with_a_space() -> None:
     lines = cron.cron_lines(Path("/h/My Agents/a"), "/b/brain", "A", "06:07", "Sun 07:13")
     assert "daily '/h/My Agents/a' >> '/h/My Agents/a/data/logs/daily.log'" in lines[0]
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="launchd path calls os.getuid")
 def test_launchd_install_and_uninstall_call_launchctl(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
