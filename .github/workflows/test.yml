@@ -60,6 +60,8 @@ jobs:
       - run: uv python install 3.12
       - run: uv sync --all-extras
       - run: uv run pytest -q
+        env:
+          PYTHONUTF8: 1  # the fixtures write files with the default encoding; brain-core itself always names utf-8
       - name: brain.exe from uv tool installs, inits a lite agent, lists its tools
         shell: pwsh
         run: |

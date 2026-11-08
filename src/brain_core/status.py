@@ -138,7 +138,7 @@ def _context(agent: Agent) -> dict[str, Any]:
     for pat in agent.config.status.context_files:
         p = Path(pat).expanduser()
         for f in sorted(glob.glob(str(p if p.is_absolute() else base / p))):
-            files[str(Path(f).relative_to(base)) if str(f).startswith(str(base)) else f] = (
+            files[Path(f).relative_to(base).as_posix() if str(f).startswith(str(base)) else f] = (
                 len(Path(f).read_bytes()) // 4
             )
     return {"tokens": sum(files.values()), "files": files}

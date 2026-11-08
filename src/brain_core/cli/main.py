@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import io
+import sys
 from pathlib import Path
 from typing import Annotated
 
@@ -11,6 +13,13 @@ from brain_core import __version__
 from brain_core.agent import Agent
 from brain_core.cli.init import init_agent
 from brain_core.stores.vault import VaultStore
+
+if (
+    sys.platform == "win32"
+):  # hooks and MCP clients read UTF-8; the Windows console default is cp1252
+    for _stream in (sys.stdout, sys.stderr):
+        if isinstance(_stream, io.TextIOWrapper):
+            _stream.reconfigure(encoding="utf-8")
 
 app = typer.Typer(
     help="brain-core — cognitive primitives for AI agents.",

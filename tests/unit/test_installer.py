@@ -5,6 +5,7 @@ from __future__ import annotations
 import plistlib
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,9 @@ from brain_core import installer
 ROOT = Path(__file__).resolve().parents[2]
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="compares a /bin/sh launchd plist against a POSIX home path"
+)
 def test_dry_run_writes_the_service_plists_only(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -58,7 +62,7 @@ def test_key_goes_to_a_private_env_file_not_the_plist(
     assert installer.write_env_file(tmp_path, "ANTHROPIC_API_KEY") == "ANTHROPIC_API_KEY written"
     env_file = tmp_path / ".config" / "hindsight" / "env"
     assert env_file.read_text() == "HINDSIGHT_API_LLM_API_KEY=sk-ant-test-123\n"
-    assert oct(env_file.stat().st_mode & 0o777) == "0o600"
+    assert sys.platform == "win32" or oct(env_file.stat().st_mode & 0o777) == "0o600"
     plist = installer.hindsight_plist(tmp_path, "/x/hindsight-api", provider="anthropic")
     assert (
         "sk-ant" not in str(plist)
