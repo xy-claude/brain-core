@@ -66,4 +66,5 @@ jobs:
         shell: pwsh
         run: |
           uv tool install --from . brain-core-mcp
-          uv run python tests/smoke_stdio.py "$env:USERPROFILE\.local\bin\brain.exe"
+          $bin = uv tool dir --bin  # setup-uv moves the tool bin dir off %USERPROFILE%
+          uv run python tests/smoke_stdio.py "$bin\brain.exe"
