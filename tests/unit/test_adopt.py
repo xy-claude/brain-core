@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from brain_core.agent import Agent
@@ -63,6 +65,7 @@ def test_adopt_is_additive_and_idempotent(tmp_path: Path) -> None:
     assert len(hooks["Stop"]) == 2  # no duplicate hook on the second run
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="/bin/sh with a fake executable")
 def test_adopted_session_start_says_so_when_the_program_is_gone(tmp_path: Path) -> None:
     import subprocess
 

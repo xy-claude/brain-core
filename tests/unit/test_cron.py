@@ -120,6 +120,7 @@ def test_weekly_archives_old_sessions_and_refreshes_models(tmp_path: Path) -> No
     assert summary.startswith("# 2026-09 — 1 session files") and "- ancient topic" in summary
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX paths in launchd plists")
 def test_cron_install_writes_launchd_plists(tmp_path: Path) -> None:
     agent = make(tmp_path)
     with agent:
@@ -136,6 +137,7 @@ def test_cron_install_writes_launchd_plists(tmp_path: Path) -> None:
     assert daily["StandardOutPath"].endswith("data/logs/daily.log")
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX paths in crontab lines")
 def test_cron_lines_and_crontab_merge(tmp_path: Path) -> None:
     lines = cron.cron_lines(tmp_path / "a", "/usr/local/bin/brain", "Atlas", "06:07", "Sun 07:13")
     assert lines[0].startswith(f"7 6 * * * /usr/local/bin/brain daily {tmp_path / 'a'}")
@@ -258,6 +260,7 @@ def test_schtasks_commands_carry_the_schedule() -> None:
     assert daily[-1].endswith('daily.log" 2>&1"')
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX quoting")
 def test_cron_lines_quote_a_path_with_a_space() -> None:
     lines = cron.cron_lines(Path("/h/My Agents/a"), "/b/brain", "A", "06:07", "Sun 07:13")
     assert "daily '/h/My Agents/a' >> '/h/My Agents/a/data/logs/daily.log'" in lines[0]

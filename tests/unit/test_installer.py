@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from brain_core import installer
+from tests.conftest import BASH
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -74,8 +75,8 @@ def test_key_goes_to_a_private_env_file_not_the_plist(
 
 def test_install_sh_parses_and_refuses_without_agent() -> None:
     script = ROOT / "install.sh"
-    assert subprocess.run(["bash", "-n", str(script)]).returncode == 0
-    r = subprocess.run(["bash", str(script)], capture_output=True, text=True)
+    assert subprocess.run([BASH, "-n", str(script)]).returncode == 0
+    r = subprocess.run([BASH, str(script)], capture_output=True, text=True)
     assert r.returncode == 2 and "usage:" in r.stderr
     if shutil.which("shellcheck"):
         assert subprocess.run(["shellcheck", "-S", "warning", str(script)]).returncode == 0

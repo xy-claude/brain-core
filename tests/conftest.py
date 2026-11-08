@@ -2,12 +2,22 @@
 
 from __future__ import annotations
 
+import shutil
+import sys
 from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 
 from brain_core.storage import Database, migrate
+
+# On Windows a bare `bash` is the WSL launcher; the hooks and install.sh need Git Bash, which is
+# what Claude Code itself uses there.
+BASH = (
+    r"C:\Program Files\Git\bin\bash.exe"
+    if sys.platform == "win32" and Path(r"C:\Program Files\Git\bin\bash.exe").exists()
+    else shutil.which("bash") or "bash"
+)
 
 
 @pytest.fixture
