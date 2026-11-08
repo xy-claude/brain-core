@@ -44,7 +44,7 @@ wheels = [
 
 [[package]]
 name = "brain-core-mcp"
-version = "0.4.10"
+version = "0.4.11"
 source = { editable = "." }
 dependencies = [
     { name = "mcp" },
