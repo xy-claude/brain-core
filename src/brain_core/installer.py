@@ -131,6 +131,12 @@ def install_hindsight(
     wait: float = 120.0,
 ) -> dict[str, str]:
     """Install (idempotent) and start Hindsight. ``run=False`` only writes the plists."""
+    if sys.platform == "win32":
+        return {
+            "hindsight": "not supported on Windows: no service manager path and no pg0 build "
+            "verified. Stay lite (vault + SQLite), or run Hindsight on a Linux host and point "
+            "brain.yaml at its URL."
+        }
     home = home or Path.home()
     launch_dir = launch_dir or home / "Library" / "LaunchAgents"
     launch_dir.mkdir(parents=True, exist_ok=True)

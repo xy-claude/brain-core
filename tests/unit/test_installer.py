@@ -77,6 +77,25 @@ def test_install_sh_parses_and_refuses_without_agent() -> None:
         assert subprocess.run(["shellcheck", "-S", "warning", str(script)]).returncode == 0
 
 
+def test_hindsight_install_declines_on_windows(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("brain_core.installer.sys.platform", "win32")
+    monkeypatch.setattr("brain_core.installer.subprocess.run", lambda *a, **k: pytest.fail(str(a)))
+    assert installer.install_hindsight()["hindsight"].startswith("not supported on Windows")
+
+
+def test_install_ps1_parses_and_refuses_a_bad_agent_name() -> None:
+    pwsh = shutil.which("pwsh") or shutil.which("powershell")
+    if pwsh is None:
+        pytest.skip("no PowerShell on this host")
+    script = ROOT / "install.ps1"
+    r = subprocess.run(
+        [pwsh, "-NoProfile", "-File", str(script), "-Agent", "bad name"],
+        capture_output=True,
+        text=True,
+    )
+    assert r.returncode == 2 and "-Agent must be" in r.stderr + r.stdout
+
+
 def test_systemd_unit_carries_the_environment(tmp_path: Path) -> None:
     plist = installer.hindsight_plist(tmp_path, "/x/hindsight-api")
     unit = installer.hindsight_unit("/x/hindsight-api", plist["EnvironmentVariables"])

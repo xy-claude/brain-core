@@ -6,14 +6,19 @@ dated, idempotent, append-only forms the schema defines.
 
 from __future__ import annotations
 
-import fcntl
 import os
 import re
+import sys
 import time
 from datetime import date
 from pathlib import Path
 
 from brain_core.stores.base import Kind, Record, WriteResult, record_id
+
+if sys.platform == "win32":
+    import msvcrt
+else:
+    import fcntl
 
 _FRONTMATTER = re.compile(r"^---\n(.*?)\n---\n", re.S)
 _HEADING = re.compile(r"^(#{1,3}) (.+?)\s*$")
@@ -366,11 +371,19 @@ class _Lock:
 
     def __enter__(self) -> _Lock:
         self.fd = os.open(self.path, os.O_CREAT | os.O_RDWR)
-        fcntl.flock(self.fd, fcntl.LOCK_EX)
+        if sys.platform == "win32":
+            # shortcut: LK_LOCK retries once a second for 10 s then raises, upgrade to a retry
+            # loop if a Windows user ever reports a lock error
+            msvcrt.locking(self.fd, msvcrt.LK_LOCK, 1)
+        else:
+            fcntl.flock(self.fd, fcntl.LOCK_EX)
         return self
 
     def __exit__(self, *exc: object) -> None:
-        fcntl.flock(self.fd, fcntl.LOCK_UN)
+        if sys.platform == "win32":
+            msvcrt.locking(self.fd, msvcrt.LK_UNLCK, 1)
+        else:
+            fcntl.flock(self.fd, fcntl.LOCK_UN)
         os.close(self.fd)
 
 

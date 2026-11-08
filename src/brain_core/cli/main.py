@@ -176,7 +176,7 @@ def cron_cmd(
         bool, typer.Option("--no-load", help="Write plists without launchctl.")
     ] = False,
 ) -> None:
-    """Register `brain daily` and `brain weekly` with launchd (macOS)."""
+    """Register `brain daily` and `brain weekly`: launchd, crontab (Linux) or Task Scheduler."""
     from brain_core import cron
 
     with _open(path) as agent:

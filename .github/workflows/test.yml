@@ -47,3 +47,21 @@ jobs:
           python3 -m venv /tmp/clean
           /tmp/clean/bin/pip install -q dist/*.whl
           python3 tests/smoke_stdio.py /tmp/clean/bin/brain
+
+  windows:
+    # the Windows path: Task Scheduler cron, msvcrt vault lock, uv-installed brain.exe; lint and
+    # types are checked once above
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv sync --all-extras
+      - run: uv run pytest -q
+      - name: brain.exe from uv tool installs, inits a lite agent, lists its tools
+        shell: pwsh
+        run: |
+          uv tool install --from . brain-core-mcp
+          uv run python tests/smoke_stdio.py "$env:USERPROFILE\.local\bin\brain.exe"

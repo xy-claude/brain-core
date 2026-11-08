@@ -77,7 +77,7 @@ Plus `brain_status()` for health in one call: which stores are up, how many toke
 
 | You need | Why | Check |
 |---|---|---|
-| macOS, or Linux with systemd | the installer sets up a background service and cron | `uname` |
+| macOS, Linux with systemd, or Windows 10 1809+ | the installer sets up a background service and cron (Windows: scheduled tasks, no Hindsight yet) | `uname`, or `winver` |
 | about 2 GB of disk and 10 minutes, or `--lite` | Hindsight ships an embedded Postgres and a CPU embedding model; `--lite` skips it | |
 | an Anthropic API key, or a Claude Code login, or `--lite` | Hindsight uses an LLM to reason over memories | `echo $ANTHROPIC_API_KEY` |
 | Claude Code | the agent runs inside it; the installer adds it if missing | `claude --version` |
@@ -158,13 +158,23 @@ Adds `brain.yaml`, the `brain` MCP server, the four hooks and the memory rule to
 
 The same one line. It needs `git` and `curl` already present. It then installs `uv` from astral.sh, installs Claude Code with npm when node is present, runs Hindsight as a `systemd --user` service, and writes the two jobs into your user crontab as tagged lines it can find and replace on re-run.
 
+### Windows
+
+One line in PowerShell (5.1 or 7):
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/xy-claude/brain-core/main/install.ps1))) -Agent Atlas -User Alex
+```
+
+It installs Git for Windows with winget when missing (Claude Code runs its hooks in Git Bash), `uv` from astral.sh, Claude Code from claude.ai, then `brain` with `uv tool`, and registers `brain daily` and `brain weekly` in Task Scheduler as `brain-core.atlas.daily` and `.weekly`. Hindsight does not run on Windows yet, so the agent is always lite: vault plus SQLite full-text search, the same configuration the recall numbers below are measured on. Options: `-Dir`, `-ProfileDir`, `-Ref`. Open a new terminal afterwards so `brain` is on PATH.
+
 ### Manual, any platform
 
 ```bash
 uv tool install brain-core-mcp   # or: uv tool install git+https://github.com/xy-claude/brain-core@v0.4.0
 brain init Atlas --path ~/Agents/Atlas --user Alex
 brain hindsight install          # launchd on macOS, systemd --user on Linux
-brain cron install ~/Agents/Atlas
+brain cron install ~/Agents/Atlas    # launchd, crontab or Task Scheduler
 brain doctor ~/Agents/Atlas
 ```
 

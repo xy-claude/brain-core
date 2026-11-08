@@ -4,6 +4,9 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+### Added
+- Windows. `install.ps1` is the one-line installer for PowerShell: Git for Windows, uv, Claude Code, `brain`, a lite agent and the two scheduled jobs. `brain cron install|status|uninstall` use Task Scheduler on Windows (`schtasks`, tasks `brain-core.<agent>.daily` and `.weekly`). The vault lock uses `msvcrt` there; it imported `fcntl` at module load before, so nothing in brain-core could start on Windows. Hindsight stays macOS and Linux only, so Windows agents run lite. CI runs the test suite and the stdio smoke test on Windows.
+
 ## [0.4.10] - 2026-11-07
 
 ### Fixed
