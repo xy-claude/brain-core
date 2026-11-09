@@ -4,6 +4,18 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+## [0.4.26] - 2026-11-09
+
+### Changed
+- The install line is the same on macOS and Windows. Both README lines carry the agent, the user and the desktop flag, and both install Hindsight. On Windows Hindsight was opt-in; it is now the default, and `-Lite` skips it as `--lite` does on macOS. `-Hindsight` is still accepted and ignored, so a line copied earlier keeps working.
+- No API key is needed for Hindsight. With no `--provider` (`-Provider`), the installer uses `anthropic` when `ANTHROPIC_API_KEY` is set and your Claude Code login otherwise, and says which. A provider you name needs its key in the shell: the installer stops before it changes anything.
+- The Windows closing summary has a Hindsight line: running, NOT running, or not installed (lite).
+
+### Fixed
+- An install without an API key never got a running Hindsight: the server refuses to start for a provider whose key is missing, and the installer only printed a note.
+- Running the install line again on an agent made lite installed Hindsight (about 2 GB) that its `brain.yaml` never used. A lite agent now stays lite.
+- `--desktop` on Linux printed a failed connection. It is skipped with a message: the desktop app has no Linux build.
+
 ## [0.4.25] - 2026-11-09
 
 ### Changed
