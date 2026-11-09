@@ -133,7 +133,7 @@ def session_end(
         )
     marker = _marker(agent)
     marker.parent.mkdir(parents=True, exist_ok=True)
-    marker.write_text(sid + "\n")
+    marker.write_text(_closing(agent, sid, session_id is not None) + "\n")
     out["marker"] = str(marker)
     agent.log_event("session_end", {"session_id": sid, "writes": len(writes)})
     agent.end_session()
@@ -193,6 +193,17 @@ def _vault(agent: Agent) -> VaultStore | None:
 
 def _hindsight(agent: Agent) -> HindsightStore | None:
     return next((s for s in agent.stores if isinstance(s, HindsightStore)), None)
+
+
+def _closing(agent: Agent, sid: str, explicit: bool) -> str:
+    """The id the close marker must hold. A server that restarted mid-session carries an
+    automatic id that ``brain_session('start')`` never saw; the session being closed is then the
+    last one started. Writing the automatic id left that session looking crashed at the next
+    start and in ``brain_status``."""
+    if explicit or agent.recent_events(session_id=sid, event_type="session_start", limit=1):
+        return sid
+    started = agent.recent_events(event_type="session_start", limit=1)
+    return str(started[0].payload.get("session_id") or sid) if started else sid
 
 
 def _marker(agent: Agent) -> Path:

@@ -4,6 +4,9 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+### Fixed
+- A session closed after the brain server had restarted looked crashed. The restarted server carries an automatic session id, and `brain_session('end')` wrote that id to the close marker instead of the id of the session that was started, so the next start reported `recovery` and `brain_status` said `unclosed`. The marker now holds the last started session when the current id was never started.
+
 ## [0.4.28] - 2026-11-10
 
 ### Fixed
