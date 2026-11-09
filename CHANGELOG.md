@@ -4,6 +4,11 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+## [0.4.25] - 2026-11-09
+
+### Changed
+- README: the one-line install command is the first thing on the page, with a short options table (desktop app, quick install, full install) under it. The long introduction is five bullets, "Is it an MCP server or a tool?" sits below the five tools, and the step-by-step section is now "Install details". Requirements lists Windows. No code changed.
+
 ## [0.4.24] - 2026-11-09
 
 ### Added
