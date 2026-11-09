@@ -472,7 +472,8 @@ def backup(agent: Agent, today: date | None = None) -> str:
 
 def _admin() -> str | None:
     found = shutil.which("hindsight-admin")
-    fallback = Path("~/.local/bin/hindsight-admin").expanduser()
+    exe = "hindsight-admin.exe" if sys.platform == "win32" else "hindsight-admin"
+    fallback = Path("~/.local/bin").expanduser() / exe
     return found or (str(fallback) if fallback.exists() else None)
 
 

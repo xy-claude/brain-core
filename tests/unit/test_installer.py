@@ -82,10 +82,53 @@ def test_install_sh_parses_and_refuses_without_agent() -> None:
         assert subprocess.run(["shellcheck", "-S", "warning", str(script)]).returncode == 0
 
 
-def test_hindsight_install_declines_on_windows(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_windows_dry_run_writes_only_the_launcher(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pwsh = shutil.which("pwsh") or shutil.which("powershell")  # before which() is stubbed
+    real_run = subprocess.run
     monkeypatch.setattr("brain_core.installer.sys.platform", "win32")
+    monkeypatch.setattr("brain_core.installer.shutil.which", lambda _: None)
     monkeypatch.setattr("brain_core.installer.subprocess.run", lambda *a, **k: pytest.fail(str(a)))
-    assert installer.install_hindsight()["hindsight"].startswith("not supported on Windows")
+    out = installer.install_hindsight(home=tmp_path, provider="claude-code", run=False)
+    script = Path(out["launcher"])
+    text = script.read_text(encoding="utf-8")
+    assert out["service"] == "not started (dry run)" and script.name == "hindsight.ps1"
+    assert "$env:HINDSIGHT_API_DATABASE_URL = 'pg0://hindsight'" in text
+    assert "$env:HINDSIGHT_API_LLM_PROVIDER = 'claude-code'" in text
+    assert "$env:PATH" not in text and "LLM_API_KEY" not in text, "the key stays in the env file"
+    assert "hindsight-api.exe" in text and not (tmp_path / "Library").exists()
+    if pwsh:
+        parse = (
+            "$e = $null; [void][System.Management.Automation.Language.Parser]::ParseFile("
+            f"'{script}', [ref]$null, [ref]$e); exit $e.Count"
+        )
+        assert real_run([pwsh, "-NoProfile", "-Command", parse]).returncode == 0
+
+
+def test_windows_install_registers_a_logon_entry_and_starts_the_launcher(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("brain_core.installer.sys.platform", "win32")
+    api = tmp_path / ".local" / "bin" / "hindsight-api.exe"
+    api.parent.mkdir(parents=True)
+    api.write_text("")
+    monkeypatch.setattr("brain_core.installer.shutil.which", lambda _: None)
+    ran: list[list[str]] = []
+    started: list[list[str]] = []
+    monkeypatch.setattr("brain_core.installer.subprocess.run", lambda cmd, **k: ran.append(cmd))
+    monkeypatch.setattr(
+        "brain_core.installer.subprocess.Popen", lambda cmd, **k: started.append(cmd)
+    )
+    monkeypatch.setattr("brain_core.installer.wait_healthy", lambda port, wait: True)
+    out = installer.install_hindsight(home=tmp_path, provider="claude-code")
+    assert out["hindsight-api"] == "present" and out["service"] == "healthy"
+    reg = ran[0]
+    assert reg[:3] == ["reg", "add", installer.RUN_KEY] and installer.RUN_VALUE in reg
+    assert "hindsight.ps1" in reg[-1] and "-WindowStyle Hidden" in reg[-1]
+    assert ran[1][0] == "powershell" and "Stop-Process" in ran[1][-1], "an old launcher is stopped"
+    assert started == [[*ran[1][:2], "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden",
+                        "-File", out["launcher"]]]  # fmt: skip
 
 
 def test_install_ps1_parses_and_refuses_a_bad_agent_name() -> None:
