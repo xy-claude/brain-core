@@ -77,6 +77,14 @@ function Run-Bounded($file, $arguments, $seconds) {
   return $p.ExitCode -eq 0
 }
 
+# The Claude desktop app, not the Claude Code program of the same name in .local\bin.
+function Get-ClaudeApp { Get-CimInstance Win32_Process -Filter "Name='claude.exe'" | Where-Object { $_.ExecutablePath -and $_.ExecutablePath -notlike "*\.local\bin\*" } }
+# True once the desktop app itself has started `brain serve`: the proof that it read the setting.
+function Test-ClaudeLoadedBrain {
+  $apps = @(Get-ClaudeApp | ForEach-Object { $_.ProcessId })
+  [bool](Get-CimInstance Win32_Process -Filter "Name='brain.exe'" | Where-Object { $_.CommandLine -like "* serve *" -and $apps -contains $_.ParentProcessId })
+}
+
 Step "1/7 Git for Windows (Claude Code runs its hooks in Git Bash)"
 if (Have git) { "present" }
 elseif (-not (Have winget)) { "skipped: no winget on this PC. Claude Code needs Git: https://git-scm.com/download/win" }
@@ -180,6 +188,39 @@ if ($claudeOk) { "present" } else {
   }
 }
 
+# The app reads its settings only when it starts, and closing its window does not stop it. So the
+# script watches for the restart and reports what the app did, instead of leaving that to trust.
+$desktopState = "not asked for (add -Desktop)"
+if ($Desktop -and -not $desktopOk) { $desktopState = "NOT connected" }
+if ($Desktop -and $desktopOk) {
+  Step "+ Claude desktop app: has it loaded brain-core?"
+  if (Test-ClaudeLoadedBrain) {
+    "yes: the app is running and has started brain-core"
+    $desktopState = "connected and loaded"
+  } elseif (-not @(Get-ClaudeApp).Count) {
+    "the Claude app is not open. brain-core loads the next time you open it"
+    $desktopState = "connected; loads when Claude is next opened"
+  } else {
+    Write-Host "The Claude app is open but started before this install, so it has not read the new setting." -ForegroundColor Yellow
+    Write-Host "  1. Right-click the Claude icon near the clock (the ^ arrow shows hidden icons) and choose Quit." -ForegroundColor Yellow
+    Write-Host "  2. Open Claude again from the Start menu." -ForegroundColor Yellow
+    "watching for that, for at most 5 minutes"
+    $waited = 0
+    while ($waited -lt 300 -and -not (Test-ClaudeLoadedBrain)) {
+      Start-Sleep -Seconds 5
+      $waited += 5
+      if ($waited % 30 -eq 0) { Write-Host "  still watching ($waited of at most 300 seconds): $(if (@(Get-ClaudeApp).Count) { 'Claude is open, brain-core not loaded yet' } else { 'Claude is closed, open it again' })" }
+    }
+    if (Test-ClaudeLoadedBrain) {
+      "yes: Claude was restarted and has started brain-core"
+      $desktopState = "connected and loaded"
+    } else {
+      $problems += "The Claude app has not loaded brain-core. Quit it from the icon near the clock, open it again, then ask it: use brain_status"
+      $desktopState = "connected, but the app has NOT loaded it yet"
+    }
+  }
+}
+
 if ($problems.Count -eq 0) {
   Step "Install complete: every step above finished" "Green"
 } else {
@@ -187,7 +228,7 @@ if ($problems.Count -eq 0) {
   $problems | ForEach-Object { Write-Host "  - $_" -ForegroundColor Red }
 }
 "  memory folder     $Dir"
-"  desktop app       $(if (-not $Desktop) { 'not asked for (add -Desktop)' } elseif ($desktopOk) { 'connected: quit Claude from the icon near the clock, then open it again' } else { 'NOT connected' })"
+"  desktop app       $desktopState"
 "  scheduled tasks   $(if ($tasksOk) { 'created' } else { 'NOT created' })"
 "  Claude Code       $(if ($claudeOk) { 'installed' } else { 'NOT installed' })"
 
