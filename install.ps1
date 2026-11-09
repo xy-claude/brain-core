@@ -1,6 +1,6 @@
 # brain-core one-line installer (Windows 10 1809+, PowerShell 5.1 or 7).
 #
-#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/xy-claude/brain-core/main/install.ps1))) -Agent NAME [-User Alex] [-Dir C:\Agents\NAME] [-Desktop] [-Lite] [-Provider anthropic|openai|claude-code] [-ApiKeyEnv VAR] [-ProfileDir DIR] [-Ref v0.4.26]
+#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/xy-claude/brain-core/main/install.ps1))) -Agent NAME [-User Alex] [-Dir C:\Agents\NAME] [-Desktop] [-Lite] [-Provider anthropic|openai|claude-code] [-ApiKeyEnv VAR] [-ProfileDir DIR] [-Ref v0.4.27]
 #
 # Idempotent: re-running skips what is already in place. Every step prints what it did.
 # It never asks for secrets. Two things stay yours: `claude` login and `gh auth login`.
