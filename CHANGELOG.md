@@ -4,6 +4,8 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+## [0.4.20] - 2026-11-09
+
 ### Changed
 - `install.ps1` shows everything it does and ends with the truth. Downloads print how many MB have arrived; a connection that brings nothing for 60 seconds is an error with a message. Claude Code is fetched by the script itself, from the same source and with the same checksum test as its own installer, because that installer downloads 345 MB without a line on the screen (a five-minute limit had been stopping it mid-download). `brain cron install` says what it is doing before each step and lets Task Scheduler's own lines through. Long steps print "still working" every 15 seconds. The last lines are either "Install complete: every step above finished" or "Install NOT complete" with each step that did not work and how to run it again.
 - Running an installer again upgrades a `brain` that is already installed (`uv tool upgrade`), so a second run brings the fixes of newer versions instead of keeping the old program.
