@@ -4,6 +4,8 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+## [0.4.14] - 2026-11-09
+
 ### Fixed
 - The vault lock file lived inside the vault (`.brain.lock`). A sync service can evict a file there: iCloud turned it into a placeholder that a background process could not open, and every vault write then failed with `PermissionError` while Hindsight kept accepting the same items. The lock is now a file under `~/.cache/brain-core/locks/`, named after the path it guards. An old `.brain.lock` in a vault is ignored and can be deleted.
 - `install.ps1` ended a failed step with `exit`, which closes the PowerShell window the documented one-liner runs in, taking the error message with it. It now throws, so the window stays and the reason is on screen.
