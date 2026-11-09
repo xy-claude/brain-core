@@ -185,7 +185,7 @@ The agent's memory also works in the Claude desktop app's chat, on macOS and Win
 brain desktop ~/Agents/Atlas
 ```
 
-It adds one `brain` server to the app's `claude_desktop_config.json`, keeps everything else in that file, and leaves a `.bak` copy the first time it changes one. Then quit the app fully and reopen it; closing the window is not enough. On Windows a Microsoft Store install keeps its settings in a package folder, and that one is written too when it exists. If the file is somewhere else, open it from the app (Settings, Developer, Edit Config) and pass it with `--config`.
+It adds one `brain` server to the app's `claude_desktop_config.json`, keeps everything else in that file, and leaves a `.bak` copy the first time it changes one. Then quit the app fully and reopen it; closing the window is not enough. On Windows the installer watches for that restart and tells you whether the app has loaded brain-core. On Windows a Microsoft Store install keeps its settings in a package folder, and that one is written too when it exists. If the file is somewhere else, open it from the app (Settings, Developer, Edit Config) and pass it with `--config`.
 
 | | Claude Code | Claude desktop app |
 |---|---|---|

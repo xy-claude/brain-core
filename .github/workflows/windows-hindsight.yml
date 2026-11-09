@@ -90,7 +90,7 @@ jobs:
           if (-not ($out -match "reached the end of the installer")) { throw "the installer ended the PowerShell session" }
           if (-not ($out -match "installed uv ")) { throw "uv was not installed by our own download" }
           # progress must be on the screen, and the ending must be the truthful one
-          foreach ($line in "uv: downloaded", "Task Scheduler: creating brain-core.atlas.daily", "Claude Code: downloaded", "Install complete: every step above finished", "scheduled tasks   created", "Claude Code       installed") {
+          foreach ($line in "uv: downloaded", "Task Scheduler: creating brain-core.atlas.daily", "Claude Code: downloaded", "Install complete: every step above finished", "scheduled tasks   created", "Claude Code       installed", "desktop app       connected; loads when Claude is next opened") {
             if (-not ($out -match [regex]::Escape($line))) { throw "missing from the installer's output: $line" }
           }
 
