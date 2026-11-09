@@ -49,6 +49,7 @@ source = { editable = "." }
 dependencies = [
     { name = "mcp" },
     { name = "pydantic" },
+    { name = "pywin32", marker = "sys_platform == 'win32'" },
     { name = "pyyaml" },
     { name = "typer" },
 ]
@@ -68,6 +69,7 @@ dev = [
 requires-dist = [
     { name = "mcp", specifier = ">=1.0,<2" },
     { name = "pydantic", specifier = ">=2.9" },
+    { name = "pywin32", marker = "sys_platform == 'win32'", specifier = ">=306" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "typer", specifier = ">=0.15" },
 ]

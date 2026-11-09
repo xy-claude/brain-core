@@ -61,9 +61,13 @@ def test_config_paths_per_platform(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "Local"))
     store = tmp_path / "Local" / "Packages" / "Claude_abc123" / "LocalCache" / "Roaming" / "Claude"
     store.mkdir(parents=True)
+    data = tmp_path / "Local" / "Claude-Data" / "claude_abc123"  # newer Store builds keep data here
+    data.mkdir(parents=True)
+    (tmp_path / "Local" / "Claude-Data" / "README.txt").write_text("not a folder")
     assert desktop.config_paths(tmp_path) == [
         tmp_path / "Roaming" / "Claude" / desktop.CONFIG_NAME,
         store / desktop.CONFIG_NAME,
+        data / desktop.CONFIG_NAME,
     ]
 
 

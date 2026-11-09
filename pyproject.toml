@@ -22,6 +22,7 @@ classifiers = [
 dependencies = [
     "mcp>=1.0,<2",  # the server is written against the 1.x FastMCP API
     "pydantic>=2.9",
+    "pywin32>=306; sys_platform == 'win32'",  # Task Scheduler's COM interface (brain cron)
     "pyyaml>=6.0",
     "typer>=0.15",
 ]
