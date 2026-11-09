@@ -4,6 +4,8 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+## [0.4.24] - 2026-11-09
+
 ### Added
 - An update notice. Installed copies never updated by themselves and nothing told their owner a newer version existed. `brain daily` now asks PyPI once a day for the newest version and keeps the answer in `data/update.json`; when it is newer than the running one, the daily brief opens with an "Update available" line and `brain doctor` and `brain_status` show it, with the command to run. Nothing is installed automatically. `brain doctor` and `brain_status` read the file and never use the network. Switch the request off with `update_check: false` under `cron:` in `brain.yaml`. Existing agents get the check without editing anything, since the setting defaults to on.
 
