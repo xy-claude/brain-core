@@ -4,6 +4,10 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+### Changed
+- `install.ps1` always reaches its end and says so. The scheduled-task step and the Claude Code step run through one helper that prints "still working" every 15 seconds and gives up at a limit (150 and 300 seconds); neither is required. The script ends with an "Install complete" summary: the memory folder, whether the desktop app is connected, whether the tasks and Claude Code were installed.
+- Running an installer again upgrades a `brain` that is already installed (`uv tool upgrade`), so a second run brings the fixes of newer versions instead of keeping the old program.
+
 ## [0.4.19] - 2026-11-09
 
 ### Fixed

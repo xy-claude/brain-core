@@ -63,7 +63,8 @@ step "4/8 brain-core${REF:+ ($REF)}"
 if [ -n "$REF" ]; then
   uv tool install --python 3.12 --force "git+https://github.com/xy-claude/brain-core@$REF"
 elif have brain; then
-  echo "brain present ($(brain version))"
+  uv tool upgrade brain-core-mcp 2>/dev/null || true  # a second run brings newer fixes; not a uv tool: left alone
+  echo "brain $(brain version)"
 else
   uv tool install --python 3.12 brain-core-mcp || uv tool install --python 3.12 "git+https://github.com/xy-claude/brain-core@main"
 fi

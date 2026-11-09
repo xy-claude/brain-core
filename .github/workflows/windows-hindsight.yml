@@ -85,6 +85,17 @@ jobs:
           if (-not ($out -match "policy: Restricted")) { throw "the child did not run under Restricted" }
           if (-not ($out -match "reached the end of the installer")) { throw "the installer ended the PowerShell session" }
           if (-not ($out -match "installed uv ")) { throw "uv was not installed by our own download" }
+          if (-not ($out -match "== Install complete")) { throw "no completion summary" }
+          if (-not ($out -match "scheduled tasks   created")) { throw "the summary does not report the tasks" }
+
+      - name: a second run upgrades nothing it should not, and completes again
+        shell: powershell
+        run: |
+          $out = powershell -NoProfile -ExecutionPolicy Restricted -Command "& ([scriptblock]::Create((Get-Content -Raw install.ps1))) -Agent Atlas -User Alex -Desktop -Dir '$HOME\My Agents\Atlas'"
+          $out
+          if (-not ($out -match "already initialised")) { throw "the second run did not keep the agent" }
+          if (-not ($out -match "already connected")) { throw "the second run did not find the desktop entry" }
+          if (-not ($out -match "== Install complete")) { throw "the second run did not complete" }
 
       - name: agent, scheduled tasks and desktop entry exist
         shell: powershell

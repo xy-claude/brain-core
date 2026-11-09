@@ -26,16 +26,20 @@ function Have($c) { [bool](Get-Command $c -ErrorAction SilentlyContinue) }
 function Fail-OnError { if ($LASTEXITCODE) { throw "the last step failed with exit code $LASTEXITCODE; the lines above say why" } }
 $env:Path = "$HOME\.local\bin;$env:ProgramFiles\Git\cmd;$env:Path"
 
-# Claude Code's installer ends with `exit`, which would close this window, so it runs in a child
-# PowerShell, and never for longer than the limit: a first real run sat in a child with no output.
-function Run-Installer($url, $minutes) {
-  Write-Host "running the installer from $url in a separate PowerShell (up to $minutes minutes)"
-  $p = Start-Process powershell -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "irm $url | iex" -NoNewWindow -PassThru
+# Runs a program for a limited time and says so every 15 seconds, so a slow step is visibly alive
+# and a stuck one ends. On a real PC three different steps sat silent for ever (2026-11-09).
+function Run-Bounded($file, $arguments, $seconds) {
+  $p = Start-Process $file -ArgumentList $arguments -NoNewWindow -PassThru
   $null = $p.Handle  # without this, ExitCode is empty for a process started without -Wait
-  if (-not $p.WaitForExit($minutes * 60000)) {
-    try { $p.Kill() } catch { }
-    Write-Host "gave up after $minutes minutes"
-    return $false
+  $waited = 0
+  while (-not $p.WaitForExit(15000)) {
+    $waited += 15
+    if ($waited -ge $seconds) {
+      try { $p.Kill() } catch { }
+      Write-Host "  gave up after $seconds seconds"
+      return $false
+    }
+    Write-Host "  still working ($waited of at most $seconds seconds)"
   }
   return $p.ExitCode -eq 0
 }
@@ -71,7 +75,10 @@ Step "3/7 brain-core$(if ($Ref) { " ($Ref)" })"
 # --python 3.12: left to itself uv fetches the newest Python, and a dependency without a ready-made
 # package for it then needs a C++ compiler (pyyaml on 3.15, seen on a real PC 2026-11-09)
 if ($Ref) { uv tool install --python 3.12 --force "git+https://github.com/xy-claude/brain-core@$Ref" }
-elseif (Have brain) { "brain present ($(brain version))" }
+elseif (Have brain) {
+  uv tool upgrade brain-core-mcp  # a second run of this script brings the fixes of newer versions
+  "brain $(brain version)"
+}
 else { uv tool install --python 3.12 brain-core-mcp }
 Fail-OnError
 uv tool update-shell  # puts %USERPROFILE%\.local\bin on the user PATH for new terminals
@@ -95,23 +102,37 @@ if ($Hindsight) {
   Step "5/7 Hindsight skipped (lite). Later: brain hindsight install, then uncomment it in brain.yaml"
 }
 
+$desktopOk = $false
 if ($Desktop) {
   Step "+ Claude desktop app (-Desktop)"
   brain desktop $Dir
-  if ($LASTEXITCODE) { "not connected; in the app open Settings > Developer > Edit Config, then: brain desktop `"$Dir`" --config <that file>" }
+  $desktopOk = $LASTEXITCODE -eq 0
+  if (-not $desktopOk) { "not connected; in the app open Settings > Developer > Edit Config, then: brain desktop `"$Dir`" --config <that file>" }
 }
 
 # From here on nothing is required: the memory is installed and, with -Desktop, connected.
 Step "6/7 Scheduled tasks (brain daily 06:07, brain weekly Sun 07:13), then doctor"
-brain cron install $Dir
-if ($LASTEXITCODE) { "the scheduled tasks were not created; the memory works without them. Later: brain cron install `"$Dir`"" }
+"asking Windows Task Scheduler for two tasks (at most 150 seconds)"
+$tasksOk = Run-Bounded (Get-Command brain).Source @("cron", "install", "`"$Dir`"") 150
+if (-not $tasksOk) { "the scheduled tasks were not created; the memory works without them. Later: brain cron install `"$Dir`"" }
 brain doctor $Dir
 
 # Last on purpose: everything above is finished before the one step that can stall, and the
 # desktop app does not need it.
 Step "7/7 Claude Code (the memory above is ready without it; Ctrl+C here loses nothing)"
-if (Have claude) { "present" }
-elseif (-not (Run-Installer "https://claude.ai/install.ps1" 5)) { "Claude Code was not installed. The memory still works in the Claude desktop app; for Claude Code see https://code.claude.com/docs/en/setup" }
+# Its installer ends with `exit`, which would close this window, so it runs in a child PowerShell.
+$claudeOk = Have claude
+if ($claudeOk) { "present" } else {
+  "running the installer from https://claude.ai/install.ps1 in a separate PowerShell (at most 300 seconds)"
+  $claudeOk = Run-Bounded "powershell" @("-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "irm https://claude.ai/install.ps1 | iex") 300
+  if (-not $claudeOk) { "Claude Code was not installed. The memory still works in the Claude desktop app; for Claude Code see https://code.claude.com/docs/en/setup" }
+}
+
+Step "Install complete"
+"  memory folder     $Dir"
+"  desktop app       $(if (-not $Desktop) { 'not asked for (add -Desktop)' } elseif ($desktopOk) { 'connected: quit Claude from the icon near the clock, then open it again' } else { 'NOT connected, see the lines above' })"
+"  scheduled tasks   $(if ($tasksOk) { 'created' } else { 'not created (optional)' })"
+"  Claude Code       $(if ($claudeOk) { 'installed' } else { 'not installed (optional for the desktop app)' })"
 
 @"
 
