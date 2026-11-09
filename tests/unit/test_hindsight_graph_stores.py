@@ -54,7 +54,17 @@ def test_hindsight_write_polls_until_completed() -> None:
         "session:2026-11-01",
         "domain:system",
     ]
-    assert args["document_id"] == "session-2026-11-01" and args["metadata"]["impact"] == "high"
+    assert args["metadata"]["impact"] == "high"
+
+
+def test_each_record_is_its_own_hindsight_document() -> None:
+    # Hindsight replaces a document whose id it already has: a shared id loses the earlier write
+    h = FakeHindsight(["completed"] * 3)
+    for text in ("Self-host Hindsight", "Move the vault to iCloud", "Self-host Hindsight"):
+        h.write("decision", text, when=date(2026, 11, 1))
+    first, second, again = (args["document_id"] for tool, args in h.calls if tool == "retain")
+    assert first != second, "two records on one day must not share a document"
+    assert first == again and first.startswith("record-"), "the same text replaces only itself"
 
 
 def test_hindsight_write_reports_failed_and_lets_a_slow_op_finish() -> None:
