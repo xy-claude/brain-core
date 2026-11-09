@@ -60,3 +60,42 @@ jobs:
         if: always()
         shell: pwsh
         run: Get-Content "$HOME\.config\hindsight\api.log" -Tail 80 -ErrorAction SilentlyContinue
+
+  installer:
+    # install.ps1 exactly as the README runs it, in Windows PowerShell 5.1 (not pwsh), with no uv
+    # preinstalled: the path a real user takes. brain comes from this commit through -Ref.
+    runs-on: windows-2025
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: the one-liner, lite, with -Desktop
+        shell: powershell
+        run: |
+          $script = Get-Content -Raw install.ps1
+          & ([scriptblock]::Create($script)) -Agent Atlas -User Alex -Desktop -Ref ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: agent, scheduled tasks and desktop entry exist
+        shell: powershell
+        run: |
+          $env:Path = "$HOME\.local\bin;$env:Path"
+          brain version
+          if (-not (Test-Path "$HOME\Agents\Atlas\brain.yaml")) { throw "no agent folder" }
+          schtasks /Query /TN brain-core.atlas.daily
+          if ($LASTEXITCODE) { throw "daily task missing" }
+          schtasks /Query /TN brain-core.atlas.weekly
+          if ($LASTEXITCODE) { throw "weekly task missing" }
+          $cfg = Get-Content -Raw "$env:APPDATA\Claude\claude_desktop_config.json" | ConvertFrom-Json
+          $cfg.mcpServers.brain | ConvertTo-Json
+          if ($cfg.mcpServers.brain.args[0] -ne "serve") { throw "desktop entry missing" }
+
+      - name: the daily task really runs and writes its log
+        shell: powershell
+        run: |
+          schtasks /Run /TN brain-core.atlas.daily
+          $log = "$HOME\Agents\Atlas\data\logs\daily.log"
+          for ($i = 0; $i -lt 30 -and -not (Test-Path $log); $i++) { Start-Sleep -Seconds 2 }
+          Start-Sleep -Seconds 5
+          schtasks /Query /TN brain-core.atlas.daily /V /FO LIST | Select-String "Last Result|Task To Run"
+          Get-Content $log
+          if (-not (Select-String -Path $log -Pattern "brief" -Quiet)) { throw "daily did not report a brief" }

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import plistlib
+import re
 import shutil
 import subprocess
 import sys
@@ -142,7 +143,10 @@ def test_install_ps1_parses_and_refuses_a_bad_agent_name() -> None:
         capture_output=True,
         text=True,
     )
-    assert r.returncode == 2 and "-Agent must be" in r.stderr + r.stdout
+    assert r.returncode != 0 and "-Agent must be" in r.stderr + r.stdout
+    code = [ln for ln in script.read_text().splitlines() if not ln.lstrip().startswith("#")]
+    exits = [ln for ln in code if re.search(r"\bexit\s+[$\d]", ln)]
+    assert not exits, "exit would close the user's PowerShell window"
 
 
 def test_systemd_unit_carries_the_environment(tmp_path: Path) -> None:

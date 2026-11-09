@@ -18,11 +18,12 @@ param(
   [string]$Ref = ""
 )
 $ErrorActionPreference = "Stop"
-if ($Agent -notmatch '^[A-Za-z0-9_-]+$') { [Console]::Error.WriteLine("-Agent must be letters, digits, '-' or '_' only (got '$Agent')"); exit 2 }
+# throw, never exit: the documented one-liner runs this in the user's own window, and exit closes it
+if ($Agent -notmatch '^[A-Za-z0-9_-]+$') { throw "-Agent must be letters, digits, '-' or '_' only (got '$Agent')" }
 if (-not $Dir) { $Dir = Join-Path $HOME "Agents\$Agent" }
 function Step($s) { Write-Host "`n== $s" -ForegroundColor White }
 function Have($c) { [bool](Get-Command $c -ErrorAction SilentlyContinue) }
-function Fail-OnError { if ($LASTEXITCODE) { exit $LASTEXITCODE } }
+function Fail-OnError { if ($LASTEXITCODE) { throw "the last step failed with exit code $LASTEXITCODE; the lines above say why" } }
 $env:Path = "$HOME\.local\bin;$env:ProgramFiles\Git\cmd;$env:Path"
 
 Step "1/7 Git for Windows (Claude Code runs its hooks in Git Bash)"

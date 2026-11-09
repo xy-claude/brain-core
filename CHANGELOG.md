@@ -4,6 +4,13 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+### Fixed
+- The vault lock file lived inside the vault (`.brain.lock`). A sync service can evict a file there: iCloud turned it into a placeholder that a background process could not open, and every vault write then failed with `PermissionError` while Hindsight kept accepting the same items. The lock is now a file under `~/.cache/brain-core/locks/`, named after the path it guards. An old `.brain.lock` in a vault is ignored and can be deleted.
+- `install.ps1` ended a failed step with `exit`, which closes the PowerShell window the documented one-liner runs in, taking the error message with it. It now throws, so the window stays and the reason is on screen.
+
+### Added
+- CI runs `install.ps1` end to end in Windows PowerShell 5.1 with no uv preinstalled, then checks the agent folder, both scheduled tasks, the desktop entry, and that the daily task really runs and writes its log.
+
 ## [0.4.13] - 2026-11-09
 
 ### Added

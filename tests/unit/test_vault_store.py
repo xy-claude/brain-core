@@ -259,3 +259,22 @@ def test_bearer_guard_needs_a_digit(vault: VaultStore) -> None:
     assert ok.status == "written"
     bad = vault.write("fact", "token: bearer abcdef1234567890xyz", domain="System")
     assert bad.status == "refused"
+
+
+def test_the_lock_lives_outside_the_vault(vault: VaultStore) -> None:
+    """A sync service can evict a file kept in the vault; an unreadable old lock must not matter."""
+    import os
+    import sys
+
+    from brain_core.stores import vault as vault_module
+
+    stale = vault.root / ".brain.lock"  # what versions before 0.4.14 left behind
+    stale.write_text("")
+    if sys.platform != "win32":
+        os.chmod(stale, 0)
+    r = vault.write("fact", "the lock is local", domain="system", when=date(2026, 11, 9))
+    assert r.status == "written"
+    assert [p.name for p in vault.root.glob(".*lock*")] == [".brain.lock"], (
+        "nothing new in the vault"
+    )
+    assert list(vault_module._lock_dir().glob("*.lock")), "the lock file is on the local disk"

@@ -6,6 +6,7 @@ dated, idempotent, append-only forms the schema defines.
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import sys
@@ -366,12 +367,25 @@ class VaultStore:
         return (True, f"{self.root} ({sum(1 for _ in self.root.rglob('*.md'))} notes)")
 
 
+def _lock_dir() -> Path:
+    return Path.home() / ".cache" / "brain-core" / "locks"
+
+
 class _Lock:
+    """An exclusive lock named after the path it guards, kept on the local disk.
+
+    The lock file is never inside the vault: a sync service can evict a file there (iCloud turned
+    ``.brain.lock`` into a placeholder that a background process could not open, 2026-11-09),
+    and every write then failed.
+    """
+
     def __init__(self, path: Path) -> None:
-        self.path = path
+        key = hashlib.sha256(os.path.abspath(path).encode()).hexdigest()[:24]
+        self.path = _lock_dir() / f"{key}.lock"
         self.fd = -1
 
     def __enter__(self) -> _Lock:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
         self.fd = os.open(self.path, os.O_CREAT | os.O_RDWR)
         if sys.platform == "win32":
             # shortcut: LK_LOCK retries once a second for 10 s then raises, upgrade to a retry
