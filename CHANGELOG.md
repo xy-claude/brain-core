@@ -4,6 +4,9 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+### Changed
+- `install.ps1` says what it is downloading before the uv and Claude Code steps, and runs those installers with `Start-Process -NoNewWindow -Wait` instead of through a pipe, so their own lines appear as they are printed. A first real run sat at "== 2/7 uv" with nothing on screen.
+
 ## [0.4.15] - 2026-11-09
 
 ### Fixed
