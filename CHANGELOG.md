@@ -4,6 +4,9 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+### Added
+- `brain desktop [PATH]` connects an agent to the Claude desktop app on macOS and Windows: it adds one `brain` server to `claude_desktop_config.json` (a Microsoft Store install's package folder too, when present), keeps every other key, leaves a `.bak` the first time it changes a file, and refuses a file that is not valid JSON. `--config` names the file when it is elsewhere. `install.sh --desktop` and `install.ps1 -Desktop` run it at the end. The desktop chat gets the five tools on the same memory as Claude Code; it has no hooks, so the brief and the capture do not run there.
+
 ## [0.4.12] - 2026-11-09
 
 ### Added

@@ -1,13 +1,13 @@
 #!/bin/bash
 # brain-core one-line installer (macOS and Linux; Windows uses install.ps1).
 #
-#   curl -fsSL https://raw.githubusercontent.com/xy-claude/brain-core/main/install.sh | bash -s -- --agent NAME [--user Alex] [--dir ~/Agents/NAME] [--provider anthropic|openai|claude-code] [--profile DIR] [--lite] [--dashboard] [--ref v0.4.0]
+#   curl -fsSL https://raw.githubusercontent.com/xy-claude/brain-core/main/install.sh | bash -s -- --agent NAME [--user Alex] [--dir ~/Agents/NAME] [--provider anthropic|openai|claude-code] [--profile DIR] [--lite] [--dashboard] [--desktop] [--ref v0.4.0]
 #
 # Idempotent: re-running skips what is already in place. Every step prints what it did.
 # It never asks for secrets. Three things stay yours: `claude` login, `gh auth login`, SSH keys.
 set -euo pipefail
 
-AGENT=""; USER_NAME="the user"; DIR=""; PROFILE=""; DASHBOARD=0; LITE=0; REF=""; PROVIDER="anthropic"; KEY_ENV=""
+AGENT=""; USER_NAME="the user"; DIR=""; PROFILE=""; DASHBOARD=0; DESKTOP=0; LITE=0; REF=""; PROVIDER="anthropic"; KEY_ENV=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --agent) AGENT="$2"; shift 2;;
@@ -15,6 +15,7 @@ while [ $# -gt 0 ]; do
     --dir) DIR="$2"; shift 2;;
     --profile) PROFILE="$2"; shift 2;;
     --dashboard) DASHBOARD=1; shift;;
+    --desktop) DESKTOP=1; shift;;
     --lite) LITE=1; shift;;
     --provider) PROVIDER="$2"; shift 2;;
     --api-key-env) KEY_ENV="$2"; shift 2;;
@@ -23,7 +24,7 @@ while [ $# -gt 0 ]; do
     *) echo "unknown option: $1" >&2; exit 2;;
   esac
 done
-[ -n "$AGENT" ] || { echo "usage: install.sh --agent NAME [--user Alex] [--dir PATH] [--provider anthropic|openai|claude-code] [--api-key-env VAR] [--profile DIR] [--lite] [--dashboard] [--ref TAG]" >&2; exit 2; }
+[ -n "$AGENT" ] || { echo "usage: install.sh --agent NAME [--user Alex] [--dir PATH] [--provider anthropic|openai|claude-code] [--api-key-env VAR] [--profile DIR] [--lite] [--dashboard] [--desktop] [--ref TAG]" >&2; exit 2; }
 DIR="${DIR:-$HOME/Agents/$AGENT}"
 OS="$(uname -s)"
 case "$OS" in Darwin|Linux) ;; *) echo "install.sh supports macOS and Linux (got $OS). Windows: install.ps1, see the README" >&2; exit 1;; esac
@@ -87,6 +88,11 @@ brain cron install "$DIR"
 
 step "8/8 Doctor"
 brain doctor "$DIR" || true
+
+if [ "$DESKTOP" = 1 ]; then
+  step "+ Claude desktop app (--desktop)"
+  brain desktop "$DIR" || echo "not connected; try: brain desktop \"$DIR\" --config /path/to/claude_desktop_config.json"
+fi
 
 cat <<EOF
 

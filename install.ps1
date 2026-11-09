@@ -1,6 +1,6 @@
 # brain-core one-line installer (Windows 10 1809+, PowerShell 5.1 or 7).
 #
-#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/xy-claude/brain-core/main/install.ps1))) -Agent NAME [-User Alex] [-Dir C:\Agents\NAME] [-Hindsight] [-Provider anthropic|openai|claude-code] [-ApiKeyEnv VAR] [-ProfileDir DIR] [-Ref v0.4.12]
+#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/xy-claude/brain-core/main/install.ps1))) -Agent NAME [-User Alex] [-Dir C:\Agents\NAME] [-Desktop] [-Hindsight] [-Provider anthropic|openai|claude-code] [-ApiKeyEnv VAR] [-ProfileDir DIR] [-Ref v0.4.13]
 #
 # Idempotent: re-running skips what is already in place. Every step prints what it did.
 # It never asks for secrets. Two things stay yours: `claude` login and `gh auth login`.
@@ -11,6 +11,7 @@ param(
   [string]$User = "the user",
   [string]$Dir = "",
   [switch]$Hindsight,
+  [switch]$Desktop,
   [string]$Provider = "anthropic",
   [string]$ApiKeyEnv = "",
   [string]$ProfileDir = "",
@@ -66,6 +67,12 @@ Step "7/7 Scheduled tasks (brain daily 06:07, brain weekly Sun 07:13), then doct
 brain cron install $Dir
 Fail-OnError
 brain doctor $Dir
+
+if ($Desktop) {
+  Step "+ Claude desktop app (-Desktop)"
+  brain desktop $Dir
+  if ($LASTEXITCODE) { "not connected; in the app open Settings > Developer > Edit Config, then: brain desktop `"$Dir`" --config <that file>" }
+}
 
 @"
 
