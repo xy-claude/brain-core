@@ -20,6 +20,15 @@ BASH = (
 )
 
 
+@pytest.fixture(autouse=True)
+def _locks_in_tmp(
+    tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Lock files go to a temp folder, not the developer's ~/.cache."""
+    locks = tmp_path_factory.getbasetemp() / "locks"
+    monkeypatch.setattr("brain_core.stores.vault._lock_dir", lambda: locks)
+
+
 @pytest.fixture
 def db(tmp_path: Path) -> Iterator[Database]:
     """A freshly-migrated Database in a tmp dir. Closes after each test."""
