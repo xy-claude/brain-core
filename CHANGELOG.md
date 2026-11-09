@@ -4,6 +4,12 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+### Added
+- Hindsight on Windows. `brain hindsight install` writes a PowerShell launcher next to the env file (`~/.config/hindsight/hindsight.ps1`), registers it under the user's registry Run key so it starts at every logon without administrator rights, and starts it hidden; the launcher restarts the server five seconds after an exit and reads the key from the env file on each start. `install.ps1 -Hindsight` (with `-Provider`, `-ApiKeyEnv`) sets up a full agent; the default stays lite. `brain hindsight install --wait SECONDS` on every platform, for a slow first start. A CI job installs it for real on Windows and waits for `/health`.
+
+### Fixed
+- 0.4.11 said Hindsight "does not run on Windows". It does; brain-core had no way to install it there.
+
 ## [0.4.11] - 2026-11-09
 
 ### Added

@@ -1,4 +1,5 @@
-"""Machine setup pieces behind ``install.sh``: the Hindsight server as a launchd service.
+"""Machine setup pieces behind ``install.sh``: the Hindsight server as a background service
+(launchd on macOS, ``systemd --user`` on Linux, a logon entry in the user's registry on Windows).
 
 Hindsight (MIT, Vectorize) is a required store. ``brain hindsight install`` puts ``hindsight-api``
 in place with ``uv tool``, writes the LaunchAgent (local embeddings on CPU, ``pg0`` embedded
@@ -96,6 +97,73 @@ def hindsight_unit(api_bin: str, env: dict[str, str]) -> str:
     )
 
 
+RUN_KEY = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run"
+RUN_VALUE = "brain-core-hindsight"
+
+
+def hindsight_launcher(home: Path, api_bin: str, env: dict[str, str]) -> str:
+    """PowerShell text that keeps Hindsight running on Windows: the same environment as the
+    LaunchAgent, the key read from the env file on every start, a restart five seconds after
+    an exit, output appended to ``api.log`` beside the script."""
+    sets = "\n".join(f"$env:{k} = '{v}'" for k, v in env.items() if k not in ("PATH", "HOME"))
+    return (
+        "# written by `brain hindsight install`; started at logon from the user's Run key\n"
+        f"{sets}\n"
+        # a redirected stdout is cp1252 on Windows and Hindsight's banner is not (seen in CI)
+        "$env:PYTHONUTF8 = '1'\n"
+        "$log = Join-Path $PSScriptRoot 'api.log'\n"
+        "while ($true) {\n"
+        "  Get-Content (Join-Path $PSScriptRoot 'env') -ErrorAction SilentlyContinue |\n"
+        "    Where-Object { $_ -match '^[A-Z_]+=' } |\n"
+        "    ForEach-Object { $k, $v = $_ -split '=', 2; Set-Item \"env:$k\" $v }\n"
+        # cmd does the redirect so the log stays plain bytes, not PowerShell's UTF-16
+        f'  cmd /c "`"{api_bin}`" >> `"$log`" 2>&1"\n'
+        "  Start-Sleep -Seconds 5\n"
+        "}\n"
+    )
+
+
+def _install_windows(
+    home: Path, api_bin: str, env: dict[str, str], port: int, run: bool, wait: float
+) -> dict[str, str]:
+    script = env_file(home).with_name("hindsight.ps1")
+    script.write_text(hindsight_launcher(home, api_bin, env), encoding="utf-8")
+    out = {"launcher": str(script)}
+    if not run:
+        out["service"] = "not started (dry run)"
+        return out
+    start = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden"]
+    # a logon entry needs no administrator, unlike a scheduled task with a logon trigger
+    subprocess.run(
+        ["reg", "add", RUN_KEY, "/v", RUN_VALUE, "/t", "REG_SZ", "/f", "/d",
+         subprocess.list2cmdline([*start, "-File", str(script)])],
+        capture_output=True,
+        check=True,
+    )  # fmt: skip
+    stop = (
+        "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*hindsight.ps1*' "
+        "-and $_.ProcessId -ne $PID } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force };"
+        " Get-Process hindsight-api -ErrorAction SilentlyContinue | Stop-Process -Force"
+    )
+    subprocess.run(["powershell", "-NoProfile", "-Command", stop], capture_output=True)
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(
+        subprocess, "CREATE_NEW_PROCESS_GROUP", 0
+    )
+    subprocess.Popen(  # outlives this command; the Run key starts it again at the next logon
+        [*start, "-File", str(script)],
+        creationflags=flags,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    out["service"] = (
+        "healthy"
+        if wait_healthy(port, wait)
+        else f"not healthy after {wait:.0f}s; see {script.with_name('api.log')}"
+    )
+    return out
+
+
 def env_file(home: Path) -> Path:
     return home / ".config" / "hindsight" / "env"
 
@@ -131,16 +199,12 @@ def install_hindsight(
     wait: float = 120.0,
 ) -> dict[str, str]:
     """Install (idempotent) and start Hindsight. ``run=False`` only writes the plists."""
-    if sys.platform == "win32":
-        return {
-            "hindsight": "not supported on Windows: no service manager path and no pg0 build "
-            "verified. Stay lite (vault + SQLite), or run Hindsight on a Linux host and point "
-            "brain.yaml at its URL."
-        }
     home = home or Path.home()
-    launch_dir = launch_dir or home / "Library" / "LaunchAgents"
-    launch_dir.mkdir(parents=True, exist_ok=True)
-    (home / "Library" / "Logs" / "hindsight").mkdir(parents=True, exist_ok=True)
+    windows = sys.platform == "win32"
+    if not windows:
+        launch_dir = launch_dir or home / "Library" / "LaunchAgents"
+        launch_dir.mkdir(parents=True, exist_ok=True)
+        (home / "Library" / "Logs" / "hindsight").mkdir(parents=True, exist_ok=True)
     out: dict[str, str] = {}
     if api_key_env is None and provider != "claude-code":
         api_key_env = (
@@ -148,7 +212,8 @@ def install_hindsight(
         )
     out["api_key"] = write_env_file(home, api_key_env)
 
-    api_bin = shutil.which("hindsight-api") or str(home / ".local" / "bin" / "hindsight-api")
+    exe = "hindsight-api.exe" if windows else "hindsight-api"
+    api_bin = shutil.which("hindsight-api") or str(home / ".local" / "bin" / exe)
     if run and not Path(api_bin).exists():
         if not shutil.which("uv"):
             raise RuntimeError("uv is required: curl -LsSf https://astral.sh/uv/install.sh | sh")
@@ -166,9 +231,18 @@ def install_hindsight(
             check=True,
         )
         out["hindsight-api"] = "installed"
+        api_bin = shutil.which("hindsight-api") or api_bin  # uv may use another bin folder
     else:
         out["hindsight-api"] = "present" if Path(api_bin).exists() else "not installed (dry run)"
 
+    if windows:
+        env = hindsight_plist(home, api_bin, port=port, provider=provider, model=model)
+        out.update(_install_windows(home, api_bin, env["EnvironmentVariables"], port, run, wait))
+        if dashboard:
+            out["dashboard"] = "not installed: the dashboard service is macOS only"
+        return out
+
+    assert launch_dir is not None
     if sys.platform != "darwin":
         unit_dir = home / ".config" / "systemd" / "user"
         unit_dir.mkdir(parents=True, exist_ok=True)

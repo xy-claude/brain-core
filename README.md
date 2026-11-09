@@ -85,7 +85,7 @@ Plus `brain_status()` for health in one call: which stores are up, how many toke
 
 | You need | Why | Check |
 |---|---|---|
-| macOS, Linux with systemd, or Windows 10 1809+ | the installer sets up a background service and cron (Windows: scheduled tasks, no Hindsight yet) | `uname`, or `winver` |
+| macOS, Linux with systemd, or Windows 10 1809+ | the installer sets up a background service and cron (Windows: a logon entry and scheduled tasks) | `uname`, or `winver` |
 | about 2 GB of disk and 10 minutes, or `--lite` | Hindsight ships an embedded Postgres and a CPU embedding model; `--lite` skips it | |
 | an Anthropic API key, or a Claude Code login, or `--lite` | Hindsight uses an LLM to reason over memories | `echo $ANTHROPIC_API_KEY` |
 | Claude Code | the agent runs inside it; the installer adds it if missing | `claude --version` |
@@ -174,14 +174,14 @@ One line in PowerShell (5.1 or 7):
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/xy-claude/brain-core/main/install.ps1))) -Agent Atlas -User Alex
 ```
 
-It installs Git for Windows with winget when missing (Claude Code runs its hooks in Git Bash), `uv` from astral.sh, Claude Code from claude.ai, then `brain` with `uv tool`, and registers `brain daily` and `brain weekly` in Task Scheduler as `brain-core.atlas.daily` and `.weekly`. Hindsight does not run on Windows yet, so the agent is always lite: vault plus SQLite full-text search, the same configuration the recall numbers below are measured on. Options: `-Dir`, `-ProfileDir`, `-Ref`. Open a new terminal afterwards so `brain` is on PATH.
+It installs Git for Windows with winget when missing (Claude Code runs its hooks in Git Bash), `uv` from astral.sh, Claude Code from claude.ai, then `brain` with `uv tool`, and registers `brain daily` and `brain weekly` in Task Scheduler as `brain-core.atlas.daily` and `.weekly`. The default is lite: vault plus SQLite full-text search, the same configuration the recall numbers below are measured on. Add `-Hindsight` for the vector store (about 2 GB, a few minutes; `-Provider` and `-ApiKeyEnv` as on macOS): it runs hidden in the background, restarts itself, and starts again at every logon from an entry in your own registry Run key, so no administrator is needed. A lite agent upgrades later with `brain hindsight install`, then uncomment the `hindsight:` block in `brain.yaml`. Other options: `-Dir`, `-ProfileDir`, `-Ref`. Open a new terminal afterwards so `brain` is on PATH.
 
 ### Manual, any platform
 
 ```bash
 uv tool install brain-core-mcp   # or: uv tool install git+https://github.com/xy-claude/brain-core@v0.4.0
 brain init Atlas --path ~/Agents/Atlas --user Alex
-brain hindsight install          # launchd on macOS, systemd --user on Linux
+brain hindsight install          # launchd, systemd --user, or a logon entry on Windows
 brain cron install ~/Agents/Atlas    # launchd, crontab or Task Scheduler
 brain doctor ~/Agents/Atlas
 ```

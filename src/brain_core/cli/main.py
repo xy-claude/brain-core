@@ -235,8 +235,13 @@ def hindsight_cmd(
     launch_dir: Annotated[
         Path | None, typer.Option("--launch-dir", help="Default ~/Library/LaunchAgents.")
     ] = None,
+    wait: Annotated[
+        float,
+        typer.Option("--wait", help="Seconds to wait for /health; the first start downloads."),
+    ] = 120.0,
 ) -> None:
-    """Install the self-hosted Hindsight server as a launchd service, or report its health."""
+    """Install the self-hosted Hindsight server as a background service (launchd, systemd
+    --user, or a logon entry on Windows), or report its health."""
     from brain_core import installer
 
     if action == "status":
@@ -253,6 +258,7 @@ def hindsight_cmd(
         dashboard=dashboard,
         run=not dry_run,
         launch_dir=launch_dir,
+        wait=wait,
     )
     for k, v in out.items():
         typer.echo(f"  {k}: {v}")

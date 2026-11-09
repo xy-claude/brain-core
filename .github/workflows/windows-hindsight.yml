@@ -1,0 +1,62 @@
+name: windows-hindsight
+# The real thing on Windows, end to end: install Hindsight as the logon service, wait for /health,
+# run the install again (the restart path). Slow: it downloads Postgres and an embedding model, so
+# it runs only when the installer changes, or by hand.
+run-name: ${{ github.event.head_commit.message || github.ref_name }}
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - src/brain_core/installer.py
+      - install.ps1
+      - .github/workflows/windows-hindsight.yml
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  hindsight:
+    runs-on: windows-2025
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+
+      - name: brain from this checkout, on PATH
+        shell: pwsh
+        run: |
+          uv tool install --from . brain-core-mcp
+          "$(uv tool dir --bin)" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+
+      - name: brain hindsight install, wait for /health
+        shell: pwsh
+        run: brain hindsight install --provider claude-code --wait 900
+
+      - name: logon entry is registered and the service answers
+        shell: pwsh
+        run: |
+          reg query "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v brain-core-hindsight
+          brain hindsight status
+          (Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8888/health).Content
+
+      - name: a second install restarts it and it is healthy again
+        shell: pwsh
+        run: brain hindsight install --provider claude-code --wait 300
+
+      - name: a full agent sees the store
+        shell: pwsh
+        continue-on-error: true  # doctor also reports cron and Claude Code, which this job does not set up
+        run: |
+          brain init CI --path "$env:RUNNER_TEMP\agent" --user ci
+          brain doctor "$env:RUNNER_TEMP\agent"
+
+      - name: service log
+        if: always()
+        shell: pwsh
+        run: Get-Content "$HOME\.config\hindsight\api.log" -Tail 80 -ErrorAction SilentlyContinue
