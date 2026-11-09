@@ -31,10 +31,10 @@ macOS and Linux:
 curl -fsSL https://raw.githubusercontent.com/xy-claude/brain-core/main/install.sh | bash -s -- --agent Atlas --user Alex
 ```
 
-Windows (PowerShell):
+Windows (PowerShell). Add `-Desktop` to use the memory in the Claude desktop app too:
 
 ```
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/xy-claude/brain-core/main/install.ps1))) -Agent Atlas -User Alex
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/xy-claude/brain-core/main/install.ps1))) -Agent Atlas -User Alex -Desktop
 ```
 
 <img src="docs/img/demo.gif" alt="brain init, brain doctor, then a real session: remember, a changed fact with its banner, recall" width="900">
@@ -169,13 +169,45 @@ The same one line. It needs `git` and `curl` already present. It then installs `
 
 ### Windows
 
-One line in PowerShell (5.1 or 7):
+One line in PowerShell (Windows PowerShell 5.1 or PowerShell 7). It works under the default `Restricted` execution policy; nothing has to be changed first.
 
 ```powershell
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/xy-claude/brain-core/main/install.ps1))) -Agent Atlas -User Alex
 ```
 
-It installs Git for Windows with winget when missing (Claude Code runs its hooks in Git Bash), `uv` from astral.sh, Claude Code from claude.ai, then `brain` with `uv tool`, and registers `brain daily` and `brain weekly` in Task Scheduler as `brain-core.atlas.daily` and `.weekly`. The default is lite: vault plus SQLite full-text search, the same configuration the recall numbers below are measured on. Add `-Hindsight` for the vector store (about 2 GB, a few minutes; `-Provider` and `-ApiKeyEnv` as on macOS): it runs hidden in the background, restarts itself, and starts again at every logon from an entry in your own registry Run key, so no administrator is needed. A lite agent upgrades later with `brain hindsight install`, then uncomment the `hindsight:` block in `brain.yaml`. Add `-Desktop` to connect the Claude desktop app in the same run. Other options: `-Dir`, `-ProfileDir`, `-Ref`. Open a new terminal afterwards so `brain` is on PATH.
+To use the memory in the Claude desktop app as well, add `-Desktop`:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/xy-claude/brain-core/main/install.ps1))) -Agent Atlas -User Alex -Desktop
+```
+
+Every step says what it is doing while it does it: downloads count their megabytes, longer steps print "still working" every 15 seconds, and nothing waits without a time limit.
+
+| Step | What it does | Good to know |
+|---|---|---|
+| 1 | checks for Git for Windows; installs it with winget when missing | Claude Code runs its hooks in Git Bash. No winget, or a declined install, is reported and the install goes on |
+| 2 | downloads `uv` from its GitHub release and unpacks it to `~\.local\bin` | about 15 MB |
+| 3 | installs the `brain` command on Python 3.12 with `uv tool` | uv fetches Python itself. Running the line again upgrades `brain` |
+| 4 | runs `brain init` and writes the agent folder (`~\Agents\Atlas`) | an existing `brain.yaml` is never overwritten |
+| 5 | Hindsight, only with `-Hindsight` | about 2 GB; runs hidden and starts again at every logon from your own registry Run key |
+| + | with `-Desktop`: adds brain-core to the Claude desktop app's settings | all three places the app may read, including Microsoft Store builds |
+| 6 | registers `brain daily` and `brain weekly` in Task Scheduler | tasks `brain-core.atlas.daily` and `.weekly`; they also start on battery |
+| 7 | downloads and installs Claude Code | about 330 MB, checksum checked |
+| end | with `-Desktop`: checks that the Claude app has loaded brain-core | if the app was open during the install, the script says how to quit it from the icon near the clock, watches for the restart, and reports what the app did |
+
+The last lines are the verdict, one of two:
+
+```
+== Install complete: every step above finished
+  memory folder     C:\Users\Alex\Agents\Atlas
+  desktop app       connected and loaded
+  scheduled tasks   created
+  Claude Code       installed
+```
+
+or `== Install NOT complete: N step(s) did not work`, followed by each step that failed, why, and the command to run it again. Running the whole line again is always safe: what is in place is kept, and `brain` is upgraded.
+
+The default is lite: vault plus SQLite full-text search, the same configuration the recall numbers below are measured on. Add `-Hindsight` for the vector store (`-Provider` and `-ApiKeyEnv` as on macOS). A lite agent upgrades later with `brain hindsight install`, then uncomment the `hindsight:` block in `brain.yaml`. Other options: `-Dir`, `-ProfileDir`, `-Ref`. Open a new terminal afterwards so `brain` is on PATH.
 
 ### Claude desktop app
 
