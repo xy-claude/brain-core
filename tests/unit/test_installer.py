@@ -97,6 +97,7 @@ def test_windows_dry_run_writes_only_the_launcher(
     assert "$env:HINDSIGHT_API_DATABASE_URL = 'pg0://hindsight'" in text
     assert "$env:HINDSIGHT_API_LLM_PROVIDER = 'claude-code'" in text
     assert "$env:PATH" not in text and "LLM_API_KEY" not in text, "the key stays in the env file"
+    assert "$env:PYTHONUTF8 = '1'" in text, "the banner crashes a cp1252 log without it"
     assert "hindsight-api.exe" in text and not (tmp_path / "Library").exists()
     if pwsh:
         parse = (

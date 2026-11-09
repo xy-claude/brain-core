@@ -109,6 +109,8 @@ def hindsight_launcher(home: Path, api_bin: str, env: dict[str, str]) -> str:
     return (
         "# written by `brain hindsight install`; started at logon from the user's Run key\n"
         f"{sets}\n"
+        # a redirected stdout is cp1252 on Windows and Hindsight's banner is not (seen in CI)
+        "$env:PYTHONUTF8 = '1'\n"
         "$log = Join-Path $PSScriptRoot 'api.log'\n"
         "while ($true) {\n"
         "  Get-Content (Join-Path $PSScriptRoot 'env') -ErrorAction SilentlyContinue |\n"
