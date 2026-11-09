@@ -246,6 +246,27 @@ def test_task_scheduler_install_status_uninstall_on_windows(
     assert removed == names and tasks == {}
 
 
+def test_task_scheduler_that_never_answers_is_reported_not_waited_on(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("brain_core.cron.sys.platform", "win32")
+    seen: list[dict[str, Any]] = []
+
+    def hangs(cmd: list[str], **kw: Any) -> subprocess.CompletedProcess[str]:
+        seen.append(kw)
+        raise subprocess.TimeoutExpired(cmd, kw["timeout"])
+
+    monkeypatch.setattr("brain_core.cron.subprocess.run", hangs)
+    monkeypatch.setattr("brain_core.cron.shutil.which", lambda _: r"C:\b\brain.exe")
+    agent = make(tmp_path)
+    with (
+        agent,
+        pytest.raises(RuntimeError, match=r"did not create brain-core\.atlas\.daily: no answer"),
+    ):
+        cron.install(agent)
+    assert seen[0]["stdin"] == subprocess.DEVNULL and seen[0]["timeout"] == 60
+
+
 def test_schtasks_commands_carry_the_schedule() -> None:
     cmds = cron.schtasks_commands(
         Path(r"C:\Agents\My A"), r"C:\b\brain.exe", "A", "06:07", "Sun 07:13"

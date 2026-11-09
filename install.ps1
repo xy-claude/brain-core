@@ -95,16 +95,17 @@ if ($Hindsight) {
   Step "5/7 Hindsight skipped (lite). Later: brain hindsight install, then uncomment it in brain.yaml"
 }
 
-Step "6/7 Scheduled tasks (brain daily 06:07, brain weekly Sun 07:13), then doctor"
-brain cron install $Dir
-Fail-OnError
-brain doctor $Dir
-
 if ($Desktop) {
   Step "+ Claude desktop app (-Desktop)"
   brain desktop $Dir
   if ($LASTEXITCODE) { "not connected; in the app open Settings > Developer > Edit Config, then: brain desktop `"$Dir`" --config <that file>" }
 }
+
+# From here on nothing is required: the memory is installed and, with -Desktop, connected.
+Step "6/7 Scheduled tasks (brain daily 06:07, brain weekly Sun 07:13), then doctor"
+brain cron install $Dir
+if ($LASTEXITCODE) { "the scheduled tasks were not created; the memory works without them. Later: brain cron install `"$Dir`"" }
+brain doctor $Dir
 
 # Last on purpose: everything above is finished before the one step that can stall, and the
 # desktop app does not need it.

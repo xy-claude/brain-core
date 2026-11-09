@@ -190,7 +190,15 @@ def cron_cmd(
 
     with _open(path) as agent:
         if action == "install":
-            for p in cron.install(agent, launch_dir, load=not no_load):
+            try:
+                written = cron.install(agent, launch_dir, load=not no_load)
+            except (
+                RuntimeError
+            ) as e:  # the scheduler refused or never answered: say so, no traceback
+                typer.echo(f"  not installed: {e}", err=True)
+                typer.echo("  The memory works without the jobs; run this command again later.")
+                raise typer.Exit(code=1) from e
+            for p in written:
                 typer.echo(f"  wrote {p}")
         elif action == "uninstall":
             for p in cron.uninstall(agent, launch_dir):
