@@ -24,7 +24,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from brain_core import traits
+from brain_core import traits, update
 from brain_core.session import _sections
 from brain_core.status import _frontmatter
 from brain_core.stores.hindsight import HindsightStore
@@ -56,10 +56,13 @@ def daily(agent: Agent, today: date | None = None, shadow: bool = False) -> dict
     today = today or date.today()
     vault = _vault(agent)
     cfg = agent.config
+    if cfg.cron.update_check and not shadow:
+        update.check(agent.data_dir, today)  # before the status below, which reports the answer
     status = agent.brain_status()
     parts = [
         f"# Daily Brief — {today.isoformat()}\n\n_Written by `brain daily`. "
         "`brain_session('start')` reads this file; everything else is one `brain_recall` away._\n",
+        f"## Update available\n\n- {status['update']}\n" if status.get("update") else "",
         _agenda(vault.root / "goals" / "mission_queue.md"),
         _hot_corrections(vault.root / "corrections.md", today),
         _correction_patterns(vault.root, today),
@@ -107,6 +110,9 @@ def daily(agent: Agent, today: date | None = None, shadow: bool = False) -> dict
         "health": line[2:],
     }
     out["backup"] = backup(agent, today) if cfg.cron.backup.enabled else "disabled"
+    out["update"] = status.get("update") or (
+        "up to date" if cfg.cron.update_check else "check disabled (cron.update_check: false)"
+    )
     for s in agent.stores:
         if isinstance(s, TranscriptStore):
             out["transcripts"] = s.index()
