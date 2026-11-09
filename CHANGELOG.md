@@ -4,6 +4,8 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+## [0.4.19] - 2026-11-09
+
 ### Fixed
 - `brain cron install` could wait for ever on Windows. `schtasks` ran with the console as its keyboard and no time limit, so a question nobody could see (from it, or from security software watching it) never got an answer. Every Task Scheduler call now runs with no keyboard and a 60-second limit, and a refusal is reported in one line instead of a traceback. The same limits apply to the registry and PowerShell calls of `brain hindsight install`.
 
