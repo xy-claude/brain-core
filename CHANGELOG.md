@@ -4,6 +4,13 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+### Fixed
+- On a PC with no Python, `uv tool install brain-core-mcp` fetched the newest Python (3.15), for which pyyaml has no ready-made package, and failed asking for a C++ compiler. Both installers now pass `--python 3.12`, and the package declares `requires-python >=3.12,<3.15`, so `uvx brain-core-mcp` and a manual install no longer end up on 3.15 either.
+
+### Changed
+- `install.ps1` installs Claude Code last. Its installer can stall in a child PowerShell on some PCs (it is given five minutes); everything the memory needs, including the desktop app entry, is now finished before that step.
+- CI's installer job lets uv fetch its own Python, as a new PC must, checks that brain lands on 3.12, and uses an agent folder with a space in its path.
+
 ## [0.4.17] - 2026-11-09
 
 ### Changed

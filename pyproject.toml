@@ -7,7 +7,7 @@ name = "brain-core-mcp"  # PyPI: "brain-core" collides with an existing "brainco
 version = "0.4.17"
 description = "A memory for your Claude Code agent that survives the session: one local MCP server, five tools, a markdown vault, an eval."
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.15"  # pyyaml has no 3.15 wheels yet; without the cap uv picks 3.15 and compiles
 license = { file = "LICENSE" }
 authors = [{ name = "xy-claude" }]
 keywords = ["ai", "agents", "memory", "llm", "mcp"]

@@ -66,6 +66,10 @@ jobs:
     # preinstalled: the path a real user takes. brain comes from this commit through -Ref.
     runs-on: windows-2025
     timeout-minutes: 30
+    env:
+      # a new PC has no Python: uv must fetch its own, as it did when it chose 3.15 and failed to
+      # compile pyyaml (2026-11-09). The runner's preinstalled 3.12 hid that.
+      UV_PYTHON_PREFERENCE: only-managed
     steps:
       - uses: actions/checkout@v7
 
@@ -75,7 +79,7 @@ jobs:
           # the runner's own policy is permissive, which hid a uv installer that exits under
           # Restricted and took the user's window with it (2026-11-09)
           $ref = "${{ github.event.pull_request.head.sha || github.sha }}"
-          $cmd = "'policy: ' + (Get-ExecutionPolicy); & ([scriptblock]::Create((Get-Content -Raw install.ps1))) -Agent Atlas -User Alex -Desktop -Ref $ref; 'reached the end of the installer'"
+          $cmd = "'policy: ' + (Get-ExecutionPolicy); & ([scriptblock]::Create((Get-Content -Raw install.ps1))) -Agent Atlas -User Alex -Desktop -Dir '$HOME\My Agents\Atlas' -Ref $ref; 'reached the end of the installer'"
           $out = powershell -NoProfile -ExecutionPolicy Restricted -Command $cmd
           $out
           if (-not ($out -match "policy: Restricted")) { throw "the child did not run under Restricted" }
@@ -87,7 +91,11 @@ jobs:
         run: |
           $env:Path = "$HOME\.local\bin;$env:Path"
           brain version
-          if (-not (Test-Path "$HOME\Agents\Atlas\brain.yaml")) { throw "no agent folder" }
+          $py = "$(uv tool dir)\brain-core-mcp\Scripts\python.exe"
+          $ver = & $py --version
+          $ver
+          if (-not ($ver -match "^Python 3\.12\.")) { throw "brain is not on Python 3.12" }
+          if (-not (Test-Path "$HOME\My Agents\Atlas\brain.yaml")) { throw "no agent folder" }
           schtasks /Query /TN brain-core.atlas.daily
           if ($LASTEXITCODE) { throw "daily task missing" }
           schtasks /Query /TN brain-core.atlas.weekly
@@ -100,7 +108,7 @@ jobs:
         shell: powershell
         run: |
           schtasks /Run /TN brain-core.atlas.daily
-          $log = "$HOME\Agents\Atlas\data\logs\daily.log"
+          $log = "$HOME\My Agents\Atlas\data\logs\daily.log"
           for ($i = 0; $i -lt 30 -and -not (Test-Path $log); $i++) { Start-Sleep -Seconds 2 }
           Start-Sleep -Seconds 5
           schtasks /Query /TN brain-core.atlas.daily /V /FO LIST | Select-String "Last Result|Task To Run"
