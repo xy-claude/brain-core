@@ -156,6 +156,8 @@ def daily_cmd(
             typer.echo(f"  missing: {m}")
     typer.echo(f"health: {out['health']}")
     typer.echo(f"backup: {out['backup']}")
+    if "update" in out:
+        typer.echo(f"update: {out['update']}")
 
 
 @app.command("weekly")
@@ -564,6 +566,8 @@ def doctor_cmd(
         f"last close {ses['last_close'] or '-'}{flag}"
     )
     typer.echo(f"  pending    {st.get('pending_decisions', 0)} decision(s)")
+    if st.get("update"):
+        typer.echo(f"  update     {st['update']}")
     tools = st.get("tools", {}).get("per_tool", {})
     if tools:
         typer.echo(

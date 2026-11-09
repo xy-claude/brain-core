@@ -13,6 +13,7 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from brain_core import update
 from brain_core.session import _marker, _sections
 from brain_core.stores.vault import VaultStore
 from brain_core.stores.vault import read_text as _read
@@ -46,6 +47,8 @@ def brain_status(agent: Agent) -> dict[str, Any]:
         )
     out["context"] = _context(agent)
     out["tools"] = tool_metrics(agent)
+    if newer := update.notice(agent.data_dir):  # read from a file `brain daily` wrote; no network
+        out["update"] = newer
     marker = _marker(agent)
     last_close = marker.read_text().strip() if marker.exists() else ""
     starts = agent.recent_events(event_type="session_start", limit=1)

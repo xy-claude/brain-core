@@ -238,6 +238,18 @@ brain desktop ~/Agents/Atlas         # optional: the Claude desktop app, macOS a
 brain doctor ~/Agents/Atlas
 ```
 
+### Updating
+
+Nothing updates by itself: the copy you installed stays as it is until you change it. brain-core tells you when there is something newer. `brain daily` asks PyPI once a day, and when a newer version exists the daily brief and `brain doctor` say so in one line:
+
+```
+update     brain-core 0.4.25 is available (this is 0.4.23). Update: `uv tool upgrade --no-cache brain-core-mcp`, then restart Claude.
+```
+
+Run that command, or paste the install line again; both keep your agent folder as it is. Restart Claude Code or the Claude desktop app afterwards, since a running one keeps the copy it started with. The daily request sends nothing about you or your memory; it only reads the version number. To stop it, set `update_check: false` under `cron:` in `brain.yaml`.
+
+An update replaces the program, not the files in your agent folder. When a release changes a rule, a hook or a setting in the template, the changelog says what to copy.
+
 ### Check it worked
 
 ```bash

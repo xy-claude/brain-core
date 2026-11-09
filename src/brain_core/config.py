@@ -92,6 +92,7 @@ class CronConfig(BaseModel):
     daily: str = "06:07"
     weekly: str = "Sun 07:13"
     backup: BackupConfig = Field(default_factory=BackupConfig)
+    update_check: bool = True  # brain daily asks PyPI once whether a newer brain-core exists
 
 
 class BrainConfig(BaseModel):

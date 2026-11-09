@@ -29,6 +29,12 @@ def _locks_in_tmp(
     monkeypatch.setattr("brain_core.stores.vault._lock_dir", lambda: locks)
 
 
+@pytest.fixture(autouse=True)
+def _no_pypi(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No test asks PyPI; a test that wants an answer sets ``update.latest`` itself."""
+    monkeypatch.setattr("brain_core.update.latest", lambda timeout=5.0: None)
+
+
 @pytest.fixture
 def db(tmp_path: Path) -> Iterator[Database]:
     """A freshly-migrated Database in a tmp dir. Closes after each test."""

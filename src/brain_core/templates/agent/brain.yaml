@@ -26,3 +26,4 @@ cron:                                 # `brain cron install`: launchd on macOS, 
   daily: "06:07"                      # brain daily: daily brief, health line, Hindsight backup
   weekly: "Sun 07:13"                 # brain weekly: archive old sessions, refresh mental models
   backup: {dir: ~/Backups/hindsight, keep: 14}
+  update_check: true                  # brain daily asks PyPI once whether a newer brain-core exists; it only tells you
