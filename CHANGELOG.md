@@ -4,6 +4,8 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+## [0.4.22] - 2026-11-09
+
 ### Added
 - `install.ps1 -Desktop` checks that the Claude desktop app has really loaded brain-core. The app reads its settings only at start, and closing its window does not stop it, so a correct install could still show nothing. The script now says whether the app is closed (brain-core loads at the next start), already has it, or is open without it; in the last case it explains how to quit from the tray icon, watches for up to five minutes, and reports what the app did.
 
