@@ -5,7 +5,7 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 ## [Unreleased]
 
 ### Changed
-- `install.ps1` always reaches its end and says so. The scheduled-task step and the Claude Code step run through one helper that prints "still working" every 15 seconds and gives up at a limit (150 and 300 seconds); neither is required. The script ends with an "Install complete" summary: the memory folder, whether the desktop app is connected, whether the tasks and Claude Code were installed.
+- `install.ps1` shows everything it does and ends with the truth. Downloads print how many MB have arrived; a connection that brings nothing for 60 seconds is an error with a message. Claude Code is fetched by the script itself, from the same source and with the same checksum test as its own installer, because that installer downloads 345 MB without a line on the screen (a five-minute limit had been stopping it mid-download). `brain cron install` says what it is doing before each step and lets Task Scheduler's own lines through. Long steps print "still working" every 15 seconds. The last lines are either "Install complete: every step above finished" or "Install NOT complete" with each step that did not work and how to run it again.
 - Running an installer again upgrades a `brain` that is already installed (`uv tool upgrade`), so a second run brings the fixes of newer versions instead of keeping the old program.
 
 ## [0.4.19] - 2026-11-09
