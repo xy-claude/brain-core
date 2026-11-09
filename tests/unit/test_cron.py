@@ -218,26 +218,22 @@ def test_task_scheduler_install_status_uninstall_on_windows(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr("brain_core.cron.sys.platform", "win32")
-    tasks: dict[str, str] = {}
-
-    def fake_run(cmd: list[str], **kw: Any) -> subprocess.CompletedProcess[str]:
-        name = cmd[cmd.index("/TN") + 1]
-        if cmd[1] == "/Create":
-            tasks[name] = cmd[cmd.index("/TR") + 1]
-        elif cmd[1] == "/Delete":
-            del tasks[name]
-        return subprocess.CompletedProcess(cmd, 0 if name in tasks else 1, stdout="", stderr="")
-
-    monkeypatch.setattr("brain_core.cron.subprocess.run", fake_run)
+    tasks: dict[str, tuple[str, int | None, str]] = {}
+    monkeypatch.setattr(
+        cron, "_create_task", lambda task, at, wd, args: tasks.__setitem__(task, (at, wd, args))
+    )
+    monkeypatch.setattr(cron, "_task_installed", lambda task: task in tasks)
+    monkeypatch.setattr(cron, "_delete_task", lambda task: tasks.pop(task))
     monkeypatch.setattr("brain_core.cron.shutil.which", lambda _: r"C:\b\brain.exe")
+    said: list[str] = []
     agent = make(tmp_path)
     with agent:
-        names = cron.install(agent)
+        names = cron.install(agent, say=said.append)
         assert names == ["brain-core.atlas.daily", "brain-core.atlas.weekly"]
-        assert (
-            tasks["brain-core.atlas.daily"].startswith('cmd /c ""')
-            and ' daily "' in tasks["brain-core.atlas.daily"]
-        )
+        assert said == [f"Task Scheduler: creating {n}" for n in names], "each task is announced"
+        at, weekday, arguments = tasks["brain-core.atlas.daily"]
+        assert (at, weekday) == ("06:07", None) and arguments.startswith('/c ""')
+        assert tasks["brain-core.atlas.weekly"][:2] == ("07:13", 0), "Sunday is day 0"
         assert cron.status(agent) == {
             "daily": "installed (Task Scheduler)",
             "weekly": "installed (Task Scheduler)",
@@ -249,14 +245,17 @@ def test_task_scheduler_install_status_uninstall_on_windows(
 def test_task_scheduler_that_never_answers_is_reported_not_waited_on(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    import time
+
     monkeypatch.setattr("brain_core.cron.sys.platform", "win32")
-    seen: list[dict[str, Any]] = []
+    monkeypatch.setattr(cron, "_connect", lambda: time.sleep(5))
+    with pytest.raises(RuntimeError, match="no answer from Task Scheduler in 0 seconds"):
+        cron._task_scheduler(lambda service, root: "never", timeout=0.2)
 
-    def hangs(cmd: list[str], **kw: Any) -> subprocess.CompletedProcess[str]:
-        seen.append(kw)
-        raise subprocess.TimeoutExpired(cmd, kw["timeout"])
+    def stuck(task: str, at: str, weekday: int | None, arguments: str) -> None:
+        raise RuntimeError("no answer from Task Scheduler in 60 seconds")
 
-    monkeypatch.setattr("brain_core.cron.subprocess.run", hangs)
+    monkeypatch.setattr(cron, "_create_task", stuck)
     monkeypatch.setattr("brain_core.cron.shutil.which", lambda _: r"C:\b\brain.exe")
     agent = make(tmp_path)
     with (
@@ -264,21 +263,42 @@ def test_task_scheduler_that_never_answers_is_reported_not_waited_on(
         pytest.raises(RuntimeError, match=r"did not create brain-core\.atlas\.daily: no answer"),
     ):
         cron.install(agent)
-    assert seen[0]["stdin"] == subprocess.DEVNULL and seen[0]["timeout"] == 60
 
 
-def test_schtasks_commands_carry_the_schedule() -> None:
-    cmds = cron.schtasks_commands(
-        Path(r"C:\Agents\My A"), r"C:\b\brain.exe", "A", "06:07", "Sun 07:13"
-    )
-    daily, weekly = cmds["brain-core.a.daily"], cmds["brain-core.a.weekly"]
-    assert daily[daily.index("/ST") + 1] == "06:07" and "DAILY" in daily
-    assert weekly[weekly.index("/D") + 1] == "SUN" and weekly[weekly.index("/ST") + 1] == "07:13"
+def test_task_scheduler_error_text_reaches_the_caller(monkeypatch: pytest.MonkeyPatch) -> None:
+    def refused() -> Any:
+        raise OSError("Access is denied.")
+
+    monkeypatch.setattr(cron, "_connect", refused)
+    with pytest.raises(RuntimeError, match="Access is denied"):
+        cron._task_scheduler(lambda service, root: "x")
+
+
+def test_task_specs_carry_the_schedule() -> None:
+    specs = cron.task_specs(Path(r"C:\Agents\My A"), r"C:\b\brain.exe", "A", "06:07", "Wed 07:13")
+    assert specs["brain-core.a.daily"][:2] == ("06:07", None)
+    assert specs["brain-core.a.weekly"][:2] == ("07:13", 3), "Wednesday is day 3, Sunday 0"
+    arguments = specs["brain-core.a.daily"][2]
     # the log path joins with the host separator, so only its ends are pinned here
-    assert daily[-1].startswith(
-        'cmd /c ""C:\\b\\brain.exe" daily "C:\\Agents\\My A" >> "C:\\Agents\\My A'
+    assert arguments.startswith(
+        '/c ""C:\\b\\brain.exe" daily "C:\\Agents\\My A" >> "C:\\Agents\\My A'
     )
-    assert daily[-1].endswith('daily.log" 2>&1"')
+    assert arguments.endswith('daily.log" 2>&1"')
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="the real Task Scheduler, Windows only")
+def test_a_real_task_is_created_found_and_deleted() -> None:
+    import os
+
+    task = f"brain-core.pytest-{os.getpid()}.daily"
+    assert cron._task_installed(task) is False
+    cron._create_task(task, "06:07", None, "/c echo hi")
+    try:
+        assert cron._task_installed(task) is True
+        cron._create_task(task, "07:13", 0, "/c echo again")  # create-or-update, no error
+    finally:
+        cron._delete_task(task)
+    assert cron._task_installed(task) is False
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX quoting")

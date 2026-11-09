@@ -4,6 +4,10 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+### Fixed
+- `brain cron install` got no answer on a Windows PC with a third-party antivirus. Measured there: `schtasks /Create` started from PowerShell took 0.1 s; started from Python (directly, through cmd or through PowerShell) it never returned; Task Scheduler's own COM interface, called inside Python, took 0.4 s. brain-core now creates, finds and deletes its tasks through that interface and no longer launches `schtasks`. Tasks also start on battery power and catch up after the PC was off at the hour. `pywin32` is declared as a Windows dependency (it was already installed through `mcp`).
+- `brain desktop` did not reach newer Microsoft Store builds of the Claude desktop app, which keep their settings in `%LOCALAPPDATA%\Claude-Data\<package>`; the entry was written to two folders that app never reads. That folder is now written too.
+
 ## [0.4.20] - 2026-11-09
 
 ### Changed

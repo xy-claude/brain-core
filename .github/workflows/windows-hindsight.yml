@@ -7,8 +7,12 @@ run-name: ${{ github.event.head_commit.message || github.ref_name }}
 on:
   pull_request:
     branches: [main]
-    paths:
+    paths:  # everything the Windows installer runs: a fix in cron.py once skipped this workflow
       - src/brain_core/installer.py
+      - src/brain_core/cron.py
+      - src/brain_core/desktop.py
+      - src/brain_core/cli/**
+      - pyproject.toml
       - install.ps1
       - .github/workflows/windows-hindsight.yml
   workflow_dispatch:

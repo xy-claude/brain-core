@@ -19,8 +19,11 @@ SERVER = "brain"
 def config_paths(home: Path | None = None) -> list[Path]:
     """Where the desktop app reads its MCP config on this platform; empty when it has no build.
 
-    A Microsoft Store install keeps its files under a package folder instead of %APPDATA%, so
-    on Windows every such folder that exists is returned as well.
+    On Windows there are three places and the app reads only one, depending on how and when
+    it was installed, so every one that exists is returned: %APPDATA%\\Claude (the download
+    from claude.ai), the package folder of a Microsoft Store install, and
+    %LOCALAPPDATA%\\Claude-Data\\<package>, where newer Store builds keep their data (found on a
+    real PC, 2026-11-09: the entry written to the first two was never read).
     """
     home = home or Path.home()
     if sys.platform == "darwin":
@@ -29,7 +32,8 @@ def config_paths(home: Path | None = None) -> list[Path]:
         roaming = Path(os.environ.get("APPDATA") or home / "AppData" / "Roaming")
         local = Path(os.environ.get("LOCALAPPDATA") or home / "AppData" / "Local")
         store = sorted((local / "Packages").glob("Claude_*/LocalCache/Roaming/Claude"))
-        return [roaming / "Claude" / CONFIG_NAME, *(p / CONFIG_NAME for p in store)]
+        data = sorted(p for p in (local / "Claude-Data").glob("*") if p.is_dir())
+        return [roaming / "Claude" / CONFIG_NAME, *(p / CONFIG_NAME for p in [*store, *data])]
     return []
 
 

@@ -8,6 +8,7 @@ Hindsight mental models. ``brain cron install`` registers both as launchd agents
 
 from __future__ import annotations
 
+import importlib
 import json
 import os
 import plistlib
@@ -16,6 +17,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import threading
 from collections import Counter
 from collections.abc import Callable
 from datetime import date, datetime
@@ -570,50 +572,100 @@ def _install_crontab(agent: Agent, agent_dir: Path, brain_bin: str) -> list[str]
 
 
 # ── Task Scheduler (Windows) ──────────────────────────────────────────────────
+#
+# Through Windows' COM interface, inside this process, never by launching ``schtasks``. On a
+# real PC with a third-party antivirus, ``schtasks /Create`` started from Python (directly, through
+# cmd or through PowerShell) got no answer at all; started from PowerShell alone it took 0.1 s, and
+# this interface took 0.4 s (2026-11-09).
 
 
-def schtasks_commands(
+def task_specs(
     agent_dir: Path, brain_bin: str, name: str, daily_at: str, weekly_at: str
-) -> dict[str, list[str]]:
-    """Two ``schtasks /Create`` argv lists, keyed by task name (brain-core.<agent>.daily|weekly)."""
+) -> dict[str, tuple[str, int | None, str]]:
+    """Task name → (HH:MM, weekday 0=Sunday or None for daily, arguments for ``cmd``)."""
     wday, wtime = weekly_at.split()
+    weekday = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"].index(wday[:3].lower())
     task = f"brain-core.{name.lower()}"
     log = agent_dir / "data" / "logs"
 
     def run(sub: str) -> str:
         # cmd strips the outer pair of quotes, which is what lets the inner ones quote paths
-        return f'cmd /c ""{brain_bin}" {sub} "{agent_dir}" >> "{log / f"{sub}.log"}" 2>&1"'
+        return f'/c ""{brain_bin}" {sub} "{agent_dir}" >> "{log / f"{sub}.log"}" 2>&1"'
 
-    create = ["schtasks", "/Create", "/F"]
-    daily = [*create, "/SC", "DAILY", "/ST", daily_at]
-    weekly = [*create, "/SC", "WEEKLY", "/D", wday[:3].upper(), "/ST", wtime]
     return {
-        f"{task}.daily": [*daily, "/TN", f"{task}.daily", "/TR", run("daily")],
-        f"{task}.weekly": [*weekly, "/TN", f"{task}.weekly", "/TR", run("weekly")],
+        f"{task}.daily": (daily_at, None, run("daily")),
+        f"{task}.weekly": (wtime, weekday, run("weekly")),
     }
 
 
-def _schtasks(args: list[str], show: bool = False) -> subprocess.CompletedProcess[str]:
-    """Run schtasks with no keyboard and a time limit. With the console as stdin, a question
-    from it or from security software watching it waited for ever, unseen (real PC, 2026-11-09).
-    ``show`` lets its own lines reach the screen instead of being collected."""
-    out = None if show else subprocess.PIPE
-    try:
-        return subprocess.run(
-            ["schtasks", *args],
-            stdout=out,
-            stderr=out,
-            text=True,
-            stdin=subprocess.DEVNULL,
-            timeout=60,
-        )
-    except subprocess.TimeoutExpired:
-        why = "no answer from Task Scheduler in 60 s; security software may be holding it"
-        return subprocess.CompletedProcess(["schtasks", *args], 1, stdout="", stderr=why)
+def _connect() -> tuple[Any, Any]:
+    """Task Scheduler's service object and its root folder, for the calling thread."""
+    pythoncom = importlib.import_module("pythoncom")
+    client = importlib.import_module("win32com.client")
+    pythoncom.CoInitialize()
+    service = client.Dispatch("Schedule.Service")
+    service.Connect()
+    return service, service.GetFolder("\\")
+
+
+def _task_scheduler(work: Callable[[Any, Any], str], timeout: float = 60.0) -> str:
+    """Run ``work(service, root_folder)`` against Task Scheduler in a worker thread. A call that
+    never returns becomes an error after ``timeout`` seconds instead of a wait."""
+    result: dict[str, Any] = {}
+
+    def run() -> None:
+        try:
+            result["value"] = work(*_connect())
+        except Exception as e:  # a COM error carries Windows' own text
+            result["error"] = e
+
+    worker = threading.Thread(target=run, daemon=True)
+    worker.start()
+    worker.join(timeout)
+    if worker.is_alive():
+        raise RuntimeError(f"no answer from Task Scheduler in {timeout:.0f} seconds")
+    if "error" in result:
+        raise RuntimeError(str(result["error"])) from result["error"]
+    return str(result["value"])
+
+
+def _create_task(task: str, at: str, weekday: int | None, arguments: str) -> None:
+    def work(service: Any, root: Any) -> str:
+        d = service.NewTask(0)
+        d.RegistrationInfo.Description = "brain-core"
+        d.Settings.StartWhenAvailable = True  # a PC that was off at the hour runs it when it wakes
+        d.Settings.DisallowStartIfOnBatteries = False  # a laptop on battery still gets its brief
+        d.Settings.StopIfGoingOnBatteries = False
+        trigger = d.Triggers.Create(2 if weekday is None else 3)  # daily | weekly
+        trigger.StartBoundary = f"{date.today().isoformat()}T{at}:00"
+        if weekday is None:
+            trigger.DaysInterval = 1
+        else:
+            trigger.DaysOfWeek = 1 << weekday  # Sunday is bit 0
+            trigger.WeeksInterval = 1
+        action = d.Actions.Create(0)  # run a program
+        action.Path = "cmd"
+        action.Arguments = arguments
+        # 6 = create or update; 3 = as the logged-on user, no stored password
+        root.RegisterTaskDefinition(task, d, 6, None, None, 3)
+        return "created"
+
+    _task_scheduler(work)
 
 
 def _task_installed(task: str) -> bool:
-    return _schtasks(["/Query", "/TN", task]).returncode == 0
+    def work(service: Any, root: Any) -> str:
+        try:
+            root.GetTask("\\" + task)
+        except Exception:  # Windows answers "file not found" for a task that is not there
+            return "absent"
+        return "present"
+
+    return _task_scheduler(work) == "present"
+
+
+def _delete_task(task: str) -> None:
+    _task_scheduler(lambda service, root: str(root.DeleteTask(task, 0)))
 
 
 # ── launchd ───────────────────────────────────────────────────────────────────
@@ -662,16 +714,15 @@ def install(
     (agent_dir / "data" / "logs").mkdir(parents=True, exist_ok=True)
     if sys.platform == "win32" and launch_dir is None:
         c = agent.config.cron
-        tasks = schtasks_commands(agent_dir, brain_bin, agent.name, c.daily, c.weekly)
+        tasks = task_specs(agent_dir, brain_bin, agent.name, c.daily, c.weekly)
         if load:
-            for task, cmd in tasks.items():
+            for task, (at, weekday, arguments) in tasks.items():
                 if say:
-                    say(f"Task Scheduler: creating {task} (answers within 60 seconds)")
-                done = _schtasks(cmd[1:], show=say is not None)
-                if done.returncode:
-                    shown = f"exit code {done.returncode}, its own message is above"
-                    why = (done.stderr or done.stdout or shown).strip()
-                    raise RuntimeError(f"Task Scheduler did not create {task}: {why}")
+                    say(f"Task Scheduler: creating {task}")
+                try:
+                    _create_task(task, at, weekday, arguments)
+                except RuntimeError as e:
+                    raise RuntimeError(f"Task Scheduler did not create {task}: {e}") from e
         return list(tasks)
     if sys.platform != "darwin" and launch_dir is None:
         return (
@@ -732,7 +783,7 @@ def uninstall(agent: Agent, launch_dir: Path | None = None) -> list[str]:
         tasks = [f"brain-core.{agent.name.lower()}.{s}" for s in ("daily", "weekly")]
         removed = [t for t in tasks if _task_installed(t)]
         for t in removed:
-            _schtasks(["/Delete", "/F", "/TN", t])
+            _delete_task(t)
         return removed
     if sys.platform != "darwin" and launch_dir is None:
         cp = subprocess.run(["crontab", "-l"], capture_output=True, text=True)
