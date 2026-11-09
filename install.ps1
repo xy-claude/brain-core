@@ -26,17 +26,28 @@ function Have($c) { [bool](Get-Command $c -ErrorAction SilentlyContinue) }
 function Fail-OnError { if ($LASTEXITCODE) { throw "the last step failed with exit code $LASTEXITCODE; the lines above say why" } }
 $env:Path = "$HOME\.local\bin;$env:ProgramFiles\Git\cmd;$env:Path"
 
+# Other people's installers run in a child PowerShell: they end with `exit`, which would close this
+# window, and uv's refuses the Restricted execution policy a new Windows PC ships with.
+function Run-Installer($url) {
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "irm $url | iex" | Out-Host  # not into the return value
+  return $LASTEXITCODE -eq 0
+}
+
 Step "1/7 Git for Windows (Claude Code runs its hooks in Git Bash)"
-if (Have git) { "present" } else {
+if (Have git) { "present" }
+elseif (-not (Have winget)) { "skipped: no winget on this PC. Claude Code needs Git: https://git-scm.com/download/win" }
+else {
   winget install --id Git.Git -e --source winget --accept-package-agreements --accept-source-agreements
-  Fail-OnError
+  if ($LASTEXITCODE) { "Git was not installed (exit code $LASTEXITCODE). Claude Code needs it: https://git-scm.com/download/win" }
 }
 
 Step "2/7 uv"
-if (Have uv) { "present" } else { irm https://astral.sh/uv/install.ps1 | iex }
+if (Have uv) { "present" }
+elseif (-not (Run-Installer "https://astral.sh/uv/install.ps1")) { throw "uv could not be installed; the lines above say why" }
 
 Step "3/7 Claude Code"
-if (Have claude) { "present" } else { irm https://claude.ai/install.ps1 | iex }
+if (Have claude) { "present" }
+elseif (-not (Run-Installer "https://claude.ai/install.ps1")) { "Claude Code was not installed. The memory still works in the Claude desktop app; for Claude Code see https://code.claude.com/docs/en/setup" }
 
 Step "4/7 brain-core$(if ($Ref) { " ($Ref)" })"
 if ($Ref) { uv tool install --force "git+https://github.com/xy-claude/brain-core@$Ref" }

@@ -69,11 +69,17 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: the one-liner, lite, with -Desktop
+      - name: the one-liner, lite, with -Desktop, under the Restricted policy a new PC ships with
         shell: powershell
         run: |
-          $script = Get-Content -Raw install.ps1
-          & ([scriptblock]::Create($script)) -Agent Atlas -User Alex -Desktop -Ref ${{ github.event.pull_request.head.sha || github.sha }}
+          # the runner's own policy is permissive, which hid a uv installer that exits under
+          # Restricted and took the user's window with it (2026-11-09)
+          $ref = "${{ github.event.pull_request.head.sha || github.sha }}"
+          $cmd = "'policy: ' + (Get-ExecutionPolicy); & ([scriptblock]::Create((Get-Content -Raw install.ps1))) -Agent Atlas -User Alex -Desktop -Ref $ref; 'reached the end of the installer'"
+          $out = powershell -NoProfile -ExecutionPolicy Restricted -Command $cmd
+          $out
+          if (-not ($out -match "policy: Restricted")) { throw "the child did not run under Restricted" }
+          if (-not ($out -match "reached the end of the installer")) { throw "the installer ended the PowerShell session" }
 
       - name: agent, scheduled tasks and desktop entry exist
         shell: powershell
@@ -99,3 +105,10 @@ jobs:
           schtasks /Query /TN brain-core.atlas.daily /V /FO LIST | Select-String "Last Result|Task To Run"
           Get-Content $log
           if (-not (Select-String -Path $log -Pattern "brief" -Quiet)) { throw "daily did not report a brief" }
+
+      - name: "for the record: uv's own installer under Restricted, run the old way"
+        shell: powershell
+        continue-on-error: true  # someone else's script; this step only documents why ours uses a child
+        run: |
+          powershell -NoProfile -ExecutionPolicy Restricted -Command "irm https://astral.sh/uv/install.ps1 | iex; 'survived'"
+          "exit code: $LASTEXITCODE"
