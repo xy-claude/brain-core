@@ -592,8 +592,24 @@ def schtasks_commands(
     }
 
 
+def _schtasks(args: list[str]) -> subprocess.CompletedProcess[str]:
+    """Run schtasks with no keyboard and a time limit. With the console as stdin, a question
+    from it or from security software watching it waited for ever, unseen (real PC, 2026-11-09)."""
+    try:
+        return subprocess.run(
+            ["schtasks", *args],
+            capture_output=True,
+            text=True,
+            stdin=subprocess.DEVNULL,
+            timeout=60,
+        )
+    except subprocess.TimeoutExpired:
+        why = "no answer from Task Scheduler in 60 s; security software may be holding it"
+        return subprocess.CompletedProcess(["schtasks", *args], 1, stdout="", stderr=why)
+
+
 def _task_installed(task: str) -> bool:
-    return subprocess.run(["schtasks", "/Query", "/TN", task], capture_output=True).returncode == 0
+    return _schtasks(["/Query", "/TN", task]).returncode == 0
 
 
 # ── launchd ───────────────────────────────────────────────────────────────────
@@ -638,8 +654,11 @@ def install(agent: Agent, launch_dir: Path | None = None, load: bool = True) -> 
         c = agent.config.cron
         tasks = schtasks_commands(agent_dir, brain_bin, agent.name, c.daily, c.weekly)
         if load:
-            for cmd in tasks.values():
-                subprocess.run(cmd, capture_output=True, check=True)
+            for task, cmd in tasks.items():
+                done = _schtasks(cmd[1:])
+                if done.returncode:
+                    why = (done.stderr or done.stdout).strip()
+                    raise RuntimeError(f"Task Scheduler did not create {task}: {why}")
         return list(tasks)
     if sys.platform != "darwin" and launch_dir is None:
         return (
@@ -700,7 +719,7 @@ def uninstall(agent: Agent, launch_dir: Path | None = None) -> list[str]:
         tasks = [f"brain-core.{agent.name.lower()}.{s}" for s in ("daily", "weekly")]
         removed = [t for t in tasks if _task_installed(t)]
         for t in removed:
-            subprocess.run(["schtasks", "/Delete", "/F", "/TN", t], capture_output=True, check=True)
+            _schtasks(["/Delete", "/F", "/TN", t])
         return removed
     if sys.platform != "darwin" and launch_dir is None:
         cp = subprocess.run(["crontab", "-l"], capture_output=True, text=True)

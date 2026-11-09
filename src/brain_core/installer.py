@@ -10,6 +10,7 @@ instead of a key; Anthropic allows that for personal use only.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import plistlib
@@ -139,13 +140,22 @@ def _install_windows(
          subprocess.list2cmdline([*start, "-File", str(script)])],
         capture_output=True,
         check=True,
+        stdin=subprocess.DEVNULL,
+        timeout=60,
     )  # fmt: skip
     stop = (
         "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*hindsight.ps1*' "
         "-and $_.ProcessId -ne $PID } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force };"
         " Get-Process hindsight-api -ErrorAction SilentlyContinue | Stop-Process -Force"
     )
-    subprocess.run(["powershell", "-NoProfile", "-Command", stop], capture_output=True)
+    # never wait on a child PowerShell: one sat silent for ever on a real PC (2026-11-09)
+    with contextlib.suppress(subprocess.TimeoutExpired):
+        subprocess.run(
+            ["powershell", "-NoProfile", "-Command", stop],
+            capture_output=True,
+            stdin=subprocess.DEVNULL,
+            timeout=60,
+        )
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(
         subprocess, "CREATE_NEW_PROCESS_GROUP", 0
     )
