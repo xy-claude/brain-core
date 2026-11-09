@@ -67,9 +67,9 @@ jobs:
 
   installer:
     # install.ps1 exactly as the README runs it, in Windows PowerShell 5.1 (not pwsh), with no uv
-    # preinstalled: the path a real user takes. brain comes from this commit through -Ref.
+    # preinstalled and no API key: the path a real user takes. brain comes from this commit through -Ref.
     runs-on: windows-2025
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       # a new PC has no Python: uv must fetch its own, as it did when it chose 3.15 and failed to
       # compile pyyaml (2026-11-09). The runner's preinstalled 3.12 hid that.
@@ -77,7 +77,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: the one-liner, lite, with -Desktop, under the Restricted policy a new PC ships with
+      - name: the one-liner as the README has it (Hindsight, -Desktop), under the Restricted policy a new PC ships with
         shell: powershell
         run: |
           # the runner's own policy is permissive, which hid a uv installer that exits under
@@ -90,7 +90,7 @@ jobs:
           if (-not ($out -match "reached the end of the installer")) { throw "the installer ended the PowerShell session" }
           if (-not ($out -match "installed uv ")) { throw "uv was not installed by our own download" }
           # progress must be on the screen, and the ending must be the truthful one
-          foreach ($line in "uv: downloaded", "Task Scheduler: creating brain-core.atlas.daily", "Claude Code: downloaded", "Install complete: every step above finished", "scheduled tasks   created", "Claude Code       installed", "desktop app       connected; loads when Claude is next opened") {
+          foreach ($line in "uv: downloaded", "Task Scheduler: creating brain-core.atlas.daily", "Claude Code: downloaded", "Install complete: every step above finished", "Hindsight         running (provider claude-code)", "scheduled tasks   created", "Claude Code       installed", "desktop app       connected; loads when Claude is next opened") {
             if (-not ($out -match [regex]::Escape($line))) { throw "missing from the installer's output: $line" }
           }
 
@@ -102,6 +102,18 @@ jobs:
           if (-not ($out -match "already initialised")) { throw "the second run did not keep the agent" }
           if (-not ($out -match "already connected")) { throw "the second run did not find the desktop entry" }
           if (-not ($out -match "Install complete: every step above finished")) { throw "the second run did not complete" }
+
+      - name: -Lite skips Hindsight, and an agent made lite stays lite on a plain second run
+        shell: powershell
+        run: |
+          foreach ($flag in "-Lite", "") {
+            $out = powershell -NoProfile -ExecutionPolicy Restricted -Command "& ([scriptblock]::Create((Get-Content -Raw install.ps1))) -Agent Quick -User Alex -Dir '$HOME\My Agents\Quick' $flag"
+            $out
+            foreach ($line in "Hindsight skipped (lite", "Hindsight         not installed (lite)", "Install complete: every step above finished") {
+              if (-not ($out -match [regex]::Escape($line))) { throw "missing from the run with '$flag': $line" }
+            }
+          }
+          if (-not ($out -match "stays lite")) { throw "the plain run did not keep the lite agent lite" }
 
       - name: agent, scheduled tasks and desktop entry exist
         shell: powershell

@@ -1,18 +1,19 @@
 # brain-core one-line installer (Windows 10 1809+, PowerShell 5.1 or 7).
 #
-#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/xy-claude/brain-core/main/install.ps1))) -Agent NAME [-User Alex] [-Dir C:\Agents\NAME] [-Desktop] [-Hindsight] [-Provider anthropic|openai|claude-code] [-ApiKeyEnv VAR] [-ProfileDir DIR] [-Ref v0.4.25]
+#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/xy-claude/brain-core/main/install.ps1))) -Agent NAME [-User Alex] [-Dir C:\Agents\NAME] [-Desktop] [-Lite] [-Provider anthropic|openai|claude-code] [-ApiKeyEnv VAR] [-ProfileDir DIR] [-Ref v0.4.25]
 #
 # Idempotent: re-running skips what is already in place. Every step prints what it did.
 # It never asks for secrets. Two things stay yours: `claude` login and `gh auth login`.
-# Default is lite: vault + SQLite, installed in about a minute. -Hindsight adds the vector store
-# (about 2 GB, a few minutes): it runs in the background and starts again at every logon.
+# Hindsight, the vector store, is installed by default (about 2 GB, a few minutes): it runs in the
+# background and starts again at every logon. -Lite skips it: vault + SQLite, about a minute.
 param(
   [Parameter(Mandatory = $true)][string]$Agent,
   [string]$User = "the user",
   [string]$Dir = "",
-  [switch]$Hindsight,
+  [switch]$Lite,
+  [switch]$Hindsight,  # ignored: Hindsight is the default now, and lines written when it was opt-in still run
   [switch]$Desktop,
-  [string]$Provider = "anthropic",
+  [string]$Provider = "",
   [string]$ApiKeyEnv = "",
   [string]$ProfileDir = "",
   [string]$Ref = ""
@@ -21,6 +22,15 @@ $ErrorActionPreference = "Stop"
 # throw, never exit: the documented one-liner runs this in the user's own window, and exit closes it
 if ($Agent -notmatch '^[A-Za-z0-9_-]+$') { throw "-Agent must be letters, digits, '-' or '_' only (got '$Agent')" }
 if (-not $Dir) { $Dir = Join-Path $HOME "Agents\$Agent" }
+# Hindsight does not start for a provider whose key is missing. So with no -Provider: anthropic
+# when its key is in this window, otherwise the Claude Code login. A named provider needs its key.
+if (-not $Provider) {
+  $keyVar = if ($ApiKeyEnv) { $ApiKeyEnv } else { "ANTHROPIC_API_KEY" }
+  if ([Environment]::GetEnvironmentVariable($keyVar)) { $Provider = "anthropic" } else { $Provider = "claude-code"; $ApiKeyEnv = "" }
+} elseif ($Provider -ne "claude-code" -and -not $Lite) {
+  $keyVar = if ($ApiKeyEnv) { $ApiKeyEnv } else { "$($Provider.ToUpper())_API_KEY" }
+  if (-not [Environment]::GetEnvironmentVariable($keyVar)) { throw "-Provider $Provider needs $keyVar set in this window: set it and run this line again, or leave -Provider out to use your Claude Code login" }
+}
 function Step($s, $color = "White") { Write-Host "`n== $s" -ForegroundColor $color }
 function Have($c) { [bool](Get-Command $c -ErrorAction SilentlyContinue) }
 function Fail-OnError { if ($LASTEXITCODE) { throw "the last step failed with exit code $LASTEXITCODE; the lines above say why" } }
@@ -132,24 +142,31 @@ Fail-OnError
 uv tool update-shell  # puts %USERPROFILE%\.local\bin on the user PATH for new terminals
 
 Step "4/7 Agent $Agent at $Dir"
-if (Test-Path (Join-Path $Dir "brain.yaml")) { "already initialised, leaving it" } else {
+if (Test-Path (Join-Path $Dir "brain.yaml")) {
+  "already initialised, leaving it"
+  # an agent made lite stays lite: Hindsight would be 2 GB that its brain.yaml never uses
+  if (-not $Lite -and -not (Select-String -Path (Join-Path $Dir "brain.yaml") -Pattern '^  hindsight:' -Quiet)) { $Lite = $true; "this agent was made lite and stays lite" }
+} else {
   $initArgs = @("init", $Agent, "--path", $Dir, "--user", $User)
-  if (-not $Hindsight) { $initArgs += "--lite" }
+  if ($Lite) { $initArgs += "--lite" }
   if ($ProfileDir) { $initArgs += @("--profile", $ProfileDir) }
   & brain @initArgs
   Fail-OnError
 }
 
-if ($Hindsight) {
-  Step "5/7 Hindsight (vector store; the first start downloads a database and a model)"
+$hindsightState = "not installed (lite)"
+if (-not $Lite) {
+  Step "5/7 Hindsight (vector store, provider $Provider; the first start downloads a database and a model)"
+  if ($Provider -eq "claude-code") { "Hindsight reasons through your Claude Code login (personal use only). For an API key instead: set ANTHROPIC_API_KEY, then: brain hindsight install" }
   $hsArgs = @("hindsight", "install", "--provider", $Provider, "--wait", "600")
   if ($ApiKeyEnv) { $hsArgs += @("--api-key-env", $ApiKeyEnv) }
   "installing and starting Hindsight; its first start downloads about 2 GB"
-  if (-not (Run-Bounded (Get-Command brain).Source $hsArgs 1500)) {
+  if (Run-Bounded (Get-Command brain).Source $hsArgs 1500) { $hindsightState = "running (provider $Provider)" } else {
+    $hindsightState = "NOT running"
     $problems += "Hindsight did not report healthy. Check: brain hindsight status. The log is in $HOME\.config\hindsight\api.log"
   }
 } else {
-  Step "5/7 Hindsight skipped (lite). Later: brain hindsight install, then uncomment it in brain.yaml"
+  Step "5/7 Hindsight skipped (lite: vault + SQLite only). Later: brain hindsight install, then uncomment it in brain.yaml"
 }
 
 $desktopOk = $false
@@ -241,6 +258,7 @@ if ($problems.Count -eq 0) {
   $problems | ForEach-Object { Write-Host "  - $_" -ForegroundColor Red }
 }
 "  memory folder     $Dir"
+"  Hindsight         $hindsightState"
 "  desktop app       $desktopState"
 "  scheduled tasks   $(if ($tasksOk) { 'created' } else { 'NOT created' })"
 "  Claude Code       $(if ($claudeOk) { 'installed' } else { 'NOT installed' })"
@@ -248,7 +266,7 @@ if ($problems.Count -eq 0) {
 @"
 
 Done. Still yours to do, once:
-  claude            # sign in to Claude Code
+  claude            # sign in to Claude Code$(if (-not $Lite -and $Provider -eq "claude-code") { "; Hindsight reasons through this login" })
   gh auth login     # GitHub, if the agent pushes (winget install GitHub.cli)
 
 Then, in a NEW terminal so PATH is fresh: cd "$Dir"; claude

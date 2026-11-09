@@ -83,6 +83,46 @@ def test_install_sh_parses_and_refuses_without_agent() -> None:
         assert subprocess.run(["shellcheck", "-S", "warning", str(script)]).returncode == 0
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="install.sh is the macOS and Linux installer")
+def test_install_sh_picks_a_provider_that_starts_and_keeps_a_lite_agent_lite(
+    tmp_path: Path,
+) -> None:
+    bin_dir = tmp_path / ".local" / "bin"  # first on PATH: every tool the script runs is a recorder
+    bin_dir.mkdir(parents=True)
+    for name in ("uv", "node", "claude", "brain"):
+        (bin_dir / name).write_text('#!/bin/sh\necho "$(basename "$0") $*" >> "$HOME/calls"\n')
+    (bin_dir / "uname").write_text("#!/bin/sh\necho Linux\n")  # the Linux path needs no Homebrew
+    for stub in bin_dir.iterdir():
+        stub.chmod(0o755)
+    calls = tmp_path / "calls"
+
+    def run(*args: str, **env: str) -> tuple[subprocess.CompletedProcess[str], str]:
+        calls.unlink(missing_ok=True)
+        r = subprocess.run(
+            [BASH, str(ROOT / "install.sh"), "--agent", "Atlas", *args],
+            env={"HOME": str(tmp_path), "PATH": f"{bin_dir}:/usr/bin:/bin", **env},
+            capture_output=True,
+            text=True,
+        )
+        return r, calls.read_text() if calls.exists() else ""
+
+    r, said = run("--desktop")  # the README line, no key in the shell
+    assert r.returncode == 0, r.stderr
+    assert "brain hindsight install --provider claude-code" in said and "--lite" not in said
+    assert "no Linux build" in r.stdout and "brain desktop" not in said
+    _, said = run(ANTHROPIC_API_KEY="k")
+    assert "brain hindsight install --provider anthropic" in said
+    r, said = run("--provider", "openai")  # Hindsight would never start: refuse before any step
+    assert r.returncode == 2 and "OPENAI_API_KEY" in r.stderr and said == ""
+    _, said = run("--lite")
+    assert "--lite" in said and "hindsight install" not in said
+    agent = tmp_path / "Agents" / "Atlas"
+    agent.mkdir(parents=True)
+    (agent / "brain.yaml").write_text("stores:\n  # hindsight:  # lite\n")
+    r, said = run()
+    assert "stays lite" in r.stdout and "hindsight install" not in said and "cron install" in said
+
+
 def test_windows_dry_run_writes_only_the_launcher(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

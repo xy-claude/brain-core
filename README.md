@@ -14,7 +14,7 @@
 **macOS and Linux**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/xy-claude/brain-core/main/install.sh | bash -s -- --agent Atlas --user Alex
+curl -fsSL https://raw.githubusercontent.com/xy-claude/brain-core/main/install.sh | bash -s -- --agent Atlas --user Alex --desktop
 ```
 
 **Windows** (PowerShell)
@@ -30,11 +30,12 @@ cd ~/Agents/Atlas
 claude
 ```
 
+Both lines install the same things: the agent, Hindsight (the vector store, about 2 GB), the daily and weekly jobs, Claude Code, and the connection to the Claude desktop app. No API key is needed.
+
 | You want | macOS and Linux | Windows |
 |---|---|---|
-| The memory in the Claude desktop app too | add `--desktop` (macOS) | `-Desktop`, already in the line above |
-| The quick install: about a minute, no vector store | add `--lite` | the default |
-| The full install with Hindsight, about 2 GB | the default | add `-Hindsight` |
+| The quick install: about a minute, no Hindsight | add `--lite` | add `-Lite` |
+| Claude Code only, not the desktop app | remove `--desktop` | remove `-Desktop` |
 
 Every step, every flag and the common problems: [Install details](#install-details).
 
@@ -107,8 +108,8 @@ Both. One Python package, three ways in:
 | You need | Why | Check |
 |---|---|---|
 | macOS, Linux with systemd, or Windows 10 1809+ | the installer sets up a background service and cron (Windows: a logon entry and scheduled tasks) | `uname`, or `winver` |
-| about 2 GB of disk and 10 minutes, or `--lite` | Hindsight ships an embedded Postgres and a CPU embedding model; `--lite` skips it | |
-| an Anthropic API key, or a Claude Code login, or `--lite` | Hindsight uses an LLM to reason over memories | `echo $ANTHROPIC_API_KEY` |
+| about 2 GB of disk and 10 minutes, or `--lite` (`-Lite` on Windows) | Hindsight ships an embedded Postgres and a CPU embedding model; lite skips it | |
+| a Claude Code login, or an Anthropic API key, or lite | Hindsight uses an LLM to reason over memories: the key when `ANTHROPIC_API_KEY` is set, otherwise your Claude Code login | `echo $ANTHROPIC_API_KEY` |
 | Claude Code | the agent runs inside it; the installer adds it if missing | `claude --version` |
 
 Pick two names before you run the command: the agent's name (`--agent`), which becomes its folder and identity, and your own (`--user`), which is how the agent addresses you. Both can be changed later by editing `CLAUDE.md`.
@@ -118,13 +119,13 @@ Pick two names before you run the command: the agent's name (`--agent`), which b
 <img src="docs/img/install.svg" alt="install.sh transcript" width="820">
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/xy-claude/brain-core/main/install.sh | bash -s -- --agent Atlas --user Alex
+curl -fsSL https://raw.githubusercontent.com/xy-claude/brain-core/main/install.sh | bash -s -- --agent Atlas --user Alex --desktop
 ```
 
 In a hurry, or no 2 GB to spare? Add `--lite`: vault plus SQLite full-text search, no Hindsight, installed in about a minute. Everything in the five tools works; what you give up is semantic recall over paraphrases, mental models and the weekly reflection. The recall numbers in [Does it work?](#does-it-work) are measured on exactly this configuration. Upgrade any time with `brain hindsight install`, then uncomment the `hindsight:` block in `brain.yaml`.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/xy-claude/brain-core/main/install.sh | bash -s -- --agent Atlas --user Alex --lite
+curl -fsSL https://raw.githubusercontent.com/xy-claude/brain-core/main/install.sh | bash -s -- --agent Atlas --user Alex --desktop --lite
 ```
 
 What it does, in order. Re-running skips what is already there, so after a failure you fix the cause and run the same line again.
@@ -154,25 +155,29 @@ What it does, in order. Re-running skips what is already there, so after a failu
 
 ### After the installer
 
-Two things the installer cannot do for you:
+One thing the installer cannot do for you:
+
+```bash
+claude                                  # sign in to Claude Code once
+```
+
+Hindsight needs an LLM to reason over memories, and the installer picks one that works. With `ANTHROPIC_API_KEY` in your shell it uses that key. Without it, Hindsight uses your Claude Code login, and the installer says so; that mode is for personal use only. To move to a key later:
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...     # add it to ~/.zshrc too
 brain hindsight install                 # copies the key into ~/.config/hindsight/env (mode 600) and restarts the service
-claude                                  # sign in to Claude Code once
 ```
-
-The installer prints a note if the key was not in your shell when it ran. If you would rather not use an API key, pass `--provider claude-code` and Hindsight uses your Claude Code login instead. That mode is for personal use only.
 
 | Flag | Meaning |
 |---|---|
 | `--agent NAME` | the agent's name (required) |
 | `--user Alex` | how the agent addresses you |
 | `--dir PATH` | where the agent lives, default `~/Agents/NAME` |
-| `--provider` | `anthropic` (default), `openai`, or `claude-code` (uses your Claude Code login; personal use only) |
+| `--provider` | `anthropic`, `openai`, or `claude-code` (your Claude Code login; personal use only). Left out: `anthropic` when `ANTHROPIC_API_KEY` is set, otherwise `claude-code`. A provider you name needs its key in the shell, or the installer stops before it changes anything |
 | `--api-key-env VAR` | read the key from a variable other than `<PROVIDER>_API_KEY` |
 | `--profile DIR` | a folder copied over the generic rules last, for your own doctrine |
-| `--lite` | skip Hindsight: vault + SQLite only, upgrade later |
+| `--lite` | skip Hindsight: vault + SQLite only, upgrade later. An agent made lite stays lite when the line is run again |
+| `--desktop` | connect the agent to the Claude desktop app (macOS; skipped on Linux, which has no build of the app) |
 | `--dashboard` | the Hindsight web UI on http://localhost:9999 |
 | `--ref v0.4.0` | pin a git tag instead of the PyPI release |
 
@@ -186,17 +191,11 @@ Adds `brain.yaml`, the `brain` MCP server, the four hooks and the memory rule to
 
 ### Linux
 
-The same one line. It needs `git` and `curl` already present. It then installs `uv` from astral.sh, installs Claude Code with npm when node is present, runs Hindsight as a `systemd --user` service, and writes the two jobs into your user crontab as tagged lines it can find and replace on re-run.
+The same one line; `--desktop` is skipped, because the desktop app has no Linux build. It needs `git` and `curl` already present. It then installs `uv` from astral.sh, installs Claude Code with npm when node is present, runs Hindsight as a `systemd --user` service, and writes the two jobs into your user crontab as tagged lines it can find and replace on re-run.
 
 ### Windows
 
-One line in PowerShell (Windows PowerShell 5.1 or PowerShell 7). It works under the default `Restricted` execution policy; nothing has to be changed first.
-
-```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/xy-claude/brain-core/main/install.ps1))) -Agent Atlas -User Alex
-```
-
-To use the memory in the Claude desktop app as well, add `-Desktop`:
+One line in PowerShell (Windows PowerShell 5.1 or PowerShell 7), with the same flags as on macOS in PowerShell spelling: `-Lite` for `--lite`, `-Desktop` for `--desktop`. It works under the default `Restricted` execution policy; nothing has to be changed first.
 
 ```powershell
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/xy-claude/brain-core/main/install.ps1))) -Agent Atlas -User Alex -Desktop
@@ -210,7 +209,7 @@ Every step says what it is doing while it does it: downloads count their megabyt
 | 2 | downloads `uv` from its GitHub release and unpacks it to `~\.local\bin` | about 15 MB |
 | 3 | installs the `brain` command on Python 3.12 with `uv tool` | uv fetches Python itself. Running the line again upgrades `brain` |
 | 4 | runs `brain init` and writes the agent folder (`~\Agents\Atlas`) | an existing `brain.yaml` is never overwritten |
-| 5 | Hindsight, only with `-Hindsight` | about 2 GB; runs hidden and starts again at every logon from your own registry Run key |
+| 5 | installs and starts Hindsight; skipped with `-Lite` | about 2 GB; runs hidden and starts again at every logon from your own registry Run key |
 | + | with `-Desktop`: adds brain-core to the Claude desktop app's settings | all three places the app may read, including Microsoft Store builds |
 | 6 | registers `brain daily` and `brain weekly` in Task Scheduler | tasks `brain-core.atlas.daily` and `.weekly`; they also start on battery |
 | 7 | downloads and installs Claude Code | about 330 MB, checksum checked |
@@ -221,6 +220,7 @@ The last lines are the verdict, one of two:
 ```
 == Install complete: every step above finished
   memory folder     C:\Users\Alex\Agents\Atlas
+  Hindsight         running (provider claude-code)
   desktop app       connected and loaded
   scheduled tasks   created
   Claude Code       installed
@@ -228,11 +228,11 @@ The last lines are the verdict, one of two:
 
 or `== Install NOT complete: N step(s) did not work`, followed by each step that failed, why, and the command to run it again. Running the whole line again is always safe: what is in place is kept, and `brain` is upgraded.
 
-The default is lite: vault plus SQLite full-text search, the same configuration the recall numbers below are measured on. Add `-Hindsight` for the vector store (`-Provider` and `-ApiKeyEnv` as on macOS). A lite agent upgrades later with `brain hindsight install`, then uncomment the `hindsight:` block in `brain.yaml`. Other options: `-Dir`, `-ProfileDir`, `-Ref`. Open a new terminal afterwards so `brain` is on PATH.
+Add `-Lite` to skip Hindsight: vault plus SQLite full-text search, the same configuration the recall numbers below are measured on. The provider is chosen as on macOS (`-Provider`, `-ApiKeyEnv`). An agent made lite stays lite when the line is run again; it upgrades with `brain hindsight install`, then uncomment the `hindsight:` block in `brain.yaml`. Other options: `-Dir`, `-ProfileDir`, `-Ref`. Open a new terminal afterwards so `brain` is on PATH.
 
 ### Claude desktop app
 
-The agent's memory also works in the Claude desktop app's chat, on macOS and Windows. Add `--desktop` (macOS) or `-Desktop` (Windows) to the install line, or connect an agent you already have:
+The agent's memory also works in the Claude desktop app's chat, on macOS and Windows. The install lines above carry `--desktop` (macOS) and `-Desktop` (Windows) for this. To connect an agent you already have:
 
 ```bash
 brain desktop ~/Agents/Atlas
@@ -396,7 +396,7 @@ Rules: idempotent by content hash, append-only, nothing deleted, secrets refused
 ## Requirements
 
 - macOS, Linux with systemd, or Windows 10 1809+ for the installer; the library and MCP run anywhere Python 3.12 does
-- optional: [Hindsight](https://github.com/vectorize-io/hindsight) (MIT) as the vector store, installed for you unless `--lite`. Postgres is embedded; embeddings run on CPU
+- optional: [Hindsight](https://github.com/vectorize-io/hindsight) (MIT) as the vector store, installed for you unless `--lite` (`-Lite` on Windows). Postgres is embedded; embeddings run on CPU
 - with Hindsight: an LLM key for its reasoning, or a Claude Code login for personal use
 
 On PyPI the package is `brain-core-mcp` (the plain name collides with an unrelated project); the command is still `brain` and the import is still `brain_core`.

@@ -7,7 +7,7 @@
 # It never asks for secrets. Three things stay yours: `claude` login, `gh auth login`, SSH keys.
 set -euo pipefail
 
-AGENT=""; USER_NAME="the user"; DIR=""; PROFILE=""; DASHBOARD=0; DESKTOP=0; LITE=0; REF=""; PROVIDER="anthropic"; KEY_ENV=""
+AGENT=""; USER_NAME="the user"; DIR=""; PROFILE=""; DASHBOARD=0; DESKTOP=0; LITE=0; REF=""; PROVIDER=""; KEY_ENV=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --agent) AGENT="$2"; shift 2;;
@@ -29,6 +29,15 @@ DIR="${DIR:-$HOME/Agents/$AGENT}"
 OS="$(uname -s)"
 case "$OS" in Darwin|Linux) ;; *) echo "install.sh supports macOS and Linux (got $OS). Windows: install.ps1, see the README" >&2; exit 1;; esac
 case "$AGENT" in *[!A-Za-z0-9_-]*|"") echo "--agent must be letters, digits, '-' or '_' only (got '$AGENT')" >&2; exit 2;; esac
+# Hindsight does not start for a provider whose key is missing. So with no --provider: anthropic
+# when its key is in this shell, otherwise the Claude Code login. A named provider needs its key.
+if [ -z "$PROVIDER" ]; then
+  KEY_VAR="${KEY_ENV:-ANTHROPIC_API_KEY}"
+  if [ -n "${!KEY_VAR:-}" ]; then PROVIDER=anthropic; else PROVIDER=claude-code; KEY_ENV=""; fi
+elif [ "$PROVIDER" != "claude-code" ] && [ "$LITE" = 0 ]; then
+  KEY_VAR="${KEY_ENV:-$(echo "$PROVIDER" | tr a-z A-Z)_API_KEY}"
+  [ -n "${!KEY_VAR:-}" ] || { echo "--provider $PROVIDER needs $KEY_VAR in this shell: export it and run this line again, or leave --provider out to use your Claude Code login" >&2; exit 2; }
+fi
 
 step() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 have() { command -v "$1" >/dev/null 2>&1; }
@@ -72,17 +81,21 @@ else
 fi
 
 step "5/8 Agent $AGENT at $DIR"
-if [ -f "$DIR/brain.yaml" ]; then echo "already initialised, leaving it"; else
+if [ -f "$DIR/brain.yaml" ]; then
+  echo "already initialised, leaving it"
+  # an agent made lite stays lite: Hindsight would be 2 GB that its brain.yaml never uses
+  if [ "$LITE" = 0 ] && ! grep -q '^  hindsight:' "$DIR/brain.yaml"; then LITE=1; echo "this agent was made lite and stays lite"; fi
+else
   ARGS=(init "$AGENT" --path "$DIR" --user "$USER_NAME"); [ -n "$PROFILE" ] && ARGS+=(--profile "$PROFILE"); [ "$LITE" = 1 ] && ARGS+=(--lite)
   brain "${ARGS[@]}"
 fi
 
 if [ "$LITE" = 1 ]; then
-  step "6/8 Hindsight skipped (--lite: vault + SQLite only; later: brain hindsight install, then uncomment it in brain.yaml)"
+  step "6/8 Hindsight skipped (lite: vault + SQLite only; later: brain hindsight install, then uncomment it in brain.yaml)"
 else
-step "6/8 Hindsight (vector store)"
+step "6/8 Hindsight (vector store, provider $PROVIDER)"
+[ "$PROVIDER" = claude-code ] && echo "Hindsight reasons through your Claude Code login (personal use only). For an API key instead: export ANTHROPIC_API_KEY=..., then: brain hindsight install"
 HS_ARGS=(hindsight install --provider "$PROVIDER"); [ -n "$KEY_ENV" ] && HS_ARGS+=(--api-key-env "$KEY_ENV"); [ "$DASHBOARD" = 1 ] && HS_ARGS+=(--dashboard)
-if [ "$PROVIDER" != "claude-code" ]; then KEY_VAR="${KEY_ENV:-$(echo "$PROVIDER" | tr a-z A-Z)_API_KEY}"; [ -n "${!KEY_VAR:-}" ] || echo "note: $KEY_VAR is not set in this shell; Hindsight needs it to reason. Export it, then re-run: brain hindsight install (it writes the key to ~/.config/hindsight/env, mode 600, and restarts the service)."; fi
 brain "${HS_ARGS[@]}"
 fi
 
@@ -94,14 +107,14 @@ brain doctor "$DIR" || true
 
 if [ "$DESKTOP" = 1 ]; then
   step "+ Claude desktop app (--desktop)"
-  brain desktop "$DIR" || echo "not connected; try: brain desktop \"$DIR\" --config /path/to/claude_desktop_config.json"
+  if [ "$OS" = "Linux" ]; then echo "skipped: the Claude desktop app has no Linux build"
+  else brain desktop "$DIR" || echo "not connected; try: brain desktop \"$DIR\" --config /path/to/claude_desktop_config.json"; fi
 fi
 
 cat <<EOF
 
 Done. Still yours to do, once:
-  claude            # sign in to Claude Code
-  export ANTHROPIC_API_KEY=...   # unless --provider claude-code (personal use only)
+  claude            # sign in to Claude Code$([ "$LITE" = 0 ] && [ "$PROVIDER" = claude-code ] && echo "; Hindsight reasons through this login")
   gh auth login     # GitHub, if the agent pushes
   ssh-keygen ...    # keys for your GitHub accounts, if any
 
