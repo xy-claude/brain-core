@@ -217,3 +217,21 @@ def test_brief_hook_adds_the_checkpoint_only_after_a_compaction(tmp_path: Path) 
     assert "Task checkpoint" not in fresh and "Daily Brief — 2026-11-03" in fresh
     with Agent.from_config(tmp_path / "brain.yaml") as agent:
         assert len(agent.recent_events(event_type="checkpoint_injected")) == 2
+
+
+def test_a_backlog_is_taken_in_runs_and_the_cursor_outlives_other_sessions(tmp_path: Path) -> None:
+    runner.invoke(app, ["init", "bot", "--path", str(tmp_path), "--lite"])
+    t = tmp_path / "old.jsonl"
+    t.write_text(
+        "\n".join(line("user", f"user message number {i} here", f"u{i}") for i in range(80)) + "\n"
+    )
+    with Agent.from_config(tmp_path / "brain.yaml") as agent:
+        first = capture(agent, t, "old")
+        second = capture(agent, t, "old")
+        assert (first["written"], second["written"]) == (50, 30), (first, second)
+        for i in range(201):  # other sessions' turns must not push this cursor out of sight
+            agent.log_event("capture", {"transcript": f"/x/{i}.jsonl", "line": 1})
+        with t.open("a") as f:
+            f.write(line("user", "one more message after the others", "u999") + "\n")
+        more = capture(agent, t, "old")
+        assert more["scanned"] == 1 and more["written"] == 1, more

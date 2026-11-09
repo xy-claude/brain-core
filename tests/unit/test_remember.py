@@ -94,3 +94,25 @@ def test_mission_and_source_reach_extra() -> None:
     brain_remember([v], "the parser uses laya", "fact", source="session", mission="M-7", when=TODAY)
     r: Record = v.records[0]
     assert r.extra == {"source": "session", "mission": "M-7"}
+
+
+def test_secret_in_an_extra_field_is_refused() -> None:
+    v = named("vault")
+    with pytest.raises(ValueError, match="secret"):
+        brain_remember(
+            [v], "used the wrong token", "correction", correction="use ghp_" + "a1B2" * 9
+        )
+    assert not v.records
+
+
+def test_one_changed_word_in_a_long_fact_is_a_change_not_a_duplicate() -> None:
+    v = named("vault")
+    fact = (
+        "The user {} wants every production release approved by the team lead "
+        "before merging into main"
+    )
+    brain_remember([v], fact.format("always"), "fact", when=TODAY)
+    out = brain_remember([v], fact.format("never"), "fact", when=TODAY)
+    assert out["status"] == "written" and "contradiction" in out and len(v.records) == 2
+    again = brain_remember([v], fact.format("never"), "fact", when=TODAY)
+    assert again["status"] == "duplicate"

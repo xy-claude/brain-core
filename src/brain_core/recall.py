@@ -115,7 +115,9 @@ def brain_recall(
             # a store that ranks the whole bank by query (Hindsight) is asked once, not per kind
             whole = bool(getattr(store, "whole", False))
             for kind in kinds[:1] if whole else kinds:
-                recs = store.read(kind, query if ranked else None, limit * 2 if ranked else 1000)
+                # shortcut: an unranked store is read whole and scored here (23 ms at 780 notes),
+                # index notes in FTS when a recall passes 100 ms
+                recs = store.read(kind, query if ranked else None, limit * 2 if ranked else 10**6)
                 for i, r in enumerate(recs):
                     if whole and r.kind not in kinds:
                         continue

@@ -105,18 +105,19 @@ def _cut(text: str, limit: int) -> str:
 
 def capture(agent: Agent, transcript: Path, session_id: str = "") -> dict[str, Any]:
     key = str(transcript)
-    cursor = next(
-        (
-            int(e.payload.get("line", 0))
-            for e in agent.recent_events(event_type="capture", limit=200)
-            if e.payload.get("transcript") == key
-        ),
-        0,
+    row = agent.db.fetchone(
+        "SELECT json_extract(payload, '$.line') AS line FROM events WHERE event_type = 'capture' "
+        "AND json_extract(payload, '$.transcript') = ? ORDER BY id DESC LIMIT 1",
+        (key,),
     )
+    cursor = end = int(row["line"] or 0) if row else 0
     lines = transcript.read_text(encoding="utf-8").splitlines() if transcript.exists() else []
     items: list[tuple[str, str]] = []
     seen_urls: set[str] = set()
     for raw in lines[cursor:]:
+        if len(items) >= MAX_ITEMS:
+            break  # the cursor stops here; the next run takes the rest
+        end += 1
         for _rid, _sess, _ts, role, text in _rows(raw.encode("utf-8"), transcript.stem):
             # URLs from speech only: shell commands and tool output carry local and asset noise
             for url in [] if text.startswith(("$ ", "→")) else _URL.findall(text):
@@ -127,7 +128,6 @@ def capture(agent: Agent, transcript: Path, session_id: str = "") -> dict[str, A
                 items.append((f"URL {url}", LINKS))
             if role == "user" and not text.startswith(("$ ", "[", "→")):
                 items.append((text[:USER_CHARS], SAID))
-    items = items[:MAX_ITEMS]
     queue = agent.config.session.queue
     stores = [s for s in agent.stores if not isinstance(s, HindsightStore)]
     written, duplicate, queued = 0, 0, []
@@ -165,12 +165,12 @@ def capture(agent: Agent, transcript: Path, session_id: str = "") -> dict[str, A
                 )
     agent.log_event(
         "capture",
-        {"transcript": key, "line": len(lines), "written": written, "duplicate": duplicate},
+        {"transcript": key, "line": end, "written": written, "duplicate": duplicate},
         session_id=session_id or None,
     )
     return {
         "transcript": key,
-        "scanned": len(lines) - cursor,
+        "scanned": end - cursor,
         "written": written,
         "duplicate": duplicate,
         "queued": len(queued) if queue else 0,

@@ -27,8 +27,10 @@ _BULLET = re.compile(r"^- (.+?)(?:\s*\((\d{4}-\d{2}-\d{2})\))?\s*$")
 _DECISION = re.compile(r"^## (\d{4}-\d{2}-\d{2}) — (.+?)\s*$")
 _CORRECTION = re.compile(r"^### \[(\d{4}-\d{2}-\d{2})\] (.+?)\s*$")
 _SECRET = re.compile(
-    r"hsk_[A-Za-z0-9]{8,}|(?i:bearer)\s+(?=[A-Za-z0-9._-]*\d)[A-Za-z0-9._-]{16,}|sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}"
+    r"hsk_[A-Za-z0-9]{8,}|(?i:bearer)\s+(?=[A-Za-z0-9._-]*\d)[A-Za-z0-9._-]{16,}|\bsk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}"
     r"|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}"
+    r"|eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"  # a JWT
+    r"|-----BEGIN [A-Z ]*PRIVATE KEY-----"
 )
 
 FILES: dict[Kind, str] = {
@@ -50,7 +52,8 @@ class VaultStore:
 
     def read(self, kind: Kind, query: str | None = None, limit: int = 50) -> list[Record]:
         if kind == "note":
-            paths = sorted((self.root / "sessions").glob("????-??-??.md"), reverse=True)
+            # rglob: `brain weekly` moves old days into sessions/archive/YYYY-MM/
+            paths = sorted((self.root / "sessions").rglob("????-??-??.md"), reverse=True)
         elif kind == "raw":
             paths = sorted((self.root / "raw").glob("*.md"), reverse=True)
         elif kind == "knowledge":
