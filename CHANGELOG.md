@@ -4,6 +4,8 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+## [0.4.28] - 2026-11-10
+
 ### Fixed
 - Hindsight kept only the last memory written each day. Every write went into one Hindsight document per day (`session-<date>`), and Hindsight replaces a document whose id it already has: it deletes the old memories and reprocesses. Each record is now its own document (`record-<id>`); the day stays in the `session:` tag. The same text written twice replaces only itself. The vault and SQLite were never affected, so nothing is lost for good: what suffered was recall by meaning, mental models and reflection. Memories written before this release are not restored by upgrading.
 
