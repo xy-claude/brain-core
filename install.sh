@@ -61,11 +61,11 @@ fi
 
 step "4/8 brain-core${REF:+ ($REF)}"
 if [ -n "$REF" ]; then
-  uv tool install --force "git+https://github.com/xy-claude/brain-core@$REF"
+  uv tool install --python 3.12 --force "git+https://github.com/xy-claude/brain-core@$REF"
 elif have brain; then
   echo "brain present ($(brain version))"
 else
-  uv tool install brain-core-mcp || uv tool install "git+https://github.com/xy-claude/brain-core@main"
+  uv tool install --python 3.12 brain-core-mcp || uv tool install --python 3.12 "git+https://github.com/xy-claude/brain-core@main"
 fi
 
 step "5/8 Agent $AGENT at $DIR"

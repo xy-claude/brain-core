@@ -198,7 +198,7 @@ The desktop app has a memory of its own, kept on Anthropic's servers. The two do
 ### Manual, any platform
 
 ```bash
-uv tool install brain-core-mcp   # or: uv tool install git+https://github.com/xy-claude/brain-core@v0.4.0
+uv tool install --python 3.12 brain-core-mcp   # Python 3.12 to 3.14; or: uv tool install git+https://github.com/xy-claude/brain-core@v0.4.0
 brain init Atlas --path ~/Agents/Atlas --user Alex
 brain hindsight install          # launchd, systemd --user, or a logon entry on Windows
 brain cron install ~/Agents/Atlas    # launchd, crontab or Task Scheduler

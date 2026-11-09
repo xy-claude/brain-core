@@ -67,18 +67,16 @@ if (Have uv) { "present" } else {
   "installed $(uv --version) to $bin"
 }
 
-Step "3/7 Claude Code"
-if (Have claude) { "present" }
-elseif (-not (Run-Installer "https://claude.ai/install.ps1" 5)) { "Claude Code was not installed. The memory still works in the Claude desktop app; for Claude Code see https://code.claude.com/docs/en/setup" }
-
-Step "4/7 brain-core$(if ($Ref) { " ($Ref)" })"
-if ($Ref) { uv tool install --force "git+https://github.com/xy-claude/brain-core@$Ref" }
+Step "3/7 brain-core$(if ($Ref) { " ($Ref)" })"
+# --python 3.12: left to itself uv fetches the newest Python, and a dependency without a ready-made
+# package for it then needs a C++ compiler (pyyaml on 3.15, seen on a real PC 2026-11-09)
+if ($Ref) { uv tool install --python 3.12 --force "git+https://github.com/xy-claude/brain-core@$Ref" }
 elseif (Have brain) { "brain present ($(brain version))" }
-else { uv tool install brain-core-mcp }
+else { uv tool install --python 3.12 brain-core-mcp }
 Fail-OnError
 uv tool update-shell  # puts %USERPROFILE%\.local\bin on the user PATH for new terminals
 
-Step "5/7 Agent $Agent at $Dir"
+Step "4/7 Agent $Agent at $Dir"
 if (Test-Path (Join-Path $Dir "brain.yaml")) { "already initialised, leaving it" } else {
   $initArgs = @("init", $Agent, "--path", $Dir, "--user", $User)
   if (-not $Hindsight) { $initArgs += "--lite" }
@@ -88,16 +86,16 @@ if (Test-Path (Join-Path $Dir "brain.yaml")) { "already initialised, leaving it"
 }
 
 if ($Hindsight) {
-  Step "6/7 Hindsight (vector store; the first start downloads a database and a model)"
+  Step "5/7 Hindsight (vector store; the first start downloads a database and a model)"
   $hsArgs = @("hindsight", "install", "--provider", $Provider, "--wait", "600")
   if ($ApiKeyEnv) { $hsArgs += @("--api-key-env", $ApiKeyEnv) }
   & brain @hsArgs
   if ($LASTEXITCODE) { "Hindsight is not healthy yet; the agent still works. Check again with: brain hindsight status" }
 } else {
-  Step "6/7 Hindsight skipped (lite). Later: brain hindsight install, then uncomment it in brain.yaml"
+  Step "5/7 Hindsight skipped (lite). Later: brain hindsight install, then uncomment it in brain.yaml"
 }
 
-Step "7/7 Scheduled tasks (brain daily 06:07, brain weekly Sun 07:13), then doctor"
+Step "6/7 Scheduled tasks (brain daily 06:07, brain weekly Sun 07:13), then doctor"
 brain cron install $Dir
 Fail-OnError
 brain doctor $Dir
@@ -107,6 +105,12 @@ if ($Desktop) {
   brain desktop $Dir
   if ($LASTEXITCODE) { "not connected; in the app open Settings > Developer > Edit Config, then: brain desktop `"$Dir`" --config <that file>" }
 }
+
+# Last on purpose: everything above is finished before the one step that can stall, and the
+# desktop app does not need it.
+Step "7/7 Claude Code (the memory above is ready without it; Ctrl+C here loses nothing)"
+if (Have claude) { "present" }
+elseif (-not (Run-Installer "https://claude.ai/install.ps1" 5)) { "Claude Code was not installed. The memory still works in the Claude desktop app; for Claude Code see https://code.claude.com/docs/en/setup" }
 
 @"
 
