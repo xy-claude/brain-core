@@ -101,6 +101,8 @@ def test_end_drains_queue_writes_stubs_and_marker(tmp_path: Path) -> None:
         agent.close()
     assert e["writes"] == 3 and e["queue_drained"] == 1
     assert [r["content"] for r in fake.retained].count("mine") == 1, "queue entry retained once"
+    docs = [r["document_id"] for r in fake.retained]
+    assert len(set(docs)) == len(docs), "a shared document id makes Hindsight drop earlier writes"
     assert json.loads((tmp_path / "queue.jsonl").read_text())["agent"] == "OTHER"
     assert e["hsam"] == "written" and e["executive_state"].startswith("unchanged")
     assert e["critique"] == "stub" and e["sync"] == "rewritten"

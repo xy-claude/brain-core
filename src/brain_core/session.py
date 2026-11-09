@@ -18,7 +18,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from brain_core.stores.hindsight import HindsightStore
+from brain_core.stores.hindsight import HindsightStore, document_id
 from brain_core.stores.vault import _SECRET, VaultStore, _Lock
 from brain_core.stores.vault import read_text as _read
 
@@ -312,7 +312,7 @@ def _drain_locked(agent: Agent, path: Path) -> int:
                 content=e["content"],
                 context=e.get("context", "hsam-conversation"),
                 tags=e.get("tags", []),
-                document_id=e.get("document_id", f"session-{date.today().isoformat()}"),
+                document_id=e.get("document_id", document_id(e["content"])),
             )
             drained += 1
         except Exception:

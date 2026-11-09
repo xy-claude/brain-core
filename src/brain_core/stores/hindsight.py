@@ -29,6 +29,14 @@ CONTEXTS: dict[Kind, str] = {
 }
 
 
+def document_id(text: str) -> str:
+    """One Hindsight document per record. Hindsight replaces a document whose id it already has
+    (it deletes the old memories and reprocesses), so the shared ``session-<date>`` id used
+    until 0.4.27 made every write delete the day's earlier ones. The same text gets the same
+    id: a repeated write replaces only itself. The day stays in the ``session:`` tag."""
+    return f"record-{record_id(text)[:16]}"
+
+
 class HindsightStore:
     name = "hindsight"
     ranked = True  # the server orders by query
@@ -82,7 +90,7 @@ class HindsightStore:
                 content=text,
                 context=extra.get("context", CONTEXTS[kind]),
                 tags=tags,
-                document_id=extra.get("document_id", f"session-{when.isoformat()}"),
+                document_id=extra.get("document_id", document_id(text)),
                 metadata={
                     "record_id": rid,
                     **{k: v for k, v in extra.items() if k in ("impact", "triggered_by", "source")},
