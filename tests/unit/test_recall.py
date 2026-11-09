@@ -116,6 +116,23 @@ def test_transcript_line_ranks_below_written_memory_of_equal_relevance() -> None
     assert out["results"][1]["score"] < out["results"][0]["score"]
 
 
+def test_miss_means_no_written_record_holds_half_the_query() -> None:
+    v = MemoryStore()
+    v.name = "vault"
+    v.write("fact", "The staging cluster runs a helm chart", when=TODAY)
+    t = MemoryStore()
+    t.name = "transcripts"
+    t.write("transcript", "[user] rollout chart canary budget?", when=TODAY)
+    assert "miss" not in brain_recall([v], "helm chart staging cluster", today=TODAY)
+    assert "miss" not in brain_recall([v], "helm chart rollout canary", today=TODAY)  # 2 of 4
+    # one word of four in written memory; the transcript line is the question asked before
+    weak = brain_recall([t, v], "rollout chart canary budget", today=TODAY)
+    assert weak["results"] and weak["miss"] == {"best": 0.25, "hits": 2}
+    own = brain_recall([t, v], "rollout chart canary budget", scope="transcript", today=TODAY)
+    assert own["results"] and "miss" not in own, "a transcript search is answered by transcripts"
+    assert brain_recall([t, v], "zxqv florbnak", today=TODAY)["miss"] == {"best": 0.0, "hits": 0}
+
+
 def test_offset_pages_through_the_ranked_list() -> None:
     page1 = brain_recall([vault()], "hindsight self-hosted launchagent", limit=2, today=TODAY)
     assert page1["total"] == 3 and len(page1["results"]) == 2

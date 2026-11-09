@@ -568,6 +568,11 @@ def doctor_cmd(
     typer.echo(f"  pending    {st.get('pending_decisions', 0)} decision(s)")
     if st.get("update"):
         typer.echo(f"  update     {st['update']}")
+    if m := st.get("recall_misses"):
+        typer.echo(
+            f"  misses     {m['count']} recall miss(es) in {m['window_days']} days, "
+            f"most asked: {m['top'][0]['query'][:60]!r}"
+        )
     tools = st.get("tools", {}).get("per_tool", {})
     if tools:
         typer.echo(

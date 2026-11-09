@@ -237,7 +237,8 @@ def build_server(agent: Agent) -> FastMCP:
         SQLite, Hindsight, graph), knowledge-wiki lint (pages missing from _index, index links
         to missing pages, pages without sources, raw files never compiled), always-loaded
         context size in tokens per file, the last session start and close ids with an
-        `unclosed` flag, the pending-decision count, and the twelve trait signals.
+        `unclosed` flag, the pending-decision count, the twelve trait signals, and
+        `recall_misses`: the queries of the last 30 days that written memory could not answer.
 
         Use it when a store seems down, before maintenance, or when the user asks how the
         memory is doing. Not a search (brain_recall). `ok` is false when any store is down or

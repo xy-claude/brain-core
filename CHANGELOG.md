@@ -4,6 +4,12 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+### Fixed
+- The recall-miss log never fired on an agent with Hindsight. A miss was "no results", and a vector store returns its nearest records for any query, so even a nonsense query came back with hits. A miss is now a recall where no written record holds half of the query's words; transcript lines do not count, because a transcript often holds the same question asked before. Measured on one live agent: 11 real queries scored 0.50 to 0.92, 8 absent topics 0.00 to 0.40.
+
+### Added
+- `brain_status` and `brain doctor` show `recall_misses`: how many recalls missed in the last 30 days and the five most asked queries. Each is a fact to write or an eval case to add. The daily brief already listed the week's misses.
+
 ## [0.4.26] - 2026-11-09
 
 ### Changed

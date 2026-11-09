@@ -10,6 +10,7 @@ import glob
 import json
 import math
 import re
+from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -49,6 +50,8 @@ def brain_status(agent: Agent) -> dict[str, Any]:
     out["tools"] = tool_metrics(agent)
     if newer := update.notice(agent.data_dir):  # read from a file `brain daily` wrote; no network
         out["update"] = newer
+    if (misses := recall_misses(agent))["count"]:
+        out["recall_misses"] = misses
     marker = _marker(agent)
     last_close = marker.read_text().strip() if marker.exists() else ""
     starts = agent.recent_events(event_type="session_start", limit=1)
@@ -67,6 +70,21 @@ def brain_status(agent: Agent) -> dict[str, Any]:
 
     out["traits"] = traits.compute(agent, out)
     return out
+
+
+def recall_misses(agent: Agent, days: int = 30) -> dict[str, Any]:
+    """What written memory could not answer: the queries `brain_recall` logged as misses,
+    most asked first. Each is a fact to write or an eval case to add."""
+    today = date.today()
+    per: dict[str, dict[str, Any]] = {}
+    for e in agent.recent_events(event_type="recall_miss", limit=500):
+        if (today - e.occurred_at.date()).days > days:
+            continue
+        q = str(e.payload.get("query", ""))
+        d = per.setdefault(q, {"query": q, "count": 0, "best": e.payload.get("best", 0.0)})
+        d["count"] += 1
+    top = sorted(per.values(), key=lambda d: -d["count"])[:5]
+    return {"window_days": days, "count": sum(d["count"] for d in per.values()), "top": top}
 
 
 def tool_metrics(agent: Agent, days: int = 30) -> dict[str, Any]:

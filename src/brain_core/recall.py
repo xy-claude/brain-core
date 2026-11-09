@@ -19,6 +19,10 @@ KINDS: tuple[Kind, ...] = get_args(Kind)
 DEFAULT_TOKENS = 6_000
 MAX_TOKENS = 25_000
 _CONCISE_CHARS = 600
+# Below this share of the query's words in the best written record, recall is a miss. Measured
+# 2026-11-09 on one live agent: 11 real queries scored 0.50 to 0.92, 8 absent topics 0.00 to 0.40.
+# "No results" cannot be the test: a vector store returns its nearest records for any query.
+_MISS_BELOW = 0.5
 _STOP = frozenset(
     [
         "the",
@@ -99,6 +103,9 @@ def brain_recall(
 
     q_norm, q_tok = normalize(query).lower(), tokens(query)
     hits: dict[str, tuple[Record, str, float]] = {}
+    # a transcript line holding the query's words is often the same question, asked before
+    count_transcripts = scope in ("transcript", "transcripts")
+    best = 0.0
     seen_text: set[str] = set()
     report: dict[str, Any] = {}
     for store in chosen:
@@ -114,6 +121,8 @@ def brain_recall(
                         continue
                     full = _full_text(r)
                     overlap = len(q_tok & tokens(full)) / len(q_tok) if q_tok else 0.0
+                    if count_transcripts or r.kind != "transcript":
+                        best = max(best, overlap)
                     phrase = 0.5 if q_norm and q_norm in full.lower() else 0.0
                     rank = (1.0 - i / (len(recs) + 1)) * 0.6 if ranked else 0.0
                     rel = max(overlap + phrase, rank)
@@ -160,6 +169,11 @@ def brain_recall(
         "total": total,
         "results": results,
     }
+    if total == 0 or (q_tok and best < _MISS_BELOW):
+        out["miss"] = {
+            "best": round(best, 2),
+            "hits": total,
+        }  # for the caller's log, not the reader
     while results and len(json.dumps(out)) // 4 > max_tokens:
         results.pop()
         out["note"] = (
