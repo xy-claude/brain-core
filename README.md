@@ -7,39 +7,50 @@
 
 # brain-core
 
-**A memory for your Claude Code agent that survives the session.** One local MCP server, five tools, a markdown vault you can read, an eval that proves recall. Installs with one command.
+**A memory for your Claude Code agent that survives the session.**
 
-brain-core gives a Claude Code agent a long-term memory that lives on your disk. You name the agent, you tell it who you are, and from then on every session opens with yesterday's brief, the decisions you made, the facts that changed and the corrections you gave. It remembers by writing markdown files you can open in any editor, and it finds things again through a local SQLite index plus [Hindsight](https://github.com/vectorize-io/hindsight), a self-hosted vector memory. Nothing leaves your machine except the LLM calls you already make.
+## Install in one line
 
-It is for one person running one or more agents on their own computer: a solo developer, a founder, anyone tired of re-explaining their project every morning. It is not a hosted service and not a team product.
+**macOS and Linux**
 
-### Is it an MCP server or a tool?
-
-Both. One Python package, three ways in:
-
-| Piece | What it is | Who uses it |
-|---|---|---|
-| `brain serve` | an MCP server that Claude Code starts from the agent's `.mcp.json` and that exposes five tools | the agent, every session, without you touching it |
-| `brain` command | a CLI: `brain init`, `brain doctor`, `brain index`, `brain hindsight install`, `brain cron install`, `brain desktop`, `brain daily`, `brain weekly` | you, once at setup, then cron |
-| `brain_core.Agent` | the Python library both of the above sit on | the eval runner, the demo script, your own scripts |
-
-To a Claude Code user: an MCP server with five memory tools and a one-line installer. To a Python developer: a memory library with an MCP front end.
-
-macOS and Linux:
-
-```
+```bash
 curl -fsSL https://raw.githubusercontent.com/xy-claude/brain-core/main/install.sh | bash -s -- --agent Atlas --user Alex
 ```
 
-Windows (PowerShell). Add `-Desktop` to use the memory in the Claude desktop app too:
+**Windows** (PowerShell)
 
-```
+```powershell
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/xy-claude/brain-core/main/install.ps1))) -Agent Atlas -User Alex -Desktop
 ```
+
+`Atlas` is your agent's name, `Alex` is yours. When the installer finishes:
+
+```bash
+cd ~/Agents/Atlas
+claude
+```
+
+| You want | macOS and Linux | Windows |
+|---|---|---|
+| The memory in the Claude desktop app too | add `--desktop` (macOS) | `-Desktop`, already in the line above |
+| The quick install: about a minute, no vector store | add `--lite` | the default |
+| The full install with Hindsight, about 2 GB | the default | add `-Hindsight` |
+
+Every step, every flag and the common problems: [Install details](#install-details).
 
 <img src="docs/img/demo.gif" alt="brain init, brain doctor, then a real session: remember, a changed fact with its banner, recall" width="900">
 
 ---
+
+## What you get
+
+- **Sessions that start where the last one ended.** Each one opens with yesterday's brief, your decisions, the facts that changed and the corrections you gave.
+- **Five tools, not thirty.** One local MCP server the agent uses by itself.
+- **Files you can read.** Memory is markdown in a folder on your disk, indexed by SQLite and, optionally, by [Hindsight](https://github.com/vectorize-io/hindsight), a self-hosted vector memory.
+- **Nothing in someone's cloud.** Nothing leaves your machine except the LLM calls you already make.
+- **An eval that proves recall.** It runs in CI; the numbers are in [Does it work?](#does-it-work)
+
+It is for one person running one or more agents on their own computer. It is not a hosted service and not a team product.
 
 ## The problem
 
@@ -79,7 +90,17 @@ flowchart LR
 
 Plus `brain_status()` for health in one call: which stores are up, how many tokens the always-loaded context costs, whether a session is open, and which decisions are waiting on you.
 
-## Install
+## Is it an MCP server or a tool?
+
+Both. One Python package, three ways in:
+
+| Piece | What it is | Who uses it |
+|---|---|---|
+| `brain serve` | an MCP server that Claude Code starts from the agent's `.mcp.json` and that exposes five tools | the agent, every session, without you touching it |
+| `brain` command | a CLI: `brain init`, `brain doctor`, `brain index`, `brain hindsight install`, `brain cron install`, `brain desktop`, `brain daily`, `brain weekly` | you, once at setup, then cron |
+| `brain_core.Agent` | the Python library both of the above sit on | the eval runner, the demo script, your own scripts |
+
+## Install details
 
 ### Before you start
 
@@ -374,7 +395,7 @@ Rules: idempotent by content hash, append-only, nothing deleted, secrets refused
 
 ## Requirements
 
-- macOS or Linux for the installer; the library and MCP run anywhere Python 3.12 does
+- macOS, Linux with systemd, or Windows 10 1809+ for the installer; the library and MCP run anywhere Python 3.12 does
 - optional: [Hindsight](https://github.com/vectorize-io/hindsight) (MIT) as the vector store, installed for you unless `--lite`. Postgres is embedded; embeddings run on CPU
 - with Hindsight: an LLM key for its reasoning, or a Claude Code login for personal use
 
