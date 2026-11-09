@@ -4,6 +4,8 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+## [0.4.18] - 2026-11-09
+
 ### Fixed
 - On a PC with no Python, `uv tool install brain-core-mcp` fetched the newest Python (3.15), for which pyyaml has no ready-made package, and failed asking for a C++ compiler. Both installers now pass `--python 3.12`, and the package declares `requires-python >=3.12,<3.15`, so `uvx brain-core-mcp` and a manual install no longer end up on 3.15 either.
 
