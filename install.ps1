@@ -26,12 +26,17 @@ function Have($c) { [bool](Get-Command $c -ErrorAction SilentlyContinue) }
 function Fail-OnError { if ($LASTEXITCODE) { throw "the last step failed with exit code $LASTEXITCODE; the lines above say why" } }
 $env:Path = "$HOME\.local\bin;$env:ProgramFiles\Git\cmd;$env:Path"
 
-# Other people's installers run in a child PowerShell: they end with `exit`, which would close this
-# window, and uv's refuses the Restricted execution policy a new Windows PC ships with.
-function Run-Installer($url) {
-  Write-Host "downloading and installing from $url (this can take a minute or two; if nothing moves, press Esc once: a click in this window pauses it)"
-  # Start-Process, no pipe: the child writes straight to this console, so its lines show as they come
-  $p = Start-Process powershell -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "irm $url | iex" -NoNewWindow -Wait -PassThru
+# Claude Code's installer ends with `exit`, which would close this window, so it runs in a child
+# PowerShell, and never for longer than the limit: a first real run sat in a child with no output.
+function Run-Installer($url, $minutes) {
+  Write-Host "running the installer from $url in a separate PowerShell (up to $minutes minutes)"
+  $p = Start-Process powershell -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "irm $url | iex" -NoNewWindow -PassThru
+  $null = $p.Handle  # without this, ExitCode is empty for a process started without -Wait
+  if (-not $p.WaitForExit($minutes * 60000)) {
+    try { $p.Kill() } catch { }
+    Write-Host "gave up after $minutes minutes"
+    return $false
+  }
   return $p.ExitCode -eq 0
 }
 
@@ -44,12 +49,27 @@ else {
 }
 
 Step "2/7 uv"
-if (Have uv) { "present" }
-elseif (-not (Run-Installer "https://astral.sh/uv/install.ps1")) { throw "uv could not be installed; the lines above say why" }
+if (Have uv) { "present" } else {
+  # Downloaded here, not through uv's own installer: that script refuses the Restricted execution
+  # policy and ends with `exit`, and in a child PowerShell it sat silent on a real PC (2026-11-09).
+  $cpu = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
+  $arch = switch ($cpu) { "ARM64" { "aarch64" } "x86" { "i686" } default { "x86_64" } }
+  $zip = Join-Path $env:TEMP "uv-$arch-pc-windows-msvc.zip"
+  $bin = Join-Path $HOME ".local\bin"
+  "downloading uv for $arch from github.com (about 15 MB, up to 5 minutes on a slow line)"
+  $ProgressPreference = "SilentlyContinue"  # the progress bar makes Windows PowerShell downloads many times slower
+  Invoke-WebRequest -UseBasicParsing -TimeoutSec 300 -OutFile $zip "https://github.com/astral-sh/uv/releases/latest/download/uv-$arch-pc-windows-msvc.zip"
+  New-Item -ItemType Directory -Force $bin | Out-Null
+  tar -xf $zip -C $bin  # Expand-Archive is a script module, which the Restricted policy will not load
+  if ($LASTEXITCODE) { throw "could not unpack $zip" }
+  Remove-Item $zip
+  if (-not (Have uv)) { throw "uv was unpacked to $bin but does not start from there" }
+  "installed $(uv --version) to $bin"
+}
 
 Step "3/7 Claude Code"
 if (Have claude) { "present" }
-elseif (-not (Run-Installer "https://claude.ai/install.ps1")) { "Claude Code was not installed. The memory still works in the Claude desktop app; for Claude Code see https://code.claude.com/docs/en/setup" }
+elseif (-not (Run-Installer "https://claude.ai/install.ps1" 5)) { "Claude Code was not installed. The memory still works in the Claude desktop app; for Claude Code see https://code.claude.com/docs/en/setup" }
 
 Step "4/7 brain-core$(if ($Ref) { " ($Ref)" })"
 if ($Ref) { uv tool install --force "git+https://github.com/xy-claude/brain-core@$Ref" }

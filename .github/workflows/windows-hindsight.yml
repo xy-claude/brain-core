@@ -80,6 +80,7 @@ jobs:
           $out
           if (-not ($out -match "policy: Restricted")) { throw "the child did not run under Restricted" }
           if (-not ($out -match "reached the end of the installer")) { throw "the installer ended the PowerShell session" }
+          if (-not ($out -match "installed uv ")) { throw "uv was not installed by our own download" }
 
       - name: agent, scheduled tasks and desktop entry exist
         shell: powershell
@@ -105,10 +106,3 @@ jobs:
           schtasks /Query /TN brain-core.atlas.daily /V /FO LIST | Select-String "Last Result|Task To Run"
           Get-Content $log
           if (-not (Select-String -Path $log -Pattern "brief" -Quiet)) { throw "daily did not report a brief" }
-
-      - name: "for the record: uv's own installer under Restricted, run the old way"
-        shell: powershell
-        continue-on-error: true  # someone else's script; this step only documents why ours uses a child
-        run: |
-          powershell -NoProfile -ExecutionPolicy Restricted -Command "irm https://astral.sh/uv/install.ps1 | iex; 'survived'"
-          "exit code: $LASTEXITCODE"
