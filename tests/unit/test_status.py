@@ -53,3 +53,24 @@ def test_status_reports_everything(tmp_path: Path) -> None:
         "current": "s1",
         "unclosed": False,
     }
+
+
+def test_status_lists_what_recall_could_not_answer(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    (vault / "facts.md").write_text(
+        "# Facts\n\n## System\n- The staging cluster runs a helm chart\n"
+    )
+    cfg = tmp_path / "brain.yaml"
+    cfg.write_text(textwrap.dedent(f"name: T\nstores:\n  vault: {vault}\n"))
+    with Agent.from_config(cfg) as a:
+        assert "recall_misses" not in a.brain_status()
+        a.brain_recall("helm chart staging")
+        for _ in range(2):
+            out = a.brain_recall("dentist appointment friday")
+            assert "miss" not in out, "the flag is for the log, not for the reader"
+        a.brain_recall("dentist appointment friday", offset=5)  # a later page is not a new miss
+        a.brain_recall("wedding anniversary gift")
+        misses = a.brain_status()["recall_misses"]
+    assert misses["count"] == 3 and misses["window_days"] == 30
+    assert misses["top"][0] == {"query": "dentist appointment friday", "count": 2, "best": 0.0}
