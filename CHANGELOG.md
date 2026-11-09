@@ -4,6 +4,9 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+### Fixed
+- `install.ps1` closed the user's PowerShell window on a normal Windows PC. It ran uv's installer inside that window; uv's installer refuses the default `Restricted` execution policy and ends with `exit 1`, which ended the session. The uv and Claude Code installers now run in a child PowerShell with `-ExecutionPolicy Bypass`. A missing `winget`, a declined Git install or a failed Claude Code install is reported and the install goes on; only uv is required. CI runs the installer under the `Restricted` policy and checks that the session survives it.
+
 ## [0.4.14] - 2026-11-09
 
 ### Fixed
