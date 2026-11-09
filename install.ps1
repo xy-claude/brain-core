@@ -29,8 +29,10 @@ $env:Path = "$HOME\.local\bin;$env:ProgramFiles\Git\cmd;$env:Path"
 # Other people's installers run in a child PowerShell: they end with `exit`, which would close this
 # window, and uv's refuses the Restricted execution policy a new Windows PC ships with.
 function Run-Installer($url) {
-  powershell -NoProfile -ExecutionPolicy Bypass -Command "irm $url | iex" | Out-Host  # not into the return value
-  return $LASTEXITCODE -eq 0
+  Write-Host "downloading and installing from $url (this can take a minute or two; if nothing moves, press Esc once: a click in this window pauses it)"
+  # Start-Process, no pipe: the child writes straight to this console, so its lines show as they come
+  $p = Start-Process powershell -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "irm $url | iex" -NoNewWindow -Wait -PassThru
+  return $p.ExitCode -eq 0
 }
 
 Step "1/7 Git for Windows (Claude Code runs its hooks in Git Bash)"
