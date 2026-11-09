@@ -4,6 +4,8 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+## [0.4.17] - 2026-11-09
+
 ### Changed
 - `install.ps1` downloads uv itself: the zip from the project's GitHub release, with a five-minute limit, unpacked to `~\.local\bin`. uv's own installer is no longer run. On a real PC it sat silent in a child PowerShell although the child, astral.sh and GitHub all answered; before that it closed the window under the Restricted policy. The Claude Code installer still runs in a child, now for five minutes at most, after which the install goes on without it.
 
