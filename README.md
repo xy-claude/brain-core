@@ -20,7 +20,7 @@ Both. One Python package, three ways in:
 | Piece | What it is | Who uses it |
 |---|---|---|
 | `brain serve` | an MCP server that Claude Code starts from the agent's `.mcp.json` and that exposes five tools | the agent, every session, without you touching it |
-| `brain` command | a CLI: `brain init`, `brain doctor`, `brain index`, `brain hindsight install`, `brain cron install`, `brain daily`, `brain weekly` | you, once at setup, then cron |
+| `brain` command | a CLI: `brain init`, `brain doctor`, `brain index`, `brain hindsight install`, `brain cron install`, `brain desktop`, `brain daily`, `brain weekly` | you, once at setup, then cron |
 | `brain_core.Agent` | the Python library both of the above sit on | the eval runner, the demo script, your own scripts |
 
 To a Claude Code user: an MCP server with five memory tools and a one-line installer. To a Python developer: a memory library with an MCP front end.
@@ -129,6 +129,7 @@ What it does, in order. Re-running skips what is already there, so after a failu
 | 6 | installs Hindsight as a launchd service on `127.0.0.1:8888` | first start downloads the embedding model; give it a few minutes |
 | 7 | installs `brain daily` and `brain weekly` as launchd agents | |
 | 8 | runs `brain doctor` on the new agent | `brain doctor ~/Agents/Atlas` repeats it any time |
+| + | with `--desktop`: connects the agent to the Claude desktop app | see [Claude desktop app](#claude-desktop-app) |
 
 ### After the installer
 
@@ -174,7 +175,25 @@ One line in PowerShell (5.1 or 7):
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/xy-claude/brain-core/main/install.ps1))) -Agent Atlas -User Alex
 ```
 
-It installs Git for Windows with winget when missing (Claude Code runs its hooks in Git Bash), `uv` from astral.sh, Claude Code from claude.ai, then `brain` with `uv tool`, and registers `brain daily` and `brain weekly` in Task Scheduler as `brain-core.atlas.daily` and `.weekly`. The default is lite: vault plus SQLite full-text search, the same configuration the recall numbers below are measured on. Add `-Hindsight` for the vector store (about 2 GB, a few minutes; `-Provider` and `-ApiKeyEnv` as on macOS): it runs hidden in the background, restarts itself, and starts again at every logon from an entry in your own registry Run key, so no administrator is needed. A lite agent upgrades later with `brain hindsight install`, then uncomment the `hindsight:` block in `brain.yaml`. Other options: `-Dir`, `-ProfileDir`, `-Ref`. Open a new terminal afterwards so `brain` is on PATH.
+It installs Git for Windows with winget when missing (Claude Code runs its hooks in Git Bash), `uv` from astral.sh, Claude Code from claude.ai, then `brain` with `uv tool`, and registers `brain daily` and `brain weekly` in Task Scheduler as `brain-core.atlas.daily` and `.weekly`. The default is lite: vault plus SQLite full-text search, the same configuration the recall numbers below are measured on. Add `-Hindsight` for the vector store (about 2 GB, a few minutes; `-Provider` and `-ApiKeyEnv` as on macOS): it runs hidden in the background, restarts itself, and starts again at every logon from an entry in your own registry Run key, so no administrator is needed. A lite agent upgrades later with `brain hindsight install`, then uncomment the `hindsight:` block in `brain.yaml`. Add `-Desktop` to connect the Claude desktop app in the same run. Other options: `-Dir`, `-ProfileDir`, `-Ref`. Open a new terminal afterwards so `brain` is on PATH.
+
+### Claude desktop app
+
+The agent's memory also works in the Claude desktop app's chat, on macOS and Windows. Add `--desktop` (macOS) or `-Desktop` (Windows) to the install line, or connect an agent you already have:
+
+```bash
+brain desktop ~/Agents/Atlas
+```
+
+It adds one `brain` server to the app's `claude_desktop_config.json`, keeps everything else in that file, and leaves a `.bak` copy the first time it changes one. Then quit the app fully and reopen it; closing the window is not enough. On Windows a Microsoft Store install keeps its settings in a package folder, and that one is written too when it exists. If the file is somewhere else, open it from the app (Settings, Developer, Edit Config) and pass it with `--config`.
+
+| | Claude Code | Claude desktop app |
+|---|---|---|
+| The five tools, on the same vault and database | yes | yes |
+| Brief at session start, capture at the end (hooks) | yes | no: say "start a brain session" and "close the session" |
+| The rules in `CLAUDE.md` and `.claude/rules/` | loaded every session | not loaded; put what you need in a project's instructions |
+
+The desktop app has a memory of its own, kept on Anthropic's servers. The two do not conflict, but a fact can end up in both. For one source of truth, work in a desktop project with "Use account memory" turned off and tell it in the project instructions to use `brain_recall` and `brain_remember`.
 
 ### Manual, any platform
 
@@ -183,6 +202,7 @@ uv tool install brain-core-mcp   # or: uv tool install git+https://github.com/xy
 brain init Atlas --path ~/Agents/Atlas --user Alex
 brain hindsight install          # launchd, systemd --user, or a logon entry on Windows
 brain cron install ~/Agents/Atlas    # launchd, crontab or Task Scheduler
+brain desktop ~/Agents/Atlas         # optional: the Claude desktop app, macOS and Windows
 brain doctor ~/Agents/Atlas
 ```
 

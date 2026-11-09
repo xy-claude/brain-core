@@ -497,6 +497,36 @@ def lessons_cmd(
         )
 
 
+@app.command("desktop")
+def desktop_cmd(
+    path: Annotated[
+        Path,
+        typer.Argument(help="Path to agent directory (contains brain.yaml)."),
+    ] = Path(),
+    config: Annotated[
+        Path | None,
+        typer.Option("--config", help="The app's claude_desktop_config.json, when not found."),
+    ] = None,
+) -> None:
+    """Connect this agent to the Claude desktop app (macOS, Windows): same memory, five tools."""
+    from brain_core import desktop
+
+    if not (path if path.is_file() else path / "brain.yaml").exists():  # a dir or a yaml, as serve
+        typer.echo(f"ERROR: no brain.yaml at {path}", err=True)
+        raise typer.Exit(code=1)
+    targets = [config] if config else desktop.config_paths()
+    if not targets:
+        typer.echo("The Claude desktop app has no build for this platform.", err=True)
+        raise typer.Exit(code=1)
+    results = [desktop.connect(path, t) for t in targets]
+    for r in results:
+        typer.echo(f"  {r}")
+    if all(r.startswith("left alone") for r in results):
+        raise typer.Exit(code=1)
+    typer.echo("Quit the Claude desktop app fully and reopen it; closing the window is not enough.")
+    typer.echo("No hooks run there: start a chat with brain_session('start').")
+
+
 @app.command("doctor")
 def doctor_cmd(
     path: Annotated[
