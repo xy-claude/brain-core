@@ -85,6 +85,19 @@ jobs:
           if (-not ($out -match "policy: Restricted")) { throw "the child did not run under Restricted" }
           if (-not ($out -match "reached the end of the installer")) { throw "the installer ended the PowerShell session" }
           if (-not ($out -match "installed uv ")) { throw "uv was not installed by our own download" }
+          # progress must be on the screen, and the ending must be the truthful one
+          foreach ($line in "uv: downloaded", "Task Scheduler: creating brain-core.atlas.daily", "Claude Code: downloaded", "Install complete: every step above finished", "scheduled tasks   created", "Claude Code       installed") {
+            if (-not ($out -match [regex]::Escape($line))) { throw "missing from the installer's output: $line" }
+          }
+
+      - name: a second run upgrades nothing it should not, and completes again
+        shell: powershell
+        run: |
+          $out = powershell -NoProfile -ExecutionPolicy Restricted -Command "& ([scriptblock]::Create((Get-Content -Raw install.ps1))) -Agent Atlas -User Alex -Desktop -Dir '$HOME\My Agents\Atlas'"
+          $out
+          if (-not ($out -match "already initialised")) { throw "the second run did not keep the agent" }
+          if (-not ($out -match "already connected")) { throw "the second run did not find the desktop entry" }
+          if (-not ($out -match "Install complete: every step above finished")) { throw "the second run did not complete" }
 
       - name: agent, scheduled tasks and desktop entry exist
         shell: powershell

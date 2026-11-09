@@ -188,10 +188,13 @@ def cron_cmd(
     """Register `brain daily` and `brain weekly`: launchd, crontab (Linux) or Task Scheduler."""
     from brain_core import cron
 
+    typer.echo(f"  reading the agent at {path}")  # each slow step says so before it starts
     with _open(path) as agent:
         if action == "install":
             try:
-                written = cron.install(agent, launch_dir, load=not no_load)
+                written = cron.install(
+                    agent, launch_dir, load=not no_load, say=lambda line: typer.echo(f"  {line}")
+                )
             except (
                 RuntimeError
             ) as e:  # the scheduler refused or never answered: say so, no traceback

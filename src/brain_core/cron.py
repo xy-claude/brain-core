@@ -17,6 +17,7 @@ import shutil
 import subprocess
 import sys
 from collections import Counter
+from collections.abc import Callable
 from datetime import date, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -592,13 +593,16 @@ def schtasks_commands(
     }
 
 
-def _schtasks(args: list[str]) -> subprocess.CompletedProcess[str]:
+def _schtasks(args: list[str], show: bool = False) -> subprocess.CompletedProcess[str]:
     """Run schtasks with no keyboard and a time limit. With the console as stdin, a question
-    from it or from security software watching it waited for ever, unseen (real PC, 2026-11-09)."""
+    from it or from security software watching it waited for ever, unseen (real PC, 2026-11-09).
+    ``show`` lets its own lines reach the screen instead of being collected."""
+    out = None if show else subprocess.PIPE
     try:
         return subprocess.run(
             ["schtasks", *args],
-            capture_output=True,
+            stdout=out,
+            stderr=out,
             text=True,
             stdin=subprocess.DEVNULL,
             timeout=60,
@@ -645,8 +649,14 @@ def plists(
     }
 
 
-def install(agent: Agent, launch_dir: Path | None = None, load: bool = True) -> list[str]:
-    """Write the plists (and bootstrap them unless ``load=False``). Returns their paths."""
+def install(
+    agent: Agent,
+    launch_dir: Path | None = None,
+    load: bool = True,
+    say: Callable[[str], None] | None = None,
+) -> list[str]:
+    """Write the plists (and bootstrap them unless ``load=False``). Returns their paths.
+    ``say`` receives one line before each slow step, so a caller can show what is happening."""
     agent_dir = agent.config_path.parent if agent.config_path else Path.cwd()
     brain_bin = shutil.which("brain") or str(Path(sys.executable).with_name("brain"))
     (agent_dir / "data" / "logs").mkdir(parents=True, exist_ok=True)
@@ -655,9 +665,12 @@ def install(agent: Agent, launch_dir: Path | None = None, load: bool = True) -> 
         tasks = schtasks_commands(agent_dir, brain_bin, agent.name, c.daily, c.weekly)
         if load:
             for task, cmd in tasks.items():
-                done = _schtasks(cmd[1:])
+                if say:
+                    say(f"Task Scheduler: creating {task} (answers within 60 seconds)")
+                done = _schtasks(cmd[1:], show=say is not None)
                 if done.returncode:
-                    why = (done.stderr or done.stdout).strip()
+                    shown = f"exit code {done.returncode}, its own message is above"
+                    why = (done.stderr or done.stdout or shown).strip()
                     raise RuntimeError(f"Task Scheduler did not create {task}: {why}")
         return list(tasks)
     if sys.platform != "darwin" and launch_dir is None:
