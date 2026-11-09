@@ -125,6 +125,20 @@ def test_end_without_session_is_an_error(tmp_path: Path) -> None:
             raise AssertionError("expected ValueError")
 
 
+def test_end_after_a_server_restart_closes_the_session_that_was_started(tmp_path: Path) -> None:
+    agent, _vault, _fake = make(tmp_path)
+    try:
+        agent.brain_session("start", "s1")
+        agent.start_session("mcp-after-restart")  # what `brain serve` does when it starts again
+        agent.brain_remember("Hindsight runs on 8888", "fact", domain="system")
+        e = agent.brain_session("end")
+        assert Path(e["marker"]).read_text().strip() == "s1"
+        assert agent.brain_status()["session"]["unclosed"] is False
+        assert agent.brain_session("start", "s2")["recovery"] is None, "s1 was closed, not crashed"
+    finally:
+        agent.close()
+
+
 def test_end_refuses_secrets_in_files_and_drops_them_from_the_queue(tmp_path: Path) -> None:
     agent, vault, fake = make(tmp_path)
     q = tmp_path / "queue.jsonl"
