@@ -29,6 +29,7 @@ $env:Path = "$HOME\.local\bin;$env:ProgramFiles\Git\cmd;$env:Path"
 # Nothing in this script waits or downloads without saying so. On a real PC three steps looked
 # frozen: two were silent downloads (one of 345 MB), one a hidden question (2026-11-09).
 $problems = @()  # every step that did not work, repeated in the last lines
+$brainChanged = $false  # true when this run replaced an older brain
 $cpu = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
@@ -115,10 +116,18 @@ Step "3/7 brain-core$(if ($Ref) { " ($Ref)" })"
 # package for it then needs a C++ compiler (pyyaml on 3.15, seen on a real PC 2026-11-09)
 if ($Ref) { uv tool install --python 3.12 --force "git+https://github.com/xy-claude/brain-core@$Ref" }
 elseif (Have brain) {
-  uv tool upgrade brain-core-mcp  # a second run of this script brings the fixes of newer versions
-  "brain $(brain version)"
+  # A second run of this script brings the fixes of newer versions. --no-cache: uv keeps PyPI's
+  # index for some minutes, and a release made in that time is invisible without it (upgrade has
+  # no --refresh).
+  $before = "$(brain version)"
+  uv tool upgrade --no-cache brain-core-mcp
+  $upgradeError = [bool]$LASTEXITCODE
+  $after = "$(brain version)"
+  $brainChanged = $after -ne $before
+  "brain $after$(if ($brainChanged) { " (was $before)" })"
+  if ($upgradeError) { "uv reported an error above. When the Claude app is open it holds brain.exe and uv cannot replace that file; the version shown here is in place and is used once Claude is restarted." }
 }
-else { uv tool install --python 3.12 brain-core-mcp }
+else { uv tool install --python 3.12 --refresh brain-core-mcp }
 Fail-OnError
 uv tool update-shell  # puts %USERPROFILE%\.local\bin on the user PATH for new terminals
 
@@ -197,6 +206,10 @@ if ($Desktop -and $desktopOk) {
   if (Test-ClaudeLoadedBrain) {
     "yes: the app is running and has started brain-core"
     $desktopState = "connected and loaded"
+    if ($brainChanged) {
+      Write-Host "It started brain-core before this upgrade, so it is still on $before. Quit Claude from the icon near the clock and open it again to use $after." -ForegroundColor Yellow
+      $desktopState = "connected and loaded; restart Claude to use $after"
+    }
   } elseif (-not @(Get-ClaudeApp).Count) {
     "the Claude app is not open. brain-core loads the next time you open it"
     $desktopState = "connected; loads when Claude is next opened"

@@ -63,10 +63,12 @@ step "4/8 brain-core${REF:+ ($REF)}"
 if [ -n "$REF" ]; then
   uv tool install --python 3.12 --force "git+https://github.com/xy-claude/brain-core@$REF"
 elif have brain; then
-  uv tool upgrade brain-core-mcp 2>/dev/null || true  # a second run brings newer fixes; not a uv tool: left alone
+  # a second run brings newer fixes; not a uv tool: left alone. --no-cache: uv keeps PyPI's index
+  # for some minutes and would miss a release made in that time (upgrade has no --refresh)
+  uv tool upgrade --no-cache brain-core-mcp 2>/dev/null || true
   echo "brain $(brain version)"
 else
-  uv tool install --python 3.12 brain-core-mcp || uv tool install --python 3.12 "git+https://github.com/xy-claude/brain-core@main"
+  uv tool install --python 3.12 --refresh brain-core-mcp || uv tool install --python 3.12 "git+https://github.com/xy-claude/brain-core@main"
 fi
 
 step "5/8 Agent $AGENT at $DIR"

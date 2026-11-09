@@ -4,6 +4,10 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+### Fixed
+- A second run of an installer did not always upgrade `brain`: uv keeps PyPI's index for some minutes, so a release made in that time was not seen. The installers now upgrade with `--no-cache` (`uv tool upgrade` has no `--refresh`) and install with `--refresh`.
+- On Windows, upgrading while the Claude desktop app is open makes uv print an error, because the app holds `brain.exe`. `install.ps1` now explains it: the new version is in place and is used once Claude is restarted. Its closing desktop check says the same when the app is still running the previous version.
+
 ## [0.4.22] - 2026-11-09
 
 ### Added
