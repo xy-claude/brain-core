@@ -75,7 +75,8 @@ def build_server(agent: Agent) -> FastMCP:
         checks (brain_status) and not for reading a file you already know the path of.
 
         `weak_match` in the reply means no record holds most of what was asked: search again
-        in other words before answering. A result marked `superseded` is an old value a newer
+        in other words before answering, then teach the record that answered it with
+        brain_remember(kind='key'). A result marked `superseded` is an old value a newer
         record replaced.
 
         Read-only. Partial results are normal: `stores` lists hits per store and names any store
@@ -94,7 +95,13 @@ def build_server(agent: Agent) -> FastMCP:
     )
     def brain_remember(
         text: Annotated[str, Field(description="The memory itself, one item, plain text.")],
-        kind: Annotated[str, Field(description=f"One of {_KINDS}.")],
+        kind: Annotated[
+            str,
+            Field(
+                description=f"One of {_KINDS}, or key: text = a question whose recall was a "
+                "`weak_match`, source = the `source` of the result that later answered it."
+            ),
+        ],
         domain: Annotated[
             str, Field(description="Topic tag such as 'trading' or 'system'; empty = none.")
         ] = "",

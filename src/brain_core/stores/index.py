@@ -195,6 +195,18 @@ class RecordIndex:
                 held[r["rid"]] += idf
         return max(held.values()) / total if total else 0.0
 
+    def find(self, source: str) -> str:
+        """The id of the record a recall result names as its ``source`` (``path:line``)."""
+        path, _, line = source.rpartition(":")
+        if not line.isdigit():
+            path, line = source, "0"
+        row = self.db.fetchone(
+            "SELECT rid FROM records_fts WHERE json_extract(record, '$.path') = ? "
+            "AND json_extract(record, '$.line') = ?",
+            (path, int(line)),
+        )
+        return str(row["rid"]) if row else ""
+
     def search(self, store: str, kinds: Sequence[Kind], query: str, limit: int) -> list[Record]:
         """The best ``limit`` records of ``store`` for ``query``, bm25 order, score on each."""
         q = match_query(query)

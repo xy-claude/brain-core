@@ -49,7 +49,8 @@ from brain_core.stores import (
     VaultStore,
 )
 from brain_core.stores.base import Kind
-from brain_core.stores.index import RecordIndex
+from brain_core.stores.index import RecordIndex, terms
+from brain_core.stores.vault import _SECRET
 
 
 class Agent:
@@ -155,10 +156,29 @@ class Agent:
             self.log_event("recall_miss", {"query": query[:200], "scope": scope, **miss})
             out["weak_match"] = (
                 "No record holds most of what was asked. The memory may use other words: "
-                "search again with synonyms or the name it would be filed under. "
-                "If that also fails, say it is not on record."
+                "search again with synonyms or the name it would be filed under. When a retry "
+                "finds it, teach it: brain_remember(kind='key', text=<this question>, "
+                "source=<that result's source>). If no retry finds it, say it is not on record."
             )
         return out
+
+    def _learn(self, missed: str, source: str) -> dict[str, Any]:
+        """Miss repair: ``missed`` came back weak, a retry found the record at ``source``."""
+        vault = next((s for s in self.stores if isinstance(s, VaultStore)), None)
+        words = terms(missed)[:12]
+        if not vault or not vault.index:
+            raise ValueError("kind='key' needs a vault: the learned words are kept there")
+        if not words or _SECRET.search(missed):
+            raise ValueError("text must be the question that missed, in plain words")
+        rid = vault.index.find(source)
+        if not rid:
+            raise ValueError(
+                f"no record has source {source!r}; pass the `source` of a brain_recall result"
+            )
+        vault.learn(rid, " ".join(words))
+        # each repair is a labelled eval case: this question must find this record
+        self.log_event("recall_repair", {"query": missed[:200], "id": rid, "source": source})
+        return {"kind": "key", "id": rid, "status": "written", "learned": " ".join(words)}
 
     # ── session lifecycle ────────────────────────────────────────────────────
 
@@ -207,10 +227,17 @@ class Agent:
         force: bool = False,
         **extra: str,
     ) -> dict[str, Any]:
-        """Write-through to every store with per-layer status. See :mod:`brain_core.remember`."""
+        """Write-through to every store with per-layer status. See :mod:`brain_core.remember`.
+
+        ``kind='key'`` is miss repair: ``text`` is a question that came back weak, ``source``
+        the ``source`` of the recall result that answered it. The question's words become
+        search keys of that record."""
+        if kind == "key":
+            return self._learn(text, source)
         if kind not in get_args(Kind) or kind == "transcript":
             raise ValueError(
                 f"kind must be one of {'|'.join(k for k in get_args(Kind) if k != 'transcript')}"
+                "|key"
             )
         out = brain_remember(
             self.stores,

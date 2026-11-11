@@ -89,8 +89,13 @@ class VaultStore:
                 d = out.setdefault(m.group(1), {})
                 for part in m.group(2).split(" | "):
                     k, _, v = part.partition(": ")
-                    d[k] = f"{d[k]}; {v}" if k == "keys" and k in d else v
+                    d[k] = f"{d[k]}; {v}" if k in ("keys", "learned") and k in d else v
         return out
+
+    def learn(self, rid: str, words: str, when: date | None = None) -> None:
+        """A question that missed and was then answered by record ``rid``: its words become
+        search keys of that record (``learned`` in record_meta.md, apart from written keys)."""
+        self._note_meta(rid, when or date.today(), {"learned": words})
 
     def retired(self) -> set[str]:
         """Ids (16 characters) of records a newer one replaced: its ``supersedes`` field."""
@@ -99,7 +104,7 @@ class VaultStore:
     def _note_meta(self, rid: str, when: date, extra: dict[str, str]) -> None:
         fields = {
             k: " ".join(str(extra[k]).replace("|", "/").split())
-            for k in ("keys", "source", "mission", "supersedes")
+            for k in ("keys", "learned", "source", "mission", "supersedes")
             if extra.get(k)
         }
         if not fields:
@@ -121,7 +126,13 @@ class VaultStore:
             meta = self.root / META
             sig = meta.stat().st_mtime_ns if meta.exists() else 0
             if sig != self._meta_sig:  # keys changed on disk: bring the index in line
-                self.index.set_keys({i: d["keys"] for i, d in self.meta().items() if "keys" in d})
+                self.index.set_keys(
+                    {
+                        i: "; ".join(d[k] for k in ("keys", "learned") if k in d)
+                        for i, d in self.meta().items()
+                        if "keys" in d or "learned" in d
+                    }
+                )
                 self._meta_sig = sig
             files = {p: k for k in _INDEXED for p in self._paths(k) if p.exists()}
             self.index.sync(self.name, files, lambda k, p: self._parse(k, p, full=True))

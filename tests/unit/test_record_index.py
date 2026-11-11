@@ -154,3 +154,39 @@ def test_a_changed_fact_retires_the_old_value(tmp_path: Path, index: RecordIndex
     d = v.write("decision", "Use Postgres", when=DAY, title="Database choice")
     v.write("decision", "Use SQLite", when=DAY, title="Database choice, revised", supersedes=d.id)
     assert d.id[:16] in v.retired()
+
+
+def test_miss_repair_teaches_the_record_the_question_that_failed(tmp_path: Path) -> None:
+    from brain_core import Agent
+
+    root = tmp_path / "vault"
+    root.mkdir()
+    cfg = tmp_path / "brain.yaml"
+    cfg.write_text(f"name: T\nstores:\n  vault: {root}\n")
+    with Agent.from_config(cfg) as a:
+        a.brain_remember("PyPI recovery codes are stored in the login Keychain", "fact")
+        for i in range(20):
+            a.brain_remember(
+                f"unrelated note number {i} about the package site", "fact", force=True
+            )
+        missed = "where are the backup passwords for the python package site?"
+        first = a.brain_recall(missed)
+        assert "weak_match" in first and "kind='key'" in first["weak_match"]
+        found = a.brain_recall("PyPI recovery codes")["results"][0]
+        out = a.brain_remember(missed, "key", source=found["source"])
+        assert out["status"] == "written" and "backup" in out["learned"]
+        again = a.brain_recall(missed)
+        assert "weak_match" not in again and again["results"][0]["source"] == found["source"]
+        vault = next(s for s in a.stores if s.name == "vault")
+        assert "backup" in vault.meta()[out["id"][:16]]["learned"]
+        assert a.recent_events(event_type="recall_repair")[0].payload["id"] == out["id"]
+        with pytest.raises(ValueError, match="no record has source"):
+            a.brain_remember(missed, "key", source="facts.md:9999")
+    import sys
+
+    sys.path.insert(0, "tests/eval")
+    import from_repairs
+
+    assert from_repairs.questions(str(cfg)) == [
+        {"s": "learned", "q": missed, "gold": [out["id"][:16]]}
+    ]
