@@ -146,3 +146,13 @@ def test_offset_pages_through_the_ranked_list() -> None:
     assert past["results"] == [] and "past the last result" in past["note"]
     with pytest.raises(ValueError, match="offset"):
         brain_recall([vault()], "x", offset=-1, today=TODAY)
+
+
+def test_a_store_can_opt_out_of_recall_but_answers_as_the_scope() -> None:
+    h = RankedStore()
+    h.recall = False
+    h.write("fact", "hindsight note from hindsight", when=TODAY)
+    out = brain_recall([vault(), h], "hindsight", today=TODAY)
+    assert "hindsight" not in out["stores"] and out["results"]
+    own = brain_recall([vault(), h], "hindsight", scope="hindsight", today=TODAY)
+    assert own["stores"] == {"hindsight": 1}

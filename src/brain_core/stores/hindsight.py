@@ -41,6 +41,7 @@ class HindsightStore:
     name = "hindsight"
     ranked = True  # the server orders by query
     whole = True  # one recall covers every kind; kind comes back in the tags
+    recall = True  # false: brain_recall asks this store only when it is the scope
 
     def __init__(
         self, url: str, bank: str, agent: str = "agent", *, timeout: float = 30.0, wait: float = 1.0

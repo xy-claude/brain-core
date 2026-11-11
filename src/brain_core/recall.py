@@ -85,10 +85,11 @@ def brain_recall(
 ) -> dict[str, Any]:
     today = today or date.today()
     names = [s.name for s in stores]
+    asked = [s for s in stores if getattr(s, "recall", True)]  # a store can opt out of recall
     if scope == "all":
-        kinds, chosen = KINDS, list(stores)
+        kinds, chosen = KINDS, asked
     elif scope in KINDS:
-        kinds, chosen = (scope,), list(stores)
+        kinds, chosen = (scope,), asked
     elif scope in names:
         kinds, chosen = KINDS, [s for s in stores if s.name == scope]
     else:

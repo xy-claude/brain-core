@@ -27,6 +27,8 @@ class HindsightConfig(BaseModel):
 
     url: str = "http://127.0.0.1:8888"
     bank: str
+    # false: still written to, and read by scope='hindsight', but not asked on every recall
+    recall: bool = True
 
 
 class GraphConfig(BaseModel):

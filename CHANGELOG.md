@@ -10,6 +10,8 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 - Search keys: `brain_remember` takes `keys`, the other words a memory would be asked for by (synonyms, plain names, the question it answers). They are indexed beside the text and never returned, and they can be added later to a record that already exists. Keys, `source` and `mission` are kept in the vault, in `record_meta.md`, one append-only line per record id; before, `source` and `mission` never reached the vault. Measured on one live agent, with keys written for 407 records by a model that did not see the questions: reworded questions whose answer is one of those records went from 25 of 51 to 43 of 51 in the top ten.
 
+- `stores.hindsight.recall: false` in `brain.yaml` keeps Hindsight for writes, mental models and `scope='hindsight'` but stops asking it on every recall. Measured on one live agent with search keys in place: the same 50 of 75 reworded questions were found with and without it, at 2,032 ms against 42 ms per recall. The default stays `true`.
+
 ### Changed
 - Recall ranks an indexed record by its share of the best bm25 score for the query, not by the share of query words it holds. Measured on one live agent with 143 labelled questions: reworded questions found in the top ten went from 13 of 75 to 31 of 75 (held-out third: 6 of 25 to 12 of 25), same-word questions stayed at 20 of 20, date questions went from 0 of 8 to 4 of 8, and the median recall from 130 ms to 42 ms.
 
