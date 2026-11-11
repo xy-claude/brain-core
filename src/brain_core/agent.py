@@ -49,6 +49,7 @@ from brain_core.stores import (
     VaultStore,
 )
 from brain_core.stores.base import Kind
+from brain_core.stores.index import RecordIndex
 
 
 class Agent:
@@ -117,8 +118,11 @@ class Agent:
         if self._stores is None:
             s = self._config.stores
             self._stores = [SqliteStore(self._db)]
+            index = RecordIndex(self._db)  # one bm25 scale for every markdown store
             if s.vault:
-                self._stores.append(VaultStore(self.resolve(s.vault), owner=self.name.lower()))
+                self._stores.append(
+                    VaultStore(self.resolve(s.vault), owner=self.name.lower(), index=index)
+                )
             if s.hindsight:
                 self._stores.append(HindsightStore(s.hindsight.url, s.hindsight.bank, self.name))
             self._stores.append(GraphStore(self._db))  # relations table in brain.db, always on
@@ -130,7 +134,7 @@ class Agent:
                 )
                 self._stores.append(TranscriptStore(self._db, s.transcripts, cwd))
             if s.notes:
-                self._stores.append(NotesStore([self.resolve(p) for p in s.notes]))
+                self._stores.append(NotesStore([self.resolve(p) for p in s.notes], index))
         return self._stores
 
     def brain_recall(

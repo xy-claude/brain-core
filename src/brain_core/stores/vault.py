@@ -15,6 +15,7 @@ from datetime import date
 from pathlib import Path
 
 from brain_core.stores.base import Kind, Record, WriteResult, record_id
+from brain_core.stores.index import RecordIndex
 
 if sys.platform == "win32":
     import msvcrt
@@ -39,31 +40,48 @@ FILES: dict[Kind, str] = {
     "decision": "decisions_log.md",
     "correction": "corrections.md",
 }
+_INDEXED: tuple[Kind, ...] = (
+    "fact",
+    "pattern",
+    "decision",
+    "correction",
+    "note",
+    "raw",
+    "knowledge",
+)
 
 
 class VaultStore:
     name = "vault"
 
-    def __init__(self, root: Path | str, owner: str = "agent") -> None:
+    def __init__(
+        self, root: Path | str, owner: str = "agent", index: RecordIndex | None = None
+    ) -> None:
         self.root = Path(root).expanduser()
         self.owner = owner
+        self.index = index
+        self.ranked = index is not None  # with an index a query comes back in bm25 order
 
     # ── read ────────────────────────────────────────────────────────────────
 
-    def read(self, kind: Kind, query: str | None = None, limit: int = 50) -> list[Record]:
+    def _paths(self, kind: Kind) -> list[Path]:
         if kind == "note":
             # rglob: `brain weekly` moves old days into sessions/archive/YYYY-MM/
-            paths = sorted((self.root / "sessions").rglob("????-??-??.md"), reverse=True)
-        elif kind == "raw":
-            paths = sorted((self.root / "raw").glob("*.md"), reverse=True)
-        elif kind == "knowledge":
-            paths = sorted(
+            return sorted((self.root / "sessions").rglob("????-??-??.md"), reverse=True)
+        if kind == "raw":
+            return sorted((self.root / "raw").glob("*.md"), reverse=True)
+        if kind == "knowledge":
+            return sorted(
                 p for p in (self.root / "knowledge").glob("*.md") if not p.name.startswith("_")
             )
-        elif kind in FILES:
-            paths = [self.root / FILES[kind]]
-        else:
-            return []
+        return [self.root / FILES[kind]] if kind in FILES else []
+
+    def read(self, kind: Kind, query: str | None = None, limit: int = 50) -> list[Record]:
+        if query and self.index:
+            files = {p: k for k in _INDEXED for p in self._paths(k) if p.exists()}
+            self.index.sync(self.name, files, lambda k, p: self._parse(k, p, full=True))
+            return self.index.search(self.name, [kind], query, limit)
+        paths = self._paths(kind)
         out: list[Record] = []
         q = (query or "").lower()
         for p in paths:
@@ -75,7 +93,7 @@ class VaultStore:
         out.sort(key=lambda r: r.date, reverse=True)
         return out[:limit]
 
-    def _parse(self, kind: Kind, path: Path) -> list[Record]:
+    def _parse(self, kind: Kind, path: Path, full: bool = False) -> list[Record]:
         text = path.read_text(encoding="utf-8")
         fm = self._frontmatter(text)
         fallback = _parse_date(fm.get("updated")) or date.fromtimestamp(path.stat().st_mtime)
@@ -94,7 +112,7 @@ class VaultStore:
                 )
             ]
         if kind == "knowledge":
-            return knowledge_records(text, rel, fallback)
+            return knowledge_records(text, rel, fallback, cap=None if full else 600)
         if kind == "note":
             fallback = _parse_date(path.stem) or fallback
         records: list[Record] = []
@@ -428,9 +446,10 @@ def _parse_date(value: str | None) -> date | None:
         return None
 
 
-def knowledge_records(text: str, rel: str, when: date) -> list[Record]:
+def knowledge_records(text: str, rel: str, when: date, cap: int | None = 600) -> list[Record]:
     """One record per `## section` of a page: title › heading: body. A page without `## `
-    sections (a plain note, a Claude Code memory file) is one record of its body."""
+    sections (a plain note, a Claude Code memory file) is one record of its body. ``cap``
+    cuts the body for a whole-store read; the index passes None so every word is searchable."""
     fm = frontmatter(text)
     m = _FRONTMATTER.match(text)
     skip = m.group(0).count("\n") if m else 0  # frontmatter lines: never body, never a title
@@ -445,24 +464,24 @@ def knowledge_records(text: str, rel: str, when: date) -> list[Record]:
     for n, line in enumerate(lines, 1):
         if line.startswith("## "):
             if heading:
-                records.append(_knowledge_record(title, heading, body, rel, start, when))
+                records.append(_knowledge_record(title, heading, body, rel, start, when, cap))
             heading, body, start = line[3:].strip(), [], n
         elif heading and line.strip() and not line.startswith("---"):
             body.append(line.strip())
     if heading:
-        records.append(_knowledge_record(title, heading, body, rel, start, when))
+        records.append(_knowledge_record(title, heading, body, rel, start, when, cap))
     if not records:
         plain = [ln.strip() for ln in lines[skip:] if ln.strip() and ln[0] != "#"]
         if plain:
-            records.append(_knowledge_record(title, "", plain, rel, 1, when))
+            records.append(_knowledge_record(title, "", plain, rel, 1, when, cap))
     return records
 
 
 def _knowledge_record(
-    title: str, heading: str, body: list[str], rel: str, line: int, when: date
+    title: str, heading: str, body: list[str], rel: str, line: int, when: date, cap: int | None
 ) -> Record:
-    joined = " ".join(body)
-    text = f"{title} › {heading}: {joined[:600]}" if heading else f"{title}: {joined[:600]}"
+    joined = " ".join(body)[:cap]
+    text = f"{title} › {heading}: {joined}" if heading else f"{title}: {joined}"
     return Record(record_id(f"{rel}#{heading}"), "knowledge", text, when, "", rel, line, {})
 
 

@@ -4,6 +4,13 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+### Added
+- A record index: every kind the vault holds (facts, patterns, decisions, corrections, session notes, raw sources, knowledge pages) and every notes folder is now in one SQLite FTS5 table, ranked by bm25 with stemming ("deployed" finds "deploy") and accent folding. Before, only facts and patterns were indexed; the rest was read from disk and scored word by word on every recall. The index is a cache: a file whose size or mtime changed is parsed again on the next search, a deleted file loses its rows, and dropping the table loses nothing. Knowledge pages and notes are searchable past their first 600 characters, and a record is found by its date (`2026-11-02`).
+- `tests/eval/run_gold.py`: a recall eval scored against hand-labelled record ids, with slices for reworded questions, changed values, dates, several records and questions the store cannot answer. It needs no judge and writes nothing to the database under test. `run_recall.py` judges by substring, which a query written in the note's own words always passes.
+
+### Changed
+- Recall ranks an indexed record by its share of the best bm25 score for the query, not by the share of query words it holds. Measured on one live agent with 143 labelled questions: reworded questions found in the top ten went from 13 of 75 to 31 of 75 (held-out third: 6 of 25 to 12 of 25), same-word questions stayed at 20 of 20, date questions went from 0 of 8 to 4 of 8, and the median recall from 130 ms to 42 ms.
+
 ## [0.4.29] - 2026-11-10
 
 ### Fixed

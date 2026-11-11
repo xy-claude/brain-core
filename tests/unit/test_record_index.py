@@ -1,0 +1,96 @@
+"""The record index: bm25 over every vault kind, rebuilt from the files, never the truth."""
+
+from __future__ import annotations
+
+from datetime import date
+from pathlib import Path
+
+import pytest
+
+from brain_core.recall import brain_recall
+from brain_core.storage import Database, migrate
+from brain_core.stores import NotesStore, VaultStore
+from brain_core.stores.index import RecordIndex, match_query
+
+DAY = date(2026, 11, 2)
+
+
+@pytest.fixture
+def index(tmp_path: Path) -> RecordIndex:
+    db = Database.connect(tmp_path / "brain.db")
+    migrate(db)
+    return RecordIndex(db)
+
+
+def vault(tmp_path: Path, index: RecordIndex) -> VaultStore:
+    v = VaultStore(tmp_path / "vault", owner="atlas", index=index)
+    v.write("fact", "The staging cluster was deployed with a helm chart", when=DAY)
+    v.write("fact", "Ana prefers café meetings on Tuesdays", when=DAY)
+    v.write(
+        "decision",
+        "Keep one database per tenant",
+        when=DAY,
+        title="Tenant isolation",
+        reason="a leaked query cannot cross customers",
+    )
+    v.write("correction", "x", when=DAY, title="Pushed without asking", error="pushed on my own")
+    v.write("note", "Reviewed the invoice export with the client", when=DAY)
+    return v
+
+
+def test_every_kind_is_searched_and_stemmed(tmp_path: Path, index: RecordIndex) -> None:
+    v = vault(tmp_path, index)
+    assert v.ranked
+    hit = v.read("fact", "deploying charts")  # deploy/deployed, chart/charts
+    assert [r.text for r in hit] == ["The staging cluster was deployed with a helm chart"]
+    assert hit[0].score > 0 and hit[0].path == "facts.md" and hit[0].date == DAY
+    assert v.read("fact", "cafe")[0].text.startswith("Ana"), "accents fold"
+    # the body fields of a decision and a correction are searchable, not only the title
+    assert v.read("decision", "leaked customers")[0].text == "Tenant isolation"
+    assert v.read("correction", "pushed")[0].extra["error"] == "pushed on my own"
+    assert v.read("note", "invoices")[0].kind == "note"
+    assert v.read("note", "2026-11-02"), "a record is found by its date"
+    assert v.read("fact", "invoice") == [], "a kind filter holds"
+    assert v.read("fact", "what is the of") == [], "only stopwords: nothing to match"
+
+
+def test_index_follows_the_files(tmp_path: Path, index: RecordIndex) -> None:
+    v = vault(tmp_path, index)
+    assert v.read("fact", "helm")
+    facts = v.root / "facts.md"
+    facts.write_text(facts.read_text().replace("helm chart", "terraform plan"))
+    assert v.read("fact", "helm") == [] and v.read("fact", "terraform"), "a hand edit is seen"
+    v.write("fact", "The queue worker restarts nightly", when=DAY)
+    assert v.read("fact", "worker"), "a write is searchable at once"
+    facts.unlink()
+    assert v.read("fact", "terraform") == [], "a deleted file loses its rows"
+    # dropping the index loses nothing: the next search rebuilds it from the vault
+    index.db.execute("DELETE FROM records_fts")
+    index.db.execute("DELETE FROM index_files")
+    assert v.read("decision", "tenant")[0].text == "Tenant isolation"
+
+
+def test_notes_folder_is_indexed_past_the_display_cap(tmp_path: Path, index: RecordIndex) -> None:
+    d = tmp_path / "memory"
+    d.mkdir()
+    (d / "long.md").write_text("# Long note\n\n" + "filler words here. " * 80 + "zanzibar ferry")
+    n = NotesStore([d], index)
+    assert n.read("knowledge", "zanzibar"), "words past the first 600 characters are searchable"
+    assert NotesStore([d]).read("knowledge", "zanzibar") == [], "the unindexed read is capped"
+
+
+def test_recall_ranks_indexed_records_by_bm25(tmp_path: Path, index: RecordIndex) -> None:
+    v = vault(tmp_path, index)
+    for i in range(30):  # decoys that share the common word but not the rare one
+        v.write("fact", f"cluster note {i} about nothing in particular", when=DAY)
+    out = brain_recall([v], "which cluster got deployed with helm?", fmt="detailed", today=DAY)
+    assert out["results"][0]["text"].startswith("The staging cluster was deployed")
+    assert out["stores"]["vault"] > 1 and "miss" not in out
+    assert brain_recall([v], "tenants", scope="decision", today=DAY)["total"] == 1
+
+
+def test_match_query_cannot_be_broken_by_fts_syntax() -> None:
+    assert match_query('co-authored-by: "helm" AND (chart*) 2026-11-02') == (
+        '"co" OR "authored" OR "helm" OR "chart" OR "2026-11-02"'
+    )
+    assert match_query("the of and") == ""
