@@ -40,6 +40,8 @@ FILES: dict[Kind, str] = {
     "decision": "decisions_log.md",
     "correction": "corrections.md",
 }
+META = "record_meta.md"
+_META = re.compile(r"^- ([0-9a-f]{16}) \| (.+)$")
 _INDEXED: tuple[Kind, ...] = (
     "fact",
     "pattern",
@@ -61,6 +63,7 @@ class VaultStore:
         self.owner = owner
         self.index = index
         self.ranked = index is not None  # with an index a query comes back in bm25 order
+        self._meta_sig = -1  # mtime of record_meta.md when its keys were last loaded
 
     # ── read ────────────────────────────────────────────────────────────────
 
@@ -76,8 +79,46 @@ class VaultStore:
             )
         return [self.root / FILES[kind]] if kind in FILES else []
 
+    def meta(self) -> dict[str, dict[str, str]]:
+        """``record_meta.md``: per record id, the fields the record's own line cannot carry
+        (search keys, source, mission). A later line for the same id adds keys and replaces
+        the rest."""
+        out: dict[str, dict[str, str]] = {}
+        for line in read_text(self.root / META).splitlines():
+            if m := _META.match(line):
+                d = out.setdefault(m.group(1), {})
+                for part in m.group(2).split(" | "):
+                    k, _, v = part.partition(": ")
+                    d[k] = f"{d[k]}; {v}" if k == "keys" and k in d else v
+        return out
+
+    def _note_meta(self, rid: str, when: date, extra: dict[str, str]) -> None:
+        fields = {
+            k: " ".join(str(extra[k]).replace("|", "/").split())
+            for k in ("keys", "source", "mission")
+            if extra.get(k)
+        }
+        if not fields:
+            return
+        path = self.root / META
+        line = f"- {rid[:16]} | " + " | ".join(f"{k}: {v}" for k, v in fields.items())
+        with self._locked(path):
+            text = read_text(path) or (
+                f"---\ntype: index\nowner: {self.owner}\nstatus: active\n"
+                f"updated: {when.isoformat()}\n---\n# Record meta\n\n"
+                "Search keys, source and mission of each record, by record id. "
+                "Written by brain_remember; append-only.\n\n"
+            )
+            if line not in text.splitlines():
+                self._save(path, text.rstrip("\n") + "\n" + line + "\n", when)
+
     def read(self, kind: Kind, query: str | None = None, limit: int = 50) -> list[Record]:
         if query and self.index:
+            meta = self.root / META
+            sig = meta.stat().st_mtime_ns if meta.exists() else 0
+            if sig != self._meta_sig:  # keys changed on disk: bring the index in line
+                self.index.set_keys({i: d["keys"] for i, d in self.meta().items() if "keys" in d})
+                self._meta_sig = sig
             files = {p: k for k in _INDEXED for p in self._paths(k) if p.exists()}
             self.index.sync(self.name, files, lambda k, p: self._parse(k, p, full=True))
             return self.index.search(self.name, [kind], query, limit)
@@ -178,6 +219,14 @@ class VaultStore:
     # ── write ───────────────────────────────────────────────────────────────
 
     def write(
+        self, kind: Kind, text: str, *, domain: str = "", when: date | None = None, **extra: str
+    ) -> WriteResult:
+        r = self._write(kind, text, domain=domain, when=when, **extra)
+        if r.status in ("written", "exists") and r.id:
+            self._note_meta(r.id, when or date.today(), extra)  # keys can be added to an old record
+        return r
+
+    def _write(
         self, kind: Kind, text: str, *, domain: str = "", when: date | None = None, **extra: str
     ) -> WriteResult:
         if _SECRET.search(text):

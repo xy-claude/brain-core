@@ -6,7 +6,7 @@ One MCP, five tools. The vault (`./vault`, markdown) is the source of truth; SQL
 |---|---|
 | `brain_session('start')` | first call of every session: brief, executive state, mental models, mission recall, inbox, recovery flag |
 | `brain_recall(query, scope, format, limit)` | anything you need to know. One query, every store, deduplicated, capped |
-| `brain_remember(text, kind, domain, source, mission, extra)` | anything worth keeping. Writes vault → SQLite → Hindsight (→ graph for relations) and reports each layer |
+| `brain_remember(text, kind, domain, source, mission, keys, extra)` | anything worth keeping. Writes vault → SQLite → Hindsight (→ graph for relations) and reports each layer. `keys`: the words $user would ask for it by that the text lacks |
 | `brain_distill(source, text)` | step 1 of `/distill`: capture a URL, file, or pasted text into `vault/raw/` |
 | `brain_session('end', executive_state, critique, sync)` | last call of every session: queue drain, HSAM close line, files rewritten, close marker |
 | `brain_status()` | health: stores, knowledge lint, context tokens, close state, pending decisions, the twelve traits (`traits.yaml`) scored from evidence on disk |

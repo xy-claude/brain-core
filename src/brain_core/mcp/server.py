@@ -100,6 +100,13 @@ def build_server(agent: Agent) -> FastMCP:
         mission: Annotated[
             str | None, Field(description="Mission id to tag, e.g. 'M-012'.")
         ] = None,
+        keys: Annotated[
+            str,
+            Field(
+                description="Other words this would be asked for by: synonyms, plain names, "
+                "the question it answers. Searched, never shown."
+            ),
+        ] = "",
         force: Annotated[
             bool, Field(description="Write even when a near-duplicate exists.")
         ] = False,
@@ -134,7 +141,7 @@ def build_server(agent: Agent) -> FastMCP:
                 source=source,
                 mission=mission,
                 force=force,
-                **cast(dict[str, Any], extra or {}),
+                **cast(dict[str, Any], {**(extra or {}), **({"keys": keys} if keys else {})}),
             ),
         )
 

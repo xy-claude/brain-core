@@ -92,6 +92,17 @@ def match_query(query: str) -> str:
 class RecordIndex:
     def __init__(self, db: Database) -> None:
         self.db = db
+        self.keys: dict[str, str] = {}  # record id -> its search keys, see set_keys
+
+    def set_keys(self, keys: dict[str, str]) -> None:
+        """Search keys by record id (any prefix length the caller uses consistently). They are
+        indexed beside the text and never returned. Only rows whose keys differ are rewritten."""
+        self.keys = keys
+        n = len(next(iter(keys), ""))
+        for row in self.db.fetchall("SELECT rowid, rid, keys FROM records_fts"):
+            new = keys.get(row["rid"][:n], "") if n else ""
+            if new != row["keys"]:
+                self.db.execute("UPDATE records_fts SET keys = ? WHERE rowid = ?", (new, row[0]))
 
     def sync(
         self, store: str, files: Mapping[Path, Kind], parse: Callable[[Kind, Path], list[Record]]
@@ -121,10 +132,19 @@ class RecordIndex:
                     # the heading and the date are searchable; the record keeps its own text
                     body = f"{r.domain} {full_text(r)} {r.date.isoformat()}"
                     row = {**asdict(r), "date": r.date.isoformat()}
+                    n = len(next(iter(self.keys), ""))
                     self.db.execute(
-                        "INSERT INTO records_fts (body, store, kind, path, record) "
-                        "VALUES (?, ?, ?, ?, ?)",
-                        (body, store, r.kind, key, json.dumps(row)),
+                        "INSERT INTO records_fts (body, keys, store, kind, path, rid, record) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (
+                            body,
+                            self.keys.get(r.id[:n], "") if n else "",
+                            store,
+                            r.kind,
+                            key,
+                            r.id,
+                            json.dumps(row),
+                        ),
                     )
                 self.db.execute(
                     "INSERT INTO index_files (store, path, sig) VALUES (?, ?, ?) "

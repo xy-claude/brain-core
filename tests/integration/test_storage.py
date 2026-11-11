@@ -19,7 +19,7 @@ def test_round_trip_persistence(tmp_path: Path) -> None:
 
     with Database.connect(db_path) as db:
         versions = migrate(db)
-        assert versions == [1, 2, 3, 4], "all migrations apply on first open"
+        assert versions == [1, 2, 3, 4, 5], "all migrations apply on first open"
         db.execute(
             "INSERT INTO facts (content, kind, content_hash) VALUES (?, ?, ?)",
             ("Ada prefers dark mode", "preference", "hash-1"),
@@ -43,7 +43,7 @@ def test_migrate_is_idempotent(tmp_path: Path) -> None:
     with Database.connect(db_path) as db:
         first = migrate(db)
         second = migrate(db)
-    assert first == [1, 2, 3, 4]
+    assert first == [1, 2, 3, 4, 5]
     assert second == []
 
 

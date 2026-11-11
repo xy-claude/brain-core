@@ -89,6 +89,34 @@ def test_recall_ranks_indexed_records_by_bm25(tmp_path: Path, index: RecordIndex
     assert brain_recall([v], "tenants", scope="decision", today=DAY)["total"] == 1
 
 
+def test_search_keys_find_a_record_its_own_words_do_not(tmp_path: Path, index: RecordIndex) -> None:
+    v = vault(tmp_path, index)
+    assert v.read("fact", "kubernetes rollout") == []
+    r = v.write(
+        "fact",
+        "The orders service ships through argo on Fridays",
+        when=DAY,
+        keys="kubernetes rollout; how do we release",
+        source="user",
+        mission="M-7",
+    )
+    hit = v.read("fact", "kubernetes rollout")
+    assert [h.id for h in hit] == [r.id] and "kubernetes" not in hit[0].text, "searched, not shown"
+    line = (v.root / "record_meta.md").read_text().splitlines()[-1]
+    want = "keys: kubernetes rollout; how do we release | source: user | mission: M-7"
+    assert line == f"- {r.id[:16]} | {want}"
+    # keys can be added to a record that already exists; the old ones stay
+    again = v.write("fact", "The orders service ships through argo on Fridays", keys="deploy day")
+    assert again.status == "exists" and v.read("fact", "deploy day")[0].id == r.id
+    assert v.meta()[r.id[:16]]["keys"] == "kubernetes rollout; how do we release; deploy day"
+    assert v.read("fact", "kubernetes")[0].id == r.id
+    # a fresh process and a rebuilt index pick the keys up from the vault file
+    index.db.execute("DELETE FROM records_fts")
+    index.db.execute("DELETE FROM index_files")
+    fresh = VaultStore(v.root, owner="atlas", index=RecordIndex(index.db))
+    assert fresh.read("fact", "kubernetes")[0].id == r.id
+
+
 def test_match_query_cannot_be_broken_by_fts_syntax() -> None:
     assert match_query('co-authored-by: "helm" AND (chart*) 2026-11-02') == (
         '"co" OR "authored" OR "helm" OR "chart" OR "2026-11-02"'
