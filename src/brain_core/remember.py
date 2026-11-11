@@ -68,6 +68,7 @@ def brain_remember(
         out["contradiction"] = _brief(match[0])
         text = f"**⚠ Fact changed {when.isoformat()}:** {text} (was: {match[0].text[:120]})"
         out["text"] = text
+        extra.setdefault("supersedes", match[0].id)  # recall ranks the old value below this one
 
     if source:
         extra["source"] = source

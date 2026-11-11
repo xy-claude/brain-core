@@ -68,7 +68,8 @@ def test_status_lists_what_recall_could_not_answer(tmp_path: Path) -> None:
         a.brain_recall("helm chart staging")
         for _ in range(2):
             out = a.brain_recall("dentist appointment friday")
-            assert "miss" not in out, "the flag is for the log, not for the reader"
+            assert "miss" not in out, "the numbers are for the log, not for the reader"
+            assert out["weak_match"].startswith("No record holds most"), "the reader is told"
         a.brain_recall("dentist appointment friday", offset=5)  # a later page is not a new miss
         a.brain_recall("wedding anniversary gift")
         misses = a.brain_status()["recall_misses"]

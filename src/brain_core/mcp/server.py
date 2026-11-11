@@ -74,6 +74,10 @@ def build_server(agent: Agent) -> FastMCP:
         preferences, and before brain_remember to avoid writing a duplicate. Not for health
         checks (brain_status) and not for reading a file you already know the path of.
 
+        `weak_match` in the reply means no record holds most of what was asked: search again
+        in other words before answering. A result marked `superseded` is an old value a newer
+        record replaced.
+
         Read-only. Partial results are normal: `stores` lists hits per store and names any store
         that was unreachable instead of failing the call. A value a `⚠ Fact changed` banner
         superseded is returned but ranked below the banner."""

@@ -122,3 +122,35 @@ def test_match_query_cannot_be_broken_by_fts_syntax() -> None:
         '"co" OR "authored" OR "helm" OR "chart" OR "2026-11-02"'
     )
     assert match_query("the of and") == ""
+
+
+def test_weak_match_is_judged_by_the_rare_words(tmp_path: Path, index: RecordIndex) -> None:
+    v = vault(tmp_path, index)
+    for i in range(30):
+        v.write("fact", f"the client asked about note {i} on the cluster", when=DAY)
+    # every common word is somewhere, the one rare word ("dentist") is nowhere: a miss
+    weak = brain_recall([v], "which dentist did the client ask about?", today=DAY)
+    assert weak["results"] and weak["miss"]["best"] < 0.5
+    held = brain_recall([v], "which cluster got deployed with helm?", today=DAY)
+    assert "miss" not in held
+    ids = [r.id for r in v.read("fact", "helm")]
+    assert index.cover("helm chart", ids) == 1.0 and index.cover("helm dentist", ids) < 0.5
+    assert index.cover("what is the", ids) == 0.0 and index.cover("helm", []) == 0.0
+
+
+def test_a_changed_fact_retires_the_old_value(tmp_path: Path, index: RecordIndex) -> None:
+    from brain_core.remember import brain_remember
+
+    v = VaultStore(tmp_path / "vault", owner="atlas", index=index)
+    old = brain_remember([v], "The API server listens on port 8887 for agents", "fact", when=DAY)
+    new = brain_remember([v], "The API server listens on port 8888 for agents", "fact", when=DAY)
+    assert new["contradiction"]["id"] == old["id"]
+    assert v.retired() == {old["id"][:16]}, "the new record names the one it replaces"
+    out = brain_recall([v], "API server port agents", fmt="detailed", today=DAY)["results"]
+    assert "8888" in out[0]["text"] and "superseded" not in out[0]
+    stale = next(r for r in out if r["id"] == old["id"])
+    assert stale["superseded"] is True and stale["score"] < out[0]["score"], "kept, ranked below"
+    # a record can also be retired by hand: any kind, by id
+    d = v.write("decision", "Use Postgres", when=DAY, title="Database choice")
+    v.write("decision", "Use SQLite", when=DAY, title="Database choice, revised", supersedes=d.id)
+    assert d.id[:16] in v.retired()

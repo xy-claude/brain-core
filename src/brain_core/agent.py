@@ -153,6 +153,11 @@ class Agent:
         if miss is not None and offset == 0:
             # a miss is an eval case waiting to be written; brain daily and brain_status list them
             self.log_event("recall_miss", {"query": query[:200], "scope": scope, **miss})
+            out["weak_match"] = (
+                "No record holds most of what was asked. The memory may use other words: "
+                "search again with synonyms or the name it would be filed under. "
+                "If that also fails, say it is not on record."
+            )
         return out
 
     # ── session lifecycle ────────────────────────────────────────────────────

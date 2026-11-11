@@ -12,6 +12,9 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 - `stores.hindsight.recall: false` in `brain.yaml` keeps Hindsight for writes, mental models and `scope='hindsight'` but stops asking it on every recall. Measured on one live agent with search keys in place: the same 50 of 75 reworded questions were found with and without it, at 2,032 ms against 42 ms per recall. The default stays `true`.
 
+- `brain_recall` tells the agent when the match is weak. The reply carries `weak_match` when no record holds most of what was asked, so the agent searches again in other words instead of answering from a near miss. Before, the flag was computed, logged and removed from the reply. For indexed records it is now judged by rarity: each query word weighs its idf, so a record with the common words of a question and none of its rare ones counts as a miss. Measured on one live agent: 11 of 12 questions the store cannot answer are flagged (6 of 12 before).
+- Retired values. When `brain_remember` writes a changed fact it records which record the new one replaces (`supersedes` in `record_meta.md`); any record can be retired the same way with `extra={"supersedes": id}`. Recall keeps the old record, ranks it below, and marks it `superseded`. Before, only a short old value quoted whole in a "Fact changed" banner was ranked down.
+
 ### Changed
 - Recall ranks an indexed record by its share of the best bm25 score for the query, not by the share of query words it holds. Measured on one live agent with 143 labelled questions: reworded questions found in the top ten went from 13 of 75 to 31 of 75 (held-out third: 6 of 25 to 12 of 25), same-word questions stayed at 20 of 20, date questions went from 0 of 8 to 4 of 8, and the median recall from 130 ms to 42 ms.
 

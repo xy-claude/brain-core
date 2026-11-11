@@ -9,6 +9,7 @@ merged by ``Record.score``.
 from __future__ import annotations
 
 import json
+import math
 import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict
@@ -82,11 +83,17 @@ _STOP = frozenset(
 )
 
 
+def terms(query: str) -> list[str]:
+    """The words of a query that carry meaning, once each. A date stays whole."""
+    return list(
+        dict.fromkeys(t for t in _TERM.findall(query.lower()) if len(t) > 1 and t not in _STOP)
+    )
+
+
 def match_query(query: str) -> str:
-    """Every word as an OR term, quoted so FTS5 syntax cannot break the match. A date stays
-    whole (``"2026-11-02"`` is a phrase of its three numbers)."""
-    terms = dict.fromkeys(t for t in _TERM.findall(query.lower()) if len(t) > 1 and t not in _STOP)
-    return " OR ".join(f'"{t}"' for t in terms)
+    """Every word as an OR term, quoted so FTS5 syntax cannot break the match
+    (``"2026-11-02"`` is a phrase of its three numbers)."""
+    return " OR ".join(f'"{t}"' for t in terms(query))
 
 
 class RecordIndex:
@@ -159,6 +166,34 @@ class RecordIndex:
                 self.db.execute(
                     "DELETE FROM index_files WHERE store = ? AND path = ?", (store, key)
                 )
+
+    def cover(self, query: str, rids: Sequence[str]) -> float:
+        """How much of what was asked the best of ``rids`` holds, 0 to 1. Each query word
+        weighs its rarity (idf), so a record that has the common words of a question and
+        lacks its one rare word scores low. Text and search keys both count."""
+        words = terms(query)
+        if not words or not rids:
+            return 0.0
+        row = self.db.fetchone("SELECT count(*) AS n FROM records_fts")
+        n = row["n"] if row else 0
+        marks = ",".join("?" * len(rids))
+        held = dict.fromkeys(rids, 0.0)
+        total = 0.0
+        for w in words:
+            q = f'"{w}"'
+            row = self.db.fetchone(
+                "SELECT count(*) AS n FROM records_fts WHERE records_fts MATCH ?", (q,)
+            )
+            df = row["n"] if row else 0
+            idf = math.log(1 + (n - df + 0.5) / (df + 0.5))
+            total += idf
+            for r in self.db.fetchall(
+                "SELECT DISTINCT rid FROM records_fts "
+                f"WHERE records_fts MATCH ? AND rid IN ({marks})",
+                (q, *rids),
+            ):
+                held[r["rid"]] += idf
+        return max(held.values()) / total if total else 0.0
 
     def search(self, store: str, kinds: Sequence[Kind], query: str, limit: int) -> list[Record]:
         """The best ``limit`` records of ``store`` for ``query``, bm25 order, score on each."""

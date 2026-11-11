@@ -92,10 +92,14 @@ class VaultStore:
                     d[k] = f"{d[k]}; {v}" if k == "keys" and k in d else v
         return out
 
+    def retired(self) -> set[str]:
+        """Ids (16 characters) of records a newer one replaced: its ``supersedes`` field."""
+        return {d["supersedes"][:16] for d in self.meta().values() if d.get("supersedes")}
+
     def _note_meta(self, rid: str, when: date, extra: dict[str, str]) -> None:
         fields = {
             k: " ".join(str(extra[k]).replace("|", "/").split())
-            for k in ("keys", "source", "mission")
+            for k in ("keys", "source", "mission", "supersedes")
             if extra.get(k)
         }
         if not fields:
