@@ -317,3 +317,16 @@ def test_brief_hook_injects_and_logs(tmp_path: Path) -> None:
         assert agent.brain_session("start", "s1")["brief"].startswith("injected at SessionStart")
     plain = runner.invoke(app, ["brief", "--path", str(tmp_path)])
     assert plain.stdout.startswith("# Daily Brief")
+
+
+def test_brief_hook_caps_what_it_injects(tmp_path: Path) -> None:
+    import json
+
+    runner.invoke(app, ["init", "bot", "--path", str(tmp_path), "--lite"])
+    brief = tmp_path / "vault" / "daily_brief.md"
+    brief.write_text("# Daily Brief — 2026-11-03\n\n" + "- a long line of the brief\n" * 2000)
+    r = runner.invoke(app, ["brief", "--hook", "--path", str(tmp_path)], input="{}")
+    ctx = json.loads(r.stdout)["hookSpecificOutput"]["additionalContext"]
+    assert len(ctx) // 4 < 3100 and "brief cut at 3000 tokens" in ctx and str(brief) in ctx
+    plain = runner.invoke(app, ["brief", "--path", str(tmp_path)])
+    assert len(plain.stdout) > 40_000, "the file and the plain command are never cut"

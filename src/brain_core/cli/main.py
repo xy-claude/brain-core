@@ -381,6 +381,9 @@ def brief_cmd(
         if not hook:
             typer.echo(text)
             return
+        cap = agent.config.session.brief_tokens
+        if len(text) // 4 > cap:  # whoever wrote the brief, the start of a session stays small
+            text = text[: cap * 4] + f"\n…(brief cut at {cap} tokens; the rest is in {brief})"
         if text.strip():
             agent.log_event(
                 "brief_injected",

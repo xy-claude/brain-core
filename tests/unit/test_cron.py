@@ -97,7 +97,7 @@ def test_daily_writes_brief_health_and_skips_backup(
     assert "## Executive State" in brief and "## Primary Objective" in brief
     assert "- Stores: sqlite OK, vault OK, graph OK, transcripts OK, hindsight OK" in brief
     assert "old-page.md (62d) → `/distill --refresh old-page`" in brief
-    assert "### 2026-11-01\n#### Session Archive — 2026-11-01" in brief and "fresh topic" in brief
+    assert "### 2026-11-01\n- fresh topic" in brief, "written lines only, no headings"
     assert out["backup"].startswith("skipped")
     log = (tmp_path / "atlas" / "vault" / "health_log.md").read_text()
     assert "- 2026-11-02 ok=True stores=5/5 lint=0 context=" in log
@@ -468,3 +468,22 @@ def test_brief_names_blocked_missions_correction_patterns_and_recall_misses(tmp_
     assert "3 missions at P1" in brief
     assert "## Correction Patterns" in brief and "`haste` ×3 → no rule yet" in brief
     assert "1 recall miss(es) this week (`nothing matches this at all`)" in brief
+
+
+def test_warmup_points_at_recent_days_without_replaying_them(tmp_path: Path) -> None:
+    from brain_core.cron import _warmup
+
+    sdir = tmp_path / "sessions"
+    sdir.mkdir()
+    body = "\n".join(f"- written note {i} " + "x" * 300 for i in range(40))
+    for day in ("2026-11-01", "2026-11-02", "2026-11-03", "2026-11-04"):
+        (sdir / f"{day}.md").write_text(
+            f"---\ntype: session\n---\n# Session Archive — {day}\n\n## Said (hook)\n"
+            f"- a raw message the user typed\n\n## What We Discussed\n{body}\n"
+        )
+    out = _warmup(sdir)
+    assert "2026-11-04" in out and "2026-11-01" not in out, "the last three days"
+    assert "raw message" not in out, "what the hook captured is not replayed"
+    assert out.count("written note") == 18 and len(out) // 4 < 1100, "six cut lines per day"
+    assert "brain_recall" in out
+    assert _warmup(tmp_path / "none") == ""

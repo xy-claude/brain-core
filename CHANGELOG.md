@@ -17,6 +17,8 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 - Miss repair. When a recall comes back `weak_match` and a retry in other words finds the record, the agent teaches it: `brain_remember(kind='key', text=<the question that missed>, source=<the result's source>)`. The question's words become search keys of that record (`learned` in `record_meta.md`, kept apart from written keys so they can be reviewed), and the same question finds it next time. Each repair is logged as a `recall_repair` event, and `tests/eval/from_repairs.py` turns those events into questions for `run_gold.py`: an eval that grows from real use.
 
+- The start of a session costs less. The daily brief's "Recent Sessions" section was a replay: 25 full lines of each of the last three session files, measured at 3,551 of one brief's 6,022 tokens. It is now a pointer: six written lines per day, each cut at 200 characters, and nothing the capture hook filed (the user's raw messages, links). The SessionStart hook also injects no more than `session.brief_tokens` (default 3000) of the brief, whoever wrote it, and says where the rest is. The brief file itself and `brain brief` are never cut.
+
 ### Changed
 - Recall ranks an indexed record by its share of the best bm25 score for the query, not by the share of query words it holds. Measured on one live agent with 143 labelled questions: reworded questions found in the top ten went from 13 of 75 to 31 of 75 (held-out third: 6 of 25 to 12 of 25), same-word questions stayed at 20 of 20, date questions went from 0 of 8 to 4 of 8, and the median recall from 130 ms to 42 ms.
 
