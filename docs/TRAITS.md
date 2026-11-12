@@ -10,7 +10,7 @@ The list comes from three literatures that agree more than they disagree: the cl
 |---|---|---|---|
 | 1 | Working memory | `brain_session('start')` and the memory rule that fixes what loads | the daily brief, the warmup, the facts the start block pulls |
 | 2 | Episodic memory | `brain_session('end')` writes the dated archive; the weekly archive job | `sessions/YYYY-MM-DD.md` and monthly summaries |
-| 3 | Semantic memory | the vault schema, `brain_remember`, `brain_recall`, the SQLite and vector indexes | facts, knowledge pages, decisions, vector entries |
+| 3 | Semantic memory | the vault schema, `brain_remember`, `brain_recall`, the SQLite keyword index and the optional vector store | facts, knowledge pages, decisions, search keys, vector entries |
 | 4 | Procedural memory | the five rule files and the tool schemas | procedures, skills, rules promoted from corrections |
 | 5 | Learning | dedup and contradiction rules, the correction format, `brain_distill` | corrections and themes, Fact-changed banners, promoted rules |
 | 6 | Reasoning and planning | the reasoning checklist in the identity rule | mission decompositions; little else persists |
@@ -37,7 +37,7 @@ Ratios are reported as counts until `n` reaches 20. One agent accumulates perhap
 |---|---|---|
 | Working memory | sessions with writes that opened with `brain_session('start')` | higher |
 | Episodic memory | the temporal slice of the recall eval (a question about a day surfaces that day's archive), from the last `run_recall.py --out data/eval.json` or `run_gold.py --out data/eval.json` | higher |
-| Semantic memory | the single-hop, multi-hop, knowledge-update and abstention slices of the same eval; facts carrying a date; knowledge pages that cite a raw source | higher |
+| Semantic memory | the single-hop, multi-hop, knowledge-update and abstention slices of the same eval (from `run_gold.py`: reworded, real, same-word, several-record, changed-value and absent); facts carrying a date; knowledge pages that cite a raw source | higher |
 | Procedural memory | procedures validated in the last 30 days | higher |
 | Learning | corrections on a theme after its rule was promoted; old values reappearing after a Fact-changed banner | lower |
 | Reasoning and planning | the same write repeated three times in a row in one session | lower |

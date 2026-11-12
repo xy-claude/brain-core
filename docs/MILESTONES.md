@@ -22,3 +22,11 @@
 | 17 | Entity graph moved from Kuzu into a `relations` table in brain.db; `brain graph import` loads the legacy dump | ✅ |
 | 18 | Cron engine: `brain daily` (brief, health line, Hindsight backup), `brain weekly` (archive sessions > 30d, refresh mental models), `brain cron install` (launchd) | ✅ |
 | 19 | Installer: `install.sh` one-liner, `brain hindsight install` (launchd service, claude-code or customer provider), `brain doctor` on `brain_status` | ✅ (export/import lands after M17) |
+| 20 | Record index (0.5.0): every vault kind and every notes folder in one SQLite FTS5 table, ranked by bm25 with stemming; a cache rebuilt from the files | ✅ |
+| 21 | Search keys (0.5.0): `brain_remember(keys=…)`, kept with source, mission and replaced values in `record_meta.md` | ✅ |
+| 22 | Honest recall (0.5.0): `weak_match` returned to the agent, retired values marked `superseded`, miss repair with `kind='key'`, `stores.hindsight.recall: false` | ✅ |
+| 23 | Labelled eval (0.5.0): `run_gold.py`, 143 hand-labelled questions on a real vault; reworded questions 13 → 51 of 75; `from_repairs.py` grows the set from real misses | ✅ |
+| 24 | Smaller session start (0.5.0): the brief's session replay cut from 3,551 to 330 tokens, the SessionStart hook capped at `session.brief_tokens` | ✅ |
+| 25 | 0.5.1: dates asked in words are found (date questions 4 → 7 of 8); the memory traits read the labelled eval | ✅ |
+
+Rows 10 and 14 record what was measured at the time: a substring judge on questions written in the notes' own words. Row 23 is the measure that replaced it.
