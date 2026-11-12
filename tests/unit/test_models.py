@@ -93,9 +93,8 @@ def test_stale_only_when_what_it_rests_on_changes(tmp_path: Path) -> None:
 
         models.refresh(a, run=answer("- Tables {tables}"), force=True, today=TODAY)
         assert models.status(a)["working-style"] == "fresh"
-        for i in range(models.NEW_RECORDS):
-            a.brain_remember(f"Works in focused blocks, rule {i}", "pattern", title=f"Rule {i}")
-        assert "new record(s) match" in models.status(a)["working-style"]
+        a.brain_remember("Works in focused blocks of ninety minutes", "pattern", title="Blocks")
+        assert models.status(a)["working-style"] == "stale: 1 new pattern record(s)"
 
 
 def test_a_failed_or_empty_run_keeps_the_file_it_had(tmp_path: Path) -> None:

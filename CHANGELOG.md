@@ -4,6 +4,9 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+### Fixed
+- A mental model now goes stale on one new record of a kind it names (one new decision for a model about decisions, one new correction for a model about working style). In 0.6.0 it took five new matching records of any kind, so a model could miss the day's one decision and still read `fresh`. Five new records of other kinds that match the question still mark it stale.
+
 ## [0.6.1] - 2026-11-12
 
 ### Changed

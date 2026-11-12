@@ -5,8 +5,9 @@ kinds the model names), asks an LLM to answer from those records only, drops eve
 does not cite one, and writes ``vault/models/<name>.md``. Nothing here is a source: a model is
 a briefing, kept out of the search index, and each claim names the line it rests on.
 
-A model is stale when a record it cited changed or went away, when enough new records match
-its question, or when the question itself changed. An unrelated write does not touch it.
+A model is stale when a record it cited changed or went away, when a new record of a kind it
+names arrives (or several of any kind that match its question), or when the question itself
+changed. An unrelated write does not touch it.
 """
 
 from __future__ import annotations
@@ -33,7 +34,7 @@ if TYPE_CHECKING:
 
 Runner = Callable[[str, str], str]  # (system, prompt) -> the model's text
 
-NEW_RECORDS = 5  # new records matching the question before a model counts as stale
+NEW_RECORDS = 5  # new records of other kinds matching the question before a model is stale
 RECORD_CHARS = 600  # of each record shown to the model
 BODY_CHARS = 2000  # of each model loaded at session start
 API_MODEL = "claude-opus-5-5"
@@ -237,6 +238,9 @@ def state(agent: Agent, item: ModelItem, records: list[dict[str, str]] | None = 
     if gone:
         return f"stale: {len(gone)} cited record(s) changed or were removed"
     new = [r for r in records if r["id"] not in set(side.get("seen", []))]
+    named = [r for r in new if r["kind"] in item.kinds]
+    if named:  # one new decision is news for a model about decisions
+        return f"stale: {len(named)} new {'/'.join(item.kinds)} record(s)"
     if len(new) >= NEW_RECORDS:
         return f"stale: {len(new)} new record(s) match the question"
     return "fresh"
