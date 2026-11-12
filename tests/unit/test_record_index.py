@@ -10,7 +10,7 @@ import pytest
 from brain_core.recall import brain_recall
 from brain_core.storage import Database, migrate
 from brain_core.stores import NotesStore, VaultStore
-from brain_core.stores.index import RecordIndex, match_query
+from brain_core.stores.index import RecordIndex, iso_dates, match_query
 
 DAY = date(2026, 11, 2)
 
@@ -190,3 +190,14 @@ def test_miss_repair_teaches_the_record_the_question_that_failed(tmp_path: Path)
     assert from_repairs.questions(str(cfg)) == [
         {"s": "learned", "q": missed, "gold": [out["id"][:16]]}
     ]
+
+
+def test_a_date_in_words_is_searched_as_the_iso_date_records_carry() -> None:
+    today = date(2026, 11, 12)
+    assert iso_dates("what happened on August 21 2026", today) == "what happened on 2026-08-21"
+    assert iso_dates("work on November 1st", today) == "work on 2026-11-01"
+    assert iso_dates("the 3rd of Sept, 2025 call", today) == "the 2025-09-03 call"
+    assert iso_dates("plans for December 25", today) == "plans for 2025-12-25", "not in the future"
+    assert iso_dates("may 40 units and march forward", today) == "may 40 units and march forward"
+    assert iso_dates("it may 5 times fail", today) == "it 2026-05-05 times fail"  # known cost
+    assert match_query("notes from Oct 27, 2026") == '"notes" OR "2026-10-27"'

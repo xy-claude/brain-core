@@ -83,10 +83,38 @@ _STOP = frozenset(
 )
 
 
+_MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
+_MON = r"(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?"
+_DAY = r"(\d{1,2})(?:st|nd|rd|th)?"
+_YEAR = r"(?:,?\s+(\d{4}))?"
+_SPOKEN = re.compile(  # "august 21 2026", "nov 1st", "21 august 2026"
+    rf"\b(?:{_MON}\s+{_DAY}{_YEAR}|{_DAY}\s+(?:of\s+)?{_MON}{_YEAR})\b"
+)
+
+
+def iso_dates(query: str, today: date | None = None) -> str:
+    """A date written in words becomes the ISO date records carry ("August 21 2026" →
+    "2026-08-21"). With no year it is the latest such day that is not in the future."""
+    today = today or date.today()
+
+    def fix(m: re.Match[str]) -> str:
+        mon, day, year = (m[1], m[2], m[3]) if m[1] else (m[5], m[4], m[6])
+        month = _MONTHS.index(mon) + 1
+        try:
+            d = date(int(year) if year else today.year, month, int(day))
+            if not year and d > today:
+                d = d.replace(year=d.year - 1)
+        except ValueError:  # "may 40", 29 feb of a common year: leave the words alone
+            return m[0]
+        return d.isoformat()
+
+    return _SPOKEN.sub(fix, query.lower())
+
+
 def terms(query: str) -> list[str]:
     """The words of a query that carry meaning, once each. A date stays whole."""
     return list(
-        dict.fromkeys(t for t in _TERM.findall(query.lower()) if len(t) > 1 and t not in _STOP)
+        dict.fromkeys(t for t in _TERM.findall(iso_dates(query)) if len(t) > 1 and t not in _STOP)
     )
 
 

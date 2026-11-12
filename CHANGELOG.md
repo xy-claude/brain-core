@@ -4,6 +4,9 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+### Added
+- A date asked in words is found. `brain_recall` turns "August 21 2026", "Nov 1st" or "21 August" in a query into the ISO date records carry; with no year it is the latest such day that is not in the future. Before, only `2026-08-21` matched a day.
+
 ### Changed
 - `brain_status` reads the labelled recall eval. `run_gold.py --out <data_dir>/eval.json` now feeds the semantic and episodic memory traits by slice (reworded, same-word, several records, absent, dates), next to the older `run_recall.py` result. Before, the traits could only quote the substring eval, which a query in the note's own words always passes.
 
