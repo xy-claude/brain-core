@@ -151,7 +151,7 @@ What it does, in order. Re-running skips what is already there, so after a failu
 | 1 | checks for `git` via the Xcode command line tools | macOS opens an install dialog; finish it, then re-run |
 | 2 | installs Homebrew if missing | Homebrew asks for your password itself |
 | 3 | installs `uv`, `gh`, `gitleaks`, `node` and Claude Code with Homebrew | anything already present is left alone |
-| 4 | installs the `brain` command from PyPI with `uv tool` | `--ref v0.6.1` pins a git tag instead |
+| 4 | installs the `brain` command from PyPI with `uv tool` | `--ref v0.6.2` pins a git tag instead |
 | 5 | runs `brain init` and writes the agent folder | an existing `brain.yaml` is never overwritten |
 | 6 | installs Hindsight as a launchd service on `127.0.0.1:8888` | first start downloads the embedding model; give it a few minutes |
 | 7 | installs `brain daily` and `brain weekly` as launchd agents | |
@@ -184,7 +184,7 @@ brain hindsight install                 # copies the key into ~/.config/hindsigh
 | `--lite` | skip Hindsight: vault + SQLite only, upgrade later. An agent made lite stays lite when the line is run again |
 | `--desktop` | connect the agent to the Claude desktop app (macOS; skipped on Linux, which has no build of the app) |
 | `--dashboard` | the Hindsight web UI on http://localhost:9999 |
-| `--ref v0.6.1` | pin a git tag instead of the PyPI release |
+| `--ref v0.6.2` | pin a git tag instead of the PyPI release |
 
 ### Already have an agent?
 
@@ -256,7 +256,7 @@ The desktop app has a memory of its own, kept on Anthropic's servers. The two do
 ### Manual, any platform
 
 ```bash
-uv tool install --python 3.12 brain-core-mcp   # Python 3.12 to 3.14; or: uv tool install git+https://github.com/xy-claude/brain-core@v0.6.1
+uv tool install --python 3.12 brain-core-mcp   # Python 3.12 to 3.14; or: uv tool install git+https://github.com/xy-claude/brain-core@v0.6.2
 brain init Atlas --path ~/Agents/Atlas --user Alex
 brain hindsight install          # launchd, systemd --user, or a logon entry on Windows
 brain cron install ~/Agents/Atlas    # launchd, crontab or Task Scheduler
