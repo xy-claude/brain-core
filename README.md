@@ -68,16 +68,7 @@ brain-core is the opposite: local, five tools, markdown files you own, and a tes
 5. **Recall is one query across every store.** `brain_recall(query)` searches the vault, the index and Hindsight at once, deduplicates, ranks by relevance and recency, and caps the reply at 6k tokens so it never floods the context.
 6. **Two cron jobs do the housekeeping.** `brain daily` writes the next morning's brief and backs up Hindsight. `brain weekly` archives sessions older than 30 days into a monthly summary and refreshes the mental models.
 
-```mermaid
-flowchart LR
-    CC[Claude Code] -->|MCP, 5 tools| B[brain serve]
-    B --> V[(vault/ markdown)]
-    B --> S[(brain.db SQLite + FTS)]
-    B --> H[(Hindsight vector memory)]
-    B --> G[(relations table)]
-    CRON[brain daily / weekly] --> V
-    CRON --> H
-```
+<img src="docs/img/architecture.png" alt="Brain-Core sits between your AI agent and its memory. The agent uses five tools. Every memory is saved to the vault of text files first, then indexed by SQLite FTS5 with bm25 ranking, then optionally copied to the Hindsight vector memory. Searches run on the index and come back with their source. Hooks and scheduled jobs feed it, and a weak-match and miss-repair loop improves it with use." width="900">
 
 ## The five tools
 
