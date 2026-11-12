@@ -70,7 +70,7 @@ def run_claude(system: str, prompt: str, model: str | None = None) -> str:
     no saved session, in an empty folder so no CLAUDE.md is read."""
     exe = shutil.which("claude")
     if not exe:
-        raise RunnerError("`claude` is not on PATH; install Claude Code or set models.runner: api")
+        raise RunnerError("`claude` is not on PATH; install Claude Code, or use models.runner: api")
     cmd = [exe, "-p", "--output-format", "json", "--tools", "", "--setting-sources", ""]
     cmd += ["--strict-mcp-config", "--no-session-persistence", "--disable-slash-commands"]
     cmd += ["--system-prompt", system] + (["--model", model] if model else [])
@@ -99,7 +99,8 @@ def run_api(system: str, prompt: str, model: str | None = None) -> str:
     except ImportError as e:
         raise RunnerError(
             "models.runner: api needs the Anthropic SDK: "
-            "uv tool install --force 'brain-core-mcp[api]'"
+            "uv tool install --force 'brain-core-mcp[api]' "
+            "(or use your Claude Code login with models.runner: claude)"
         ) from e
     model = model or API_MODEL
     extra: dict[str, Any] = {}
@@ -114,7 +115,10 @@ def run_api(system: str, prompt: str, model: str | None = None) -> str:
             **extra,
         )
     except anthropic.AuthenticationError as e:
-        raise RunnerError("no valid Anthropic credential: set ANTHROPIC_API_KEY") from e
+        raise RunnerError(
+            "no valid Anthropic credential: set ANTHROPIC_API_KEY, or use your Claude Code login "
+            "with models.runner: claude"
+        ) from e
     except anthropic.RateLimitError as e:
         raise RunnerError("rate limited by the API; the next run will try again") from e
     except anthropic.APIStatusError as e:

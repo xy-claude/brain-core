@@ -121,7 +121,9 @@ class ModelsConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    runner: Literal["claude", "api"] = "claude"  # your Claude Code login, or an API key
+    # api: the Anthropic API with a key (the default). claude: your own Claude Code login,
+    # for personal use on your own machine; you opt in by naming it.
+    runner: Literal["api", "claude"] = "api"
     model: str | None = None  # default: Claude Code's own, or claude-opus-5-5 on the API
     records: int = 150  # read per question
     items: list[ModelItem] = Field(default_factory=_default_models)

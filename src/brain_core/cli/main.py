@@ -614,7 +614,10 @@ def models_cmd(
 
     with _open(path) as agent:
         if agent.config.models is None:
-            typer.echo("no `models:` block in brain.yaml; add `models: {}` for the five defaults")
+            typer.echo(
+                "no `models:` block in brain.yaml; add `models: {runner: api}` (API key) or "
+                "`models: {runner: claude}` (your Claude Code login) for the five defaults"
+            )
             raise typer.Exit(code=1)
         out = models.status(agent) if check else models.refresh(agent, name, force=force)
     for n, line in out.items():

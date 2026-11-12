@@ -4,6 +4,10 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+### Changed
+- The mental models are written through the Anthropic API by default (`models.runner: api`, your own key, the `brain-core-mcp[api]` extra). Your Claude Code login is now the opt-in (`runner: claude`): it suits one person on their own machine, and a published tool should not lean on it by default. 0.6.0 had it the other way round; an agent that relied on the old default needs `runner: claude` in its `models:` block.
+- The README records the vector-search test: on 143 labelled questions a local embedding model blended into the keyword ranking scored 113 against 110, gaining 7 questions and losing 4, so no vector index ships.
+
 ## [0.6.0] - 2026-11-12
 
 ### Added

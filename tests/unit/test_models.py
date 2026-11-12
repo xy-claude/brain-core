@@ -127,6 +127,13 @@ def test_models_are_off_without_the_block_and_the_question_change_is_seen(tmp_pa
         assert models.status(a)["working-style"] == "stale: the question changed"
 
 
+def test_the_api_key_is_the_default_runner_and_the_login_is_opt_in() -> None:
+    from brain_core.config import ModelsConfig
+
+    assert ModelsConfig().runner == "api"
+    assert ModelsConfig(runner="claude").runner == "claude"
+
+
 def test_the_api_runner_says_how_to_install_the_sdk(monkeypatch: pytest.MonkeyPatch) -> None:
     def missing(name: str) -> None:
         raise ImportError(name)
