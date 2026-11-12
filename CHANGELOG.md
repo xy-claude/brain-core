@@ -4,6 +4,8 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-12
+
 ### Added
 - A date asked in words is found. `brain_recall` turns "August 21 2026", "Nov 1st" or "21 August" in a query into the ISO date records carry; with no year it is the latest such day that is not in the future. Before, only `2026-08-21` matched a day.
 
