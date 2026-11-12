@@ -39,7 +39,7 @@ Both lines install the same things: the agent, Hindsight (the vector store, abou
 
 Every step, every flag and the common problems: [Install details](#install-details).
 
-<img src="docs/img/demo.gif" alt="brain init, brain doctor, then a real session: remember, a changed fact with its banner, recall" width="900">
+<img src="docs/img/demo.gif" alt="brain init and brain doctor on a new agent, then a real session: a memory saved with search keys, a changed fact with its banner, a recall in the same words, a recall in other words, and a question that was never saved coming back as a weak match" width="900">
 
 ---
 
@@ -283,7 +283,7 @@ It prints the agent name, the config path, one line per store, the knowledge lin
 
 ## First session
 
-<img src="docs/img/session.svg" alt="first session transcript" width="820">
+<img src="docs/img/session.svg" alt="first session transcript: session start, a memory saved with search keys, a changed fact, three recalls" width="820">
 
 ```bash
 cd ~/Agents/Atlas && claude

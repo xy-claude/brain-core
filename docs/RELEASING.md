@@ -15,11 +15,16 @@ The first tag push claims the project name on PyPI. From then on `uv tool instal
 ## Every release
 
 ```bash
-# 1. version + changelog
-sed -i '' 's/^version = ".*"/version = "0.2.2"/' pyproject.toml
-sed -i '' 's/^__version__ = ".*"/__version__ = "0.2.2"/' src/brain_core/__init__.py
-#    move items from "## [Unreleased]" to "## [0.2.2] - YYYY-MM-DD" in CHANGELOG.md
-# 2. verify like CI does
+# 1. version in the five places that carry it, then the changelog (OLD is the current version)
+OLD=0.2.1 NEW=0.2.2
+sed -i '' "s/^version = \"$OLD\"/version = \"$NEW\"/" pyproject.toml
+sed -i '' "s/^__version__ = \".*\"/__version__ = \"$NEW\"/" src/brain_core/__init__.py
+sed -i '' "s/\"version\": \"$OLD\"/\"version\": \"$NEW\"/g" server.json      # two places
+sed -i '' "s/-Ref v$OLD/-Ref v$NEW/" install.ps1                              # the usage example
+uv lock                                                                       # uv.lock names the version too
+#    in CHANGELOG.md add "## [0.2.2] - YYYY-MM-DD" under "## [Unreleased]", above its items
+git diff --stat          # expect six files: CHANGELOG.md install.ps1 pyproject.toml server.json __init__.py uv.lock
+# 2. verify like CI does (mypy with no path: it checks the tests too)
 uv run ruff check src tests && uv run ruff format --check src tests && uv run mypy && uv run pytest -q
 # 3. commit, tag, push the tag
 git commit -am "Release 0.2.2: what changed" && git tag v0.2.2 && git push origin main v0.2.2
@@ -32,3 +37,5 @@ Convention: one commit per release, subject `Release X.Y.Z: what changed`, and t
 - https://github.com/xy-claude/brain-core/actions (release run green)
 - https://pypi.org/project/brain-core-mcp/ (new version listed)
 - `uv tool install --force brain-core-mcp && brain version`
+
+PyPI's JSON page can show the old version for a minute after the upload. The README on PyPI is the one in the tagged commit, so README changes made after a release show there only with the next one.

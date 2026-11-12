@@ -1,0 +1,37 @@
+$ curl -fsSL https://raw.githubusercontent.com/xy-claude/brain-core/main/install.sh \
+    | bash -s -- --agent Atlas --user Alex --desktop
+
+== 1/8 Xcode command line tools (git)
+present
+== 2/8 Homebrew
+present
+== 3/8 uv, gh, gitleaks, node, Claude Code
+uv present · gh present · gitleaks present · node present · claude present
+== 4/8 brain-core
+Installed 1 executable: brain
+== 5/8 Agent Atlas at ~/Agents/Atlas
+Agent 'Atlas' written to ~/Agents/Atlas: 32 files
+  memory: vault/ · data/brain.db · Hindsight bank atlas-brain
+== 6/8 Hindsight (vector store, provider claude-code)
+hindsight on :8888: healthy
+== 7/8 Cron (brain daily 06:07, brain weekly Sun 07:13)
+  wrote ~/Library/LaunchAgents/io.brain-core.atlas.daily.plist
+  wrote ~/Library/LaunchAgents/io.brain-core.atlas.weekly.plist
+== 8/8 Doctor
+Agent: Atlas  config: ~/Agents/Atlas/brain.yaml
+  store sqlite    OK   sqlite facts=0
+  store vault     OK   ~/Agents/Atlas/vault (14 notes)
+  store hindsight OK   http://127.0.0.1:8888 bank=atlas-brain status=healthy
+  store graph     OK   graph relations=0
+  knowledge  0 pages, 0 raw, 0 lint issue(s)
+  context    3250 always-loaded tokens
+  traits     4/12 grown: Semantic memory, Decision, Metacognition, Goal management
+Brain: OK
+== + Claude desktop app (--desktop)
+added: ~/Library/Application Support/Claude/claude_desktop_config.json
+Quit the Claude desktop app fully and reopen it; closing the window is not enough.
+
+Done. Still yours to do, once:
+  claude            # sign in to Claude Code; Hindsight reasons through this login
+
+Then: cd ~/Agents/Atlas && claude
