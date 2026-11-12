@@ -72,6 +72,7 @@ def test_a_model_is_written_with_sources_and_uncited_claims_are_dropped(tmp_path
         assert "essays" not in text and "Cites nothing" not in text and "briefing." not in text
         assert "- Unknown: how they like to be greeted" in text
         assert models.status(a) == {"working-style": "fresh"}
+        assert "sqlite://" not in seen[0], "only records a reader can open are cited"
         assert models.load(a)["working-style"].startswith("(fresh)\n## Style")
         assert a.brain_status()["models"] == {"working-style": "fresh"}
         # the briefing is not a memory: recall never returns it

@@ -39,7 +39,9 @@ BODY_CHARS = 2000  # of each model loaded at session start
 API_MODEL = "claude-opus-5-5"
 _FALLBACKS = ("claude-fable-5", "claude-opus-5", "claude-sonnet-5-5")  # take `fallbacks`
 _CITE = re.compile(r"\[(\d+)\]")
-_SEARCHED = ("vault", "notes", "sqlite")  # written memory; never transcripts or a vector copy
+# the files only: a SQLite row is a copy with a source nobody can open, and a row the vault no
+# longer holds would read as "a cited record was removed" on the next check
+_SEARCHED = ("vault", "notes")
 
 SYSTEM = """You write a short standing briefing for an AI agent from its own memory records.
 
