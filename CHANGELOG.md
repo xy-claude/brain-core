@@ -4,6 +4,8 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-12
+
 ### Added
 - Mental models without Hindsight. A `models:` block in `brain.yaml` turns on `brain models`: for each standing question (five defaults: active priorities, working style, key decisions, system architecture, recurring lessons) it reads the records that bear on it, asks an LLM to answer from those records only, and writes `vault/models/<name>.md`, a briefing of about 250 words in which every claim names the file and line it rests on. A claim that cites no record is dropped before the file is written, a run that fails or cites nothing keeps the file it had, and the previous version stays beside it as `<name>.prev.md`. The LLM is your own Claude Code login (`runner: claude`, started with no tools, settings, hooks or MCP servers) or the Anthropic API (`runner: api`, needs the `brain-core-mcp[api]` extra). `brain_session('start')` loads these files in place of Hindsight's models, `brain daily` rewrites the stale ones and `brain weekly` all of them.
 - A model knows when it is stale. It records which records it cited and which it read. It is stale when a cited record changed or was removed, when five or more new records match its question, or when the question changed; an unrelated write does not touch it. `brain_status`, `brain doctor` and `brain models --status` show each model's state. Measured on one live vault of about 3,200 records: five models written in 78 seconds on a Claude Code login, 170 citations, every one resolving to a real file and line, and 2,510 tokens at session start.
