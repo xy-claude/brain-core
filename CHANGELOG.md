@@ -22,6 +22,9 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 ### Changed
 - Recall ranks an indexed record by its share of the best bm25 score for the query, not by the share of query words it holds. Measured on one live agent with 143 labelled questions: reworded questions found in the top ten went from 13 of 75 to 31 of 75 (held-out third: 6 of 25 to 12 of 25), same-word questions stayed at 20 of 20, date questions went from 0 of 8 to 4 of 8, and the median recall from 130 ms to 42 ms.
 
+### Fixed
+- A fact held by both the vault and SQLite could come back with the source `sqlite://facts/N` instead of its file and line. The two copies tie on score whenever the local date equals the UTC date, and the tie kept whichever store answered first. The copy that names a file now wins, so the source can be opened and miss repair (`kind='key'`) accepts it.
+
 ## [0.4.29] - 2026-11-10
 
 ### Fixed

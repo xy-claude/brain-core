@@ -148,8 +148,13 @@ def brain_recall(
             score = 0.75 * min(rel, 1.5) / 1.5 + 0.25 * recency(r.date, today)
             key = normalize(r.text).lower()
             if r.id in hits or key in seen_text:
-                if r.id in hits and score > hits[r.id][2]:
-                    hits[r.id] = (r, name, score)
+                if r.id in hits:
+                    # one record in two stores: the better score, and the copy that names a file
+                    # (a tie used to keep `sqlite://facts/N`, which no one can open or teach)
+                    old, was, had = hits[r.id]
+                    if r.path.startswith("sqlite://") and not old.path.startswith("sqlite://"):
+                        r, name = old, was
+                    hits[r.id] = (r, name, max(score, had))
                 continue
             hits[r.id], n = (r, name, score), n + 1
             seen_text.add(key)
