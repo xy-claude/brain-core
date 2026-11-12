@@ -77,6 +77,19 @@ def test_a_model_is_written_with_sources_and_uncited_claims_are_dropped(tmp_path
         assert a.brain_status()["models"] == {"working-style": "fresh"}
         # the briefing is not a memory: recall never returns it
         assert all("Show proof" not in r["text"] for r in a.brain_recall("proof done")["results"])
+        day = tmp_path / "atlas" / "vault" / "sessions" / "2026-11-12.md"
+        day.write_text(
+            "# 2026-11-12\n\n## Said (hook)\n- please ship the report\n\n"
+            "## Decisions Made\n- shipped\n"
+        )
+        a.config.models.items[0].kinds = ["note"]  # type: ignore[union-attr]
+        texts = [r["text"] for r in models.gather(a, a.config.models.items[0], 50)]  # type: ignore[union-attr]
+        assert "shipped" in texts and "please ship the report" not in texts, (
+            "a request is not a record"
+        )
+        a.config.models.items[0].kinds = ["pattern"]  # type: ignore[union-attr]
+        out = a.brain_remember("Likes a morning summary", "pattern", title="Morning")
+        assert set(out["layers"]) <= {"vault", "sqlite"}, "read-only stores are not write layers"
 
 
 def test_stale_only_when_what_it_rests_on_changes(tmp_path: Path) -> None:

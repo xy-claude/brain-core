@@ -196,6 +196,8 @@ class TranscriptStore:
             for r in rows
         ]
 
+    readonly = True  # brain_remember never asks it
+
     def write(
         self, kind: Kind, text: str, *, domain: str = "", when: date | None = None, **extra: str
     ) -> WriteResult:

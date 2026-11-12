@@ -4,6 +4,10 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+### Fixed
+- A mental model no longer reads what the capture hook filed (the user's raw messages and links). A request is not a record of what was done, and the priorities model was listing finished work as pending because the request was on file and the completion was not.
+- `brain_remember` no longer lists read-only stores in `layers`. Every write used to report `transcripts: refused` and `notes: refused`, which read like failures.
+
 ## [0.6.2] - 2026-11-12
 
 ### Fixed

@@ -44,6 +44,8 @@ class NotesStore:
         out.sort(key=lambda r: r.date, reverse=True)
         return out[:limit]
 
+    readonly = True  # brain_remember never asks it
+
     def write(
         self, kind: Kind, text: str, *, domain: str = "", when: date | None = None, **extra: str
     ) -> WriteResult:

@@ -52,6 +52,8 @@ def brain_remember(
     ordered = sorted(stores, key=lambda s: ORDER.index(s.name) if s.name in ORDER else len(ORDER))
     if kind != "relation":
         ordered = [s for s in ordered if s.name != "graph"]
+    # a store that is only read (transcripts, notes folders) is not a layer of a write
+    ordered = [s for s in ordered if not getattr(s, "readonly", False)]
 
     match = _closest(ordered, kind, text) if kind in ("fact", "pattern") else None
     out: dict[str, Any] = {"kind": kind, "text": text, "layers": {}}

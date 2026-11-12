@@ -150,6 +150,8 @@ def gather(agent: Agent, item: ModelItem, n: int) -> list[dict[str, str]]:
     )["results"]
     out: dict[str, dict[str, str]] = {}
     for h in hits[: n if not item.kinds else n // 2]:
+        if _hook(str(h["kind"]), str(h.get("domain", ""))):
+            continue
         text = str(h["text"]) + (" (superseded)" if h.get("superseded") else "")
         out[str(h["id"])[:16]] = {
             "kind": str(h["kind"]),
@@ -162,11 +164,19 @@ def gather(agent: Agent, item: ModelItem, n: int) -> list[dict[str, str]]:
         for r in vault.read(kind, None, n):  # type: ignore[union-attr,arg-type]
             if len(out) >= n:
                 break
+            if _hook(r.kind, r.domain):
+                continue
             src = f"{r.path}:{r.line}" if r.line else r.path
             row = {"kind": r.kind, "date": r.date.isoformat(), "source": src, "text": r.text}
             out.setdefault(r.id[:16], row)
     # a record that looks like it holds a secret is never sent to a model
     return [{"id": i, **d} for i, d in out.items() if not _SECRET.search(d["text"])]
+
+
+def _hook(kind: str, section: str) -> bool:
+    """What the capture hook filed: the user's raw messages and links. A request is not a
+    record of what was done, and a model that reads it lists finished work as pending."""
+    return kind == "note" and section.endswith("(hook)")
 
 
 def _short(source: str) -> str:
