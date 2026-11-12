@@ -26,6 +26,7 @@ import argparse
 import json
 import sys
 import time
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -142,7 +143,9 @@ def main() -> int:
     if errors:
         print(f"\nstores that errored: {errors}")
     if a.out:
-        Path(a.out).write_text(json.dumps({"summary": summary(rows), "rows": rows}, indent=1))
+        # `date` and `summary` are what brain_status reads when this is <data_dir>/eval.json
+        doc = {"date": date.today().isoformat(), "summary": summary(rows), "rows": rows}
+        Path(a.out).write_text(json.dumps(doc, indent=1))
     return 0
 
 

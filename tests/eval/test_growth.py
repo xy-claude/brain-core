@@ -54,6 +54,22 @@ def test_eval_result_feeds_the_memory_traits(tmp_path: Path) -> None:
     assert tr["episodic_memory"]["grown"] and tr["semantic_memory"]["grown"]
 
 
+def test_gold_eval_result_feeds_the_memory_traits(tmp_path: Path) -> None:
+    cfg, _ = fixture_agent(tmp_path)
+    (tmp_path / "data").mkdir(exist_ok=True)
+    slices = {"reworded": (50, 75), "same": (20, 20), "temporal": (4, 8), "absent": (11, 12)}
+    summary = {s: {"n": n, "hits": h} for s, (h, n) in slices.items()}
+    (tmp_path / "data" / "eval.json").write_text(
+        json.dumps({"date": "2026-11-12", "summary": summary, "rows": []})
+    )
+    with Agent.from_config(cfg) as agent:
+        tr = traits.compute(agent, agent.brain_status(), TODAY)
+    sem = tr["semantic_memory"]["signals"]["stratified_recall"]
+    epi = tr["episodic_memory"]["signals"]["temporal_recall"]
+    assert (sem["value"], sem["n"]) == (81, 107) and "reworded 50/75" in sem["note"]
+    assert (epi["value"], epi["n"]) == (4, 8)
+
+
 def test_thirty_days_of_sessions_grow_the_brain(tmp_path: Path) -> None:
     init_agent("Day1", tmp_path / "day1", False, user="Ada")
     with Agent.from_config(tmp_path / "day1" / "brain.yaml") as fresh:

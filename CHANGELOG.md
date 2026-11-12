@@ -4,6 +4,9 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+### Changed
+- `brain_status` reads the labelled recall eval. `run_gold.py --out <data_dir>/eval.json` now feeds the semantic and episodic memory traits by slice (reworded, same-word, several records, absent, dates), next to the older `run_recall.py` result. Before, the traits could only quote the substring eval, which a query in the note's own words always passes.
+
 ## [0.5.0] - 2026-11-12
 
 ### Added

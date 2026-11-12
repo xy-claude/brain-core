@@ -169,7 +169,7 @@ def _semantic(
         "facts_dated": _ratio(dated, len(facts), "facts carrying their date"),
         "pages_sourced": _ratio(pages - unsourced, pages, "knowledge pages that cite a raw source"),
         "stratified_recall": _eval_slice(
-            data_dir, "single-hop", "multi-hop", "update", "abstention"
+            data_dir, "single-hop", "multi-hop", "update", "abstention", *_GOLD_SLICES
         )
         or _pending_signal("single-hop, multi-hop, update and abstention slices (the growth eval)"),
     }
@@ -406,8 +406,13 @@ def _authority(pending: list[list[str]]) -> dict[str, dict[str, Any]]:
     }
 
 
+# run_gold.py slices that are not about a date: reworded questions are the ones that fail first
+_GOLD_SLICES = ("reworded", "real", "same", "multi", "absent", "learned")
+
+
 def _eval_slice(data_dir: Path, *types: str) -> dict[str, Any] | None:
-    """The last stratified eval (``run_recall.py --out <data_dir>/eval.json``), by slice."""
+    """The last stratified eval in ``<data_dir>/eval.json``, by slice: ``run_recall.py --out``
+    (``by_type``) or ``run_gold.py --out`` (``summary``, judged against labelled record ids)."""
     path = data_dir / "eval.json"
     if not path.exists():
         return None
@@ -415,7 +420,7 @@ def _eval_slice(data_dir: Path, *types: str) -> dict[str, Any] | None:
         data = json.loads(_read(path))
     except ValueError:
         return None
-    sl = data.get("by_type", {})
+    sl = data.get("by_type") or data.get("summary") or {}
     hits = sum(int(sl[t]["hits"]) for t in types if t in sl)
     n = sum(int(sl[t]["n"]) for t in types if t in sl)
     if n == 0:
