@@ -1,8 +1,10 @@
 """``brain_recall``: one query across every store, deduplicated, ranked, capped.
 
-Stores that rank by query themselves (Hindsight, SQLite FTS) are asked once per kind with
-the query. Stores that only filter (vault markdown, graph) are read whole and scored here by
-token overlap. A store that raises is reported in ``stores`` and never aborts the call.
+Stores that rank by query themselves (the record index, Hindsight, SQLite FTS) are asked with
+the query. A record from the index carries its bm25 score, and all of them share one scale, so
+they are ranked by it. A store that only filters (the graph, a vault with no index) is read
+whole and scored here by token overlap. A store that raises is reported in ``stores`` and never
+aborts the call.
 """
 
 from __future__ import annotations
@@ -13,7 +15,8 @@ from collections.abc import Sequence
 from datetime import date
 from typing import Any, get_args
 
-from brain_core.stores.base import Kind, Record, Store, normalize
+from brain_core.stores.base import Kind, Record, Store, full_text, normalize
+from brain_core.stores.index import RecordIndex
 
 KINDS: tuple[Kind, ...] = get_args(Kind)
 DEFAULT_TOKENS = 6_000
@@ -83,10 +86,11 @@ def brain_recall(
 ) -> dict[str, Any]:
     today = today or date.today()
     names = [s.name for s in stores]
+    asked = [s for s in stores if getattr(s, "recall", True)]  # a store can opt out of recall
     if scope == "all":
-        kinds, chosen = KINDS, list(stores)
+        kinds, chosen = KINDS, asked
     elif scope in KINDS:
-        kinds, chosen = (scope,), list(stores)
+        kinds, chosen = (scope,), asked
     elif scope in names:
         kinds, chosen = KINDS, [s for s in stores if s.name == scope]
     else:
@@ -102,66 +106,92 @@ def brain_recall(
     max_tokens = min(max_tokens, MAX_TOKENS)
 
     q_norm, q_tok = normalize(query).lower(), tokens(query)
-    hits: dict[str, tuple[Record, str, float]] = {}
     # a transcript line holding the query's words is often the same question, asked before
     count_transcripts = scope in ("transcript", "transcripts")
-    best = 0.0
-    seen_text: set[str] = set()
     report: dict[str, Any] = {}
+    found: dict[str, list[tuple[Record, float]]] = {}  # store -> (record, its place in the list)
     for store in chosen:
         ranked = bool(getattr(store, "ranked", False))
-        n = 0
+        found[store.name] = []
         try:
             # a store that ranks the whole bank by query (Hindsight) is asked once, not per kind
             whole = bool(getattr(store, "whole", False))
             for kind in kinds[:1] if whole else kinds:
-                recs = store.read(kind, query if ranked else None, limit * 2 if ranked else 1000)
-                for i, r in enumerate(recs):
-                    if whole and r.kind not in kinds:
-                        continue
-                    full = _full_text(r)
-                    overlap = len(q_tok & tokens(full)) / len(q_tok) if q_tok else 0.0
-                    if count_transcripts or r.kind != "transcript":
-                        best = max(best, overlap)
-                    phrase = 0.5 if q_norm and q_norm in full.lower() else 0.0
-                    rank = (1.0 - i / (len(recs) + 1)) * 0.6 if ranked else 0.0
-                    rel = max(overlap + phrase, rank)
-                    if rel <= 0:
-                        continue
-                    score = 0.75 * min(rel, 1.5) / 1.5 + 0.25 * recency(r.date, today)
-                    key = normalize(r.text).lower()
-                    if r.id in hits or key in seen_text:
-                        if r.id in hits and score > hits[r.id][2]:
-                            hits[r.id] = (r, store.name, score)
-                        continue
-                    hits[r.id], n = (r, store.name, score), n + 1
-                    seen_text.add(key)
+                want = (offset + limit) * 2 if ranked else 10**6
+                recs = store.read(kind, query if ranked else None, want)
+                found[store.name] += [
+                    (r, (1.0 - i / (len(recs) + 1)) * 0.6 if ranked else 0.0)
+                    for i, r in enumerate(recs)
+                    if not whole or r.kind in kinds
+                ]
         except Exception as e:  # a dead store must not kill recall
             report[store.name] = f"error: {type(e).__name__}: {str(e)[:120]}"
-            continue
-        report[store.name] = n
+            found[store.name] = []
+
+    # index records share one bm25 scale: each is worth its share of the best one
+    top = max((r.score for rs in found.values() for r, _ in rs), default=0.0)
+    hits: dict[str, tuple[Record, str, float]] = {}
+    best = 0.0
+    seen_text: set[str] = set()
+    for name, rs in found.items():
+        n = 0
+        for r, place in rs:
+            full = full_text(r)
+            overlap = len(q_tok & tokens(full)) / len(q_tok) if q_tok else 0.0
+            # an index record is judged below, by rarity-weighted cover, not by raw overlap
+            if r.score <= 0 and (count_transcripts or r.kind != "transcript"):
+                best = max(best, overlap)
+            phrase = 0.5 if q_norm and q_norm in full.lower() else 0.0
+            rel = r.score / top + phrase if r.score > 0 else max(overlap + phrase, place)
+            if rel <= 0:
+                continue
+            score = 0.75 * min(rel, 1.5) / 1.5 + 0.25 * recency(r.date, today)
+            key = normalize(r.text).lower()
+            if r.id in hits or key in seen_text:
+                if r.id in hits:
+                    # one record in two stores: the better score, and the copy that names a file
+                    # (a tie used to keep `sqlite://facts/N`, which no one can open or teach)
+                    old, was, had = hits[r.id]
+                    if r.path.startswith("sqlite://") and not old.path.startswith("sqlite://"):
+                        r, name = old, was
+                    hits[r.id] = (r, name, max(score, had))
+                continue
+            hits[r.id], n = (r, name, score), n + 1
+            seen_text.add(key)
+        report.setdefault(name, n)
 
     # a value a "Fact changed" banner superseded is kept on disk but ranks below the banner;
     # a transcript line is what was said, not what was decided, so written memory outranks it
     superseded = {
         normalize(m.group(1)).lower() for r, _s, _sc in hits.values() for m in _WAS.finditer(r.text)
     }
+    # a record another one names in `supersedes` (record_meta.md) is retired the same way
+    retired: set[str] = set()
+    for store in chosen:
+        if hasattr(store, "retired"):
+            retired |= store.retired()
+
+    def stale(r: Record) -> bool:
+        return normalize(r.text).lower() in superseded or r.id[:16] in retired
+
     ordered = sorted(
         (
-            (
-                r,
-                s,
-                sc
-                * (0.5 if normalize(r.text).lower() in superseded else 1.0)
-                * (0.7 if r.kind == "transcript" else 1.0),
-            )
+            (r, s, sc * (0.5 if stale(r) else 1.0) * (0.7 if r.kind == "transcript" else 1.0))
             for r, s, sc in hits.values()
         ),
         key=lambda h: (h[2], h[0].date),
         reverse=True,
     )
     total = len(ordered)
-    results = [_item(r, s, sc, fmt) for r, s, sc in ordered[offset : offset + limit]]
+    results = [_item(r, s, sc, fmt, stale(r)) for r, s, sc in ordered[offset : offset + limit]]
+    index = next(
+        (i for s in chosen if isinstance(i := getattr(s, "index", None), RecordIndex)), None
+    )
+    lead = [r.id for r, _s, _sc in ordered[:3] if r.score > 0]
+    if index and q_tok and lead:
+        # written memory leads the list: it alone says whether the question is answered. Raw
+        # overlap would let a record with only the question's common words count as an answer
+        best = index.cover(query, lead)
     out: dict[str, Any] = {
         "query": query,
         "scope": scope,
@@ -196,16 +226,11 @@ def brain_recall(
     return out
 
 
-def _full_text(r: Record) -> str:
-    """Title plus the body fields a decision or correction carries in `extra`."""
-    body = " ".join(
-        v for k, v in r.extra.items() if k in ("decision", "reason", "error", "correction")
-    )
-    return f"{r.text} — {body}" if body else r.text
+_full_text = full_text  # the name older callers import
 
 
-def _item(r: Record, store: str, score: float, fmt: str) -> dict[str, Any]:
-    r = Record(r.id, r.kind, _full_text(r), r.date, r.domain, r.path, r.line, r.extra)
+def _item(r: Record, store: str, score: float, fmt: str, stale: bool = False) -> dict[str, Any]:
+    r = Record(r.id, r.kind, full_text(r), r.date, r.domain, r.path, r.line, r.extra)
     text = (
         r.text
         if fmt == "detailed" or len(r.text) <= _CONCISE_CHARS
@@ -218,6 +243,8 @@ def _item(r: Record, store: str, score: float, fmt: str) -> dict[str, Any]:
         "source": f"{r.path}:{r.line}" if r.line else r.path or store,
         "text": text,
     }
+    if stale:
+        item["superseded"] = True  # a newer record replaced this value; kept for its history
     if fmt == "detailed":
         item.update(id=r.id, store=store, score=round(score, 3), domain=r.domain, extra=r.extra)
     return item

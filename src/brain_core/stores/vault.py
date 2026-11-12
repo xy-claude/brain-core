@@ -15,6 +15,7 @@ from datetime import date
 from pathlib import Path
 
 from brain_core.stores.base import Kind, Record, WriteResult, record_id
+from brain_core.stores.index import RecordIndex
 
 if sys.platform == "win32":
     import msvcrt
@@ -27,8 +28,10 @@ _BULLET = re.compile(r"^- (.+?)(?:\s*\((\d{4}-\d{2}-\d{2})\))?\s*$")
 _DECISION = re.compile(r"^## (\d{4}-\d{2}-\d{2}) — (.+?)\s*$")
 _CORRECTION = re.compile(r"^### \[(\d{4}-\d{2}-\d{2})\] (.+?)\s*$")
 _SECRET = re.compile(
-    r"hsk_[A-Za-z0-9]{8,}|(?i:bearer)\s+(?=[A-Za-z0-9._-]*\d)[A-Za-z0-9._-]{16,}|sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}"
+    r"hsk_[A-Za-z0-9]{8,}|(?i:bearer)\s+(?=[A-Za-z0-9._-]*\d)[A-Za-z0-9._-]{16,}|\bsk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}"
     r"|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}"
+    r"|eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"  # a JWT
+    r"|-----BEGIN [A-Z ]*PRIVATE KEY-----"
 )
 
 FILES: dict[Kind, str] = {
@@ -37,30 +40,104 @@ FILES: dict[Kind, str] = {
     "decision": "decisions_log.md",
     "correction": "corrections.md",
 }
+META = "record_meta.md"
+_META = re.compile(r"^- ([0-9a-f]{16}) \| (.+)$")
+_INDEXED: tuple[Kind, ...] = (
+    "fact",
+    "pattern",
+    "decision",
+    "correction",
+    "note",
+    "raw",
+    "knowledge",
+)
 
 
 class VaultStore:
     name = "vault"
 
-    def __init__(self, root: Path | str, owner: str = "agent") -> None:
+    def __init__(
+        self, root: Path | str, owner: str = "agent", index: RecordIndex | None = None
+    ) -> None:
         self.root = Path(root).expanduser()
         self.owner = owner
+        self.index = index
+        self.ranked = index is not None  # with an index a query comes back in bm25 order
+        self._meta_sig = -1  # mtime of record_meta.md when its keys were last loaded
 
     # ── read ────────────────────────────────────────────────────────────────
 
-    def read(self, kind: Kind, query: str | None = None, limit: int = 50) -> list[Record]:
+    def _paths(self, kind: Kind) -> list[Path]:
         if kind == "note":
-            paths = sorted((self.root / "sessions").glob("????-??-??.md"), reverse=True)
-        elif kind == "raw":
-            paths = sorted((self.root / "raw").glob("*.md"), reverse=True)
-        elif kind == "knowledge":
-            paths = sorted(
+            # rglob: `brain weekly` moves old days into sessions/archive/YYYY-MM/
+            return sorted((self.root / "sessions").rglob("????-??-??.md"), reverse=True)
+        if kind == "raw":
+            return sorted((self.root / "raw").glob("*.md"), reverse=True)
+        if kind == "knowledge":
+            return sorted(
                 p for p in (self.root / "knowledge").glob("*.md") if not p.name.startswith("_")
             )
-        elif kind in FILES:
-            paths = [self.root / FILES[kind]]
-        else:
-            return []
+        return [self.root / FILES[kind]] if kind in FILES else []
+
+    def meta(self) -> dict[str, dict[str, str]]:
+        """``record_meta.md``: per record id, the fields the record's own line cannot carry
+        (search keys, source, mission). A later line for the same id adds keys and replaces
+        the rest."""
+        out: dict[str, dict[str, str]] = {}
+        for line in read_text(self.root / META).splitlines():
+            if m := _META.match(line):
+                d = out.setdefault(m.group(1), {})
+                for part in m.group(2).split(" | "):
+                    k, _, v = part.partition(": ")
+                    d[k] = f"{d[k]}; {v}" if k in ("keys", "learned") and k in d else v
+        return out
+
+    def learn(self, rid: str, words: str, when: date | None = None) -> None:
+        """A question that missed and was then answered by record ``rid``: its words become
+        search keys of that record (``learned`` in record_meta.md, apart from written keys)."""
+        self._note_meta(rid, when or date.today(), {"learned": words})
+
+    def retired(self) -> set[str]:
+        """Ids (16 characters) of records a newer one replaced: its ``supersedes`` field."""
+        return {d["supersedes"][:16] for d in self.meta().values() if d.get("supersedes")}
+
+    def _note_meta(self, rid: str, when: date, extra: dict[str, str]) -> None:
+        fields = {
+            k: " ".join(str(extra[k]).replace("|", "/").split())
+            for k in ("keys", "learned", "source", "mission", "supersedes")
+            if extra.get(k)
+        }
+        if not fields:
+            return
+        path = self.root / META
+        line = f"- {rid[:16]} | " + " | ".join(f"{k}: {v}" for k, v in fields.items())
+        with self._locked(path):
+            text = read_text(path) or (
+                f"---\ntype: index\nowner: {self.owner}\nstatus: active\n"
+                f"updated: {when.isoformat()}\n---\n# Record meta\n\n"
+                "Search keys, source and mission of each record, by record id. "
+                "Written by brain_remember; append-only.\n\n"
+            )
+            if line not in text.splitlines():
+                self._save(path, text.rstrip("\n") + "\n" + line + "\n", when)
+
+    def read(self, kind: Kind, query: str | None = None, limit: int = 50) -> list[Record]:
+        if query and self.index:
+            meta = self.root / META
+            sig = meta.stat().st_mtime_ns if meta.exists() else 0
+            if sig != self._meta_sig:  # keys changed on disk: bring the index in line
+                self.index.set_keys(
+                    {
+                        i: "; ".join(d[k] for k in ("keys", "learned") if k in d)
+                        for i, d in self.meta().items()
+                        if "keys" in d or "learned" in d
+                    }
+                )
+                self._meta_sig = sig
+            files = {p: k for k in _INDEXED for p in self._paths(k) if p.exists()}
+            self.index.sync(self.name, files, lambda k, p: self._parse(k, p, full=True))
+            return self.index.search(self.name, [kind], query, limit)
+        paths = self._paths(kind)
         out: list[Record] = []
         q = (query or "").lower()
         for p in paths:
@@ -72,7 +149,7 @@ class VaultStore:
         out.sort(key=lambda r: r.date, reverse=True)
         return out[:limit]
 
-    def _parse(self, kind: Kind, path: Path) -> list[Record]:
+    def _parse(self, kind: Kind, path: Path, full: bool = False) -> list[Record]:
         text = path.read_text(encoding="utf-8")
         fm = self._frontmatter(text)
         fallback = _parse_date(fm.get("updated")) or date.fromtimestamp(path.stat().st_mtime)
@@ -91,7 +168,7 @@ class VaultStore:
                 )
             ]
         if kind == "knowledge":
-            return knowledge_records(text, rel, fallback)
+            return knowledge_records(text, rel, fallback, cap=None if full else 600)
         if kind == "note":
             fallback = _parse_date(path.stem) or fallback
         records: list[Record] = []
@@ -157,6 +234,14 @@ class VaultStore:
     # ── write ───────────────────────────────────────────────────────────────
 
     def write(
+        self, kind: Kind, text: str, *, domain: str = "", when: date | None = None, **extra: str
+    ) -> WriteResult:
+        r = self._write(kind, text, domain=domain, when=when, **extra)
+        if r.status in ("written", "exists") and r.id:
+            self._note_meta(r.id, when or date.today(), extra)  # keys can be added to an old record
+        return r
+
+    def _write(
         self, kind: Kind, text: str, *, domain: str = "", when: date | None = None, **extra: str
     ) -> WriteResult:
         if _SECRET.search(text):
@@ -425,9 +510,10 @@ def _parse_date(value: str | None) -> date | None:
         return None
 
 
-def knowledge_records(text: str, rel: str, when: date) -> list[Record]:
+def knowledge_records(text: str, rel: str, when: date, cap: int | None = 600) -> list[Record]:
     """One record per `## section` of a page: title › heading: body. A page without `## `
-    sections (a plain note, a Claude Code memory file) is one record of its body."""
+    sections (a plain note, a Claude Code memory file) is one record of its body. ``cap``
+    cuts the body for a whole-store read; the index passes None so every word is searchable."""
     fm = frontmatter(text)
     m = _FRONTMATTER.match(text)
     skip = m.group(0).count("\n") if m else 0  # frontmatter lines: never body, never a title
@@ -442,24 +528,24 @@ def knowledge_records(text: str, rel: str, when: date) -> list[Record]:
     for n, line in enumerate(lines, 1):
         if line.startswith("## "):
             if heading:
-                records.append(_knowledge_record(title, heading, body, rel, start, when))
+                records.append(_knowledge_record(title, heading, body, rel, start, when, cap))
             heading, body, start = line[3:].strip(), [], n
         elif heading and line.strip() and not line.startswith("---"):
             body.append(line.strip())
     if heading:
-        records.append(_knowledge_record(title, heading, body, rel, start, when))
+        records.append(_knowledge_record(title, heading, body, rel, start, when, cap))
     if not records:
         plain = [ln.strip() for ln in lines[skip:] if ln.strip() and ln[0] != "#"]
         if plain:
-            records.append(_knowledge_record(title, "", plain, rel, 1, when))
+            records.append(_knowledge_record(title, "", plain, rel, 1, when, cap))
     return records
 
 
 def _knowledge_record(
-    title: str, heading: str, body: list[str], rel: str, line: int, when: date
+    title: str, heading: str, body: list[str], rel: str, line: int, when: date, cap: int | None
 ) -> Record:
-    joined = " ".join(body)
-    text = f"{title} › {heading}: {joined[:600]}" if heading else f"{title}: {joined[:600]}"
+    joined = " ".join(body)[:cap]
+    text = f"{title} › {heading}: {joined}" if heading else f"{title}: {joined}"
     return Record(record_id(f"{rel}#{heading}"), "knowledge", text, when, "", rel, line, {})
 
 

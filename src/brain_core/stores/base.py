@@ -44,6 +44,15 @@ class Record:
     path: str = ""
     line: int = 0
     extra: dict[str, str] = field(default_factory=dict)
+    score: float = 0.0  # bm25 from the record index (higher is better); 0 = the store gave none
+
+
+def full_text(r: Record) -> str:
+    """Title plus the body fields a decision or correction carries in `extra`."""
+    body = " ".join(
+        v for k, v in r.extra.items() if k in ("decision", "reason", "error", "correction")
+    )
+    return f"{r.text} — {body}" if body else r.text
 
 
 @dataclass(frozen=True)

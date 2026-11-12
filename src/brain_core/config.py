@@ -27,6 +27,8 @@ class HindsightConfig(BaseModel):
 
     url: str = "http://127.0.0.1:8888"
     bank: str
+    # false: still written to, and read by scope='hindsight', but not asked on every recall
+    recall: bool = True
 
 
 class GraphConfig(BaseModel):
@@ -57,6 +59,7 @@ class SessionConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     brief: str = "daily_brief.md"
+    brief_tokens: int = 3000  # the SessionStart hook injects no more of the brief than this
     executive: str = "executive_state.md"
     inbox: str = "inbox_staged.md"
     critique: str = "session_critique.md"

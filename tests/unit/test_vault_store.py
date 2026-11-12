@@ -278,3 +278,40 @@ def test_the_lock_lives_outside_the_vault(vault: VaultStore) -> None:
         "nothing new in the vault"
     )
     assert list(vault_module._lock_dir().glob("*.lock")), "the lock file is on the local disk"
+
+
+@pytest.mark.parametrize(
+    "secret",
+    [
+        "sk-ant-api03-" + "aB3_" * 20 + "-xyzAA",
+        "sk-proj-" + "aB3d" * 12,
+        "sk-" + "a1" * 12,
+        ".".join(["eyJ" + "hbGciOiJI" * 2, "eyJ" + "yb2xlIjoi" * 2, "abcDEF123456"]),  # JWT shape
+        "-----BEGIN OPENSSH PRIVATE KEY-----",
+        "ghp_" + "a1B2" * 9,
+    ],
+)
+def test_common_key_formats_are_refused(vault: VaultStore, secret: str) -> None:
+    assert vault.write("fact", f"the key is {secret}").status == "refused"
+
+
+def test_a_hyphenated_word_is_not_a_key(vault: VaultStore) -> None:
+    r = vault.write("fact", "use the risk-adjusted-return-on-capital figure and task-level-retry")
+    assert r.status == "written"
+
+
+def test_archived_and_old_notes_are_still_read(vault: VaultStore) -> None:
+    sessions = vault.root / "sessions"
+    (sessions / "archive" / "2025-06").mkdir(parents=True)
+    (sessions / "archive" / "2025-06" / "2025-06-01.md").write_text(
+        "# s\n\n## What We Discussed\n- the zebra codename is quokka\n", encoding="utf-8"
+    )
+    (sessions / "archive" / "2025-06.md").write_text("# 2025-06 — 1 session files\n")
+    (sessions / "2026-11-01.md").write_text(
+        "# s\n\n## What We Discussed\n" + "".join(f"- filler line {i}\n" for i in range(1100)),
+        encoding="utf-8",
+    )
+    from brain_core.recall import brain_recall
+
+    out = brain_recall([vault], "zebra codename", scope="note")
+    assert out["total"] == 1 and out["results"][0]["date"] == "2025-06-01"

@@ -46,7 +46,7 @@ def brain_remember(
         text = relation_text(extra["subject"], extra["predicate"], extra["object"])
     if not text:
         raise ValueError("text must not be empty")
-    if _SECRET.search(text):
+    if any(_SECRET.search(str(v)) for v in (text, source, *extra.values())):
         raise ValueError("text looks like it contains a secret; nothing was written to any store")
     when = when or date.today()
     ordered = sorted(stores, key=lambda s: ORDER.index(s.name) if s.name in ORDER else len(ORDER))
@@ -55,11 +55,11 @@ def brain_remember(
 
     match = _closest(ordered, kind, text) if kind in ("fact", "pattern") else None
     out: dict[str, Any] = {"kind": kind, "text": text, "layers": {}}
-    # a changed number on a near-identical line is a new value, never a duplicate
-    changed = (
-        match is not None
-        and match[1] >= CONTRADICTION
-        and _numbers(core(match[0].text)) != _numbers(text)
+    # a changed number on a near-identical line is a new value, never a duplicate; so is a
+    # near-identical line with a word the old one lacks ("always" → "never")
+    changed = match is not None and (
+        (match[1] >= CONTRADICTION and _numbers(core(match[0].text)) != _numbers(text))
+        or (match[1] >= DUPLICATE and not tokens(text) <= tokens(core(match[0].text)))
     )
     if match and match[1] >= DUPLICATE and not changed and not force:
         out.update(id=match[0].id, status="duplicate", duplicate_of=_brief(match[0]))
@@ -68,6 +68,7 @@ def brain_remember(
         out["contradiction"] = _brief(match[0])
         text = f"**⚠ Fact changed {when.isoformat()}:** {text} (was: {match[0].text[:120]})"
         out["text"] = text
+        extra.setdefault("supersedes", match[0].id)  # recall ranks the old value below this one
 
     if source:
         extra["source"] = source

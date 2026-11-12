@@ -74,6 +74,11 @@ def build_server(agent: Agent) -> FastMCP:
         preferences, and before brain_remember to avoid writing a duplicate. Not for health
         checks (brain_status) and not for reading a file you already know the path of.
 
+        `weak_match` in the reply means no record holds most of what was asked: search again
+        in other words before answering, then teach the record that answered it with
+        brain_remember(kind='key'). A result marked `superseded` is an old value a newer
+        record replaced.
+
         Read-only. Partial results are normal: `stores` lists hits per store and names any store
         that was unreachable instead of failing the call. A value a `⚠ Fact changed` banner
         superseded is returned but ranked below the banner."""
@@ -90,7 +95,13 @@ def build_server(agent: Agent) -> FastMCP:
     )
     def brain_remember(
         text: Annotated[str, Field(description="The memory itself, one item, plain text.")],
-        kind: Annotated[str, Field(description=f"One of {_KINDS}.")],
+        kind: Annotated[
+            str,
+            Field(
+                description=f"One of {_KINDS}, or key: text = a question whose recall was a "
+                "`weak_match`, source = the `source` of the result that later answered it."
+            ),
+        ],
         domain: Annotated[
             str, Field(description="Topic tag such as 'trading' or 'system'; empty = none.")
         ] = "",
@@ -100,6 +111,13 @@ def build_server(agent: Agent) -> FastMCP:
         mission: Annotated[
             str | None, Field(description="Mission id to tag, e.g. 'M-012'.")
         ] = None,
+        keys: Annotated[
+            str,
+            Field(
+                description="Other words this would be asked for by: synonyms, plain names, "
+                "the question it answers. Searched, never shown."
+            ),
+        ] = "",
         force: Annotated[
             bool, Field(description="Write even when a near-duplicate exists.")
         ] = False,
@@ -134,7 +152,7 @@ def build_server(agent: Agent) -> FastMCP:
                 source=source,
                 mission=mission,
                 force=force,
-                **cast(dict[str, Any], extra or {}),
+                **cast(dict[str, Any], {**(extra or {}), **({"keys": keys} if keys else {})}),
             ),
         )
 

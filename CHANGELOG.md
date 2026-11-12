@@ -4,6 +4,27 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+### Added
+- A record index: every kind the vault holds (facts, patterns, decisions, corrections, session notes, raw sources, knowledge pages) and every notes folder is now in one SQLite FTS5 table, ranked by bm25 with stemming ("deployed" finds "deploy") and accent folding. Before, only facts and patterns were indexed; the rest was read from disk and scored word by word on every recall. The index is a cache: a file whose size or mtime changed is parsed again on the next search, a deleted file loses its rows, and dropping the table loses nothing. Knowledge pages and notes are searchable past their first 600 characters, and a record is found by its date (`2026-11-02`).
+- `tests/eval/run_gold.py`: a recall eval scored against hand-labelled record ids, with slices for reworded questions, changed values, dates, several records and questions the store cannot answer. It needs no judge and writes nothing to the database under test. `run_recall.py` judges by substring, which a query written in the note's own words always passes.
+
+- Search keys: `brain_remember` takes `keys`, the other words a memory would be asked for by (synonyms, plain names, the question it answers). They are indexed beside the text and never returned, and they can be added later to a record that already exists. Keys, `source` and `mission` are kept in the vault, in `record_meta.md`, one append-only line per record id; before, `source` and `mission` never reached the vault. Measured on one live agent, with keys written for 407 records by a model that did not see the questions: reworded questions whose answer is one of those records went from 25 of 51 to 43 of 51 in the top ten.
+
+- `stores.hindsight.recall: false` in `brain.yaml` keeps Hindsight for writes, mental models and `scope='hindsight'` but stops asking it on every recall. Measured on one live agent with search keys in place: the same 50 of 75 reworded questions were found with and without it, at 2,032 ms against 42 ms per recall. The default stays `true`.
+
+- `brain_recall` tells the agent when the match is weak. The reply carries `weak_match` when no record holds most of what was asked, so the agent searches again in other words instead of answering from a near miss. Before, the flag was computed, logged and removed from the reply. For indexed records it is now judged by rarity: each query word weighs its idf, so a record with the common words of a question and none of its rare ones counts as a miss. Measured on one live agent: 11 of 12 questions the store cannot answer are flagged (6 of 12 before).
+- Retired values. When `brain_remember` writes a changed fact it records which record the new one replaces (`supersedes` in `record_meta.md`); any record can be retired the same way with `extra={"supersedes": id}`. Recall keeps the old record, ranks it below, and marks it `superseded`. Before, only a short old value quoted whole in a "Fact changed" banner was ranked down.
+
+- Miss repair. When a recall comes back `weak_match` and a retry in other words finds the record, the agent teaches it: `brain_remember(kind='key', text=<the question that missed>, source=<the result's source>)`. The question's words become search keys of that record (`learned` in `record_meta.md`, kept apart from written keys so they can be reviewed), and the same question finds it next time. Each repair is logged as a `recall_repair` event, and `tests/eval/from_repairs.py` turns those events into questions for `run_gold.py`: an eval that grows from real use.
+
+- The start of a session costs less. The daily brief's "Recent Sessions" section was a replay: 25 full lines of each of the last three session files, measured at 3,551 of one brief's 6,022 tokens. It is now a pointer: six written lines per day, each cut at 200 characters, and nothing the capture hook filed (the user's raw messages, links). The SessionStart hook also injects no more than `session.brief_tokens` (default 3000) of the brief, whoever wrote it, and says where the rest is. The brief file itself and `brain brief` are never cut.
+
+### Changed
+- Recall ranks an indexed record by its share of the best bm25 score for the query, not by the share of query words it holds. Measured on one live agent with 143 labelled questions: reworded questions found in the top ten went from 13 of 75 to 31 of 75 (held-out third: 6 of 25 to 12 of 25), same-word questions stayed at 20 of 20, date questions went from 0 of 8 to 4 of 8, and the median recall from 130 ms to 42 ms.
+
+### Fixed
+- A fact held by both the vault and SQLite could come back with the source `sqlite://facts/N` instead of its file and line. The two copies tie on score whenever the local date equals the UTC date, and the tie kept whichever store answered first. The copy that names a file now wins, so the source can be opened and miss repair (`kind='key'`) accepts it.
+
 ## [0.4.29] - 2026-11-10
 
 ### Fixed

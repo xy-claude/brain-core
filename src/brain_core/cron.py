@@ -441,16 +441,32 @@ def _stale_knowledge(kdir: Path, today: date) -> str:
     )
 
 
-def _warmup(sdir: Path, n: int = 3, lines: int = 25) -> str:
+def _warmup(sdir: Path, n: int = 3, lines: int = 6) -> str:
+    """A pointer to the last days, not a replay: a few written lines of each, cut short.
+    Measured on one agent, 25 full lines of 3 files were 3,551 of the brief's 6,022 tokens,
+    and every one of those lines is one brain_recall away. What the capture hook filed
+    (the user's raw messages, links) is skipped: it is the record, not the summary."""
     files = sorted(sdir.glob("????-??-??.md"), reverse=True)[:n] if sdir.exists() else []
     if not files:
         return ""
     blocks = []
     for f in files:
-        body = [ln for ln in _read(f).split("---", 2)[-1].splitlines() if ln.strip()][:lines]
-        body = [("#### " + ln.lstrip("# ")) if ln.startswith("#") else ln for ln in body]
-        blocks.append(f"### {f.stem}\n" + "\n".join(body))
-    return "## Recent Sessions — HSAM warmup\n\n" + "\n\n".join(blocks) + "\n"
+        body: list[str] = []
+        hook = False
+        for ln in _read(f).split("---", 2)[-1].splitlines():
+            if ln.startswith("#"):
+                hook = "(hook)" in ln
+            elif ln.strip() and not hook and len(body) < lines:
+                body.append(ln if len(ln) <= 200 else ln[:200] + "…")
+        if body:
+            blocks.append(f"### {f.stem}\n" + "\n".join(body))
+    if not blocks:
+        return ""
+    return (
+        "## Recent Sessions — HSAM warmup\n\n"
+        + "\n\n".join(blocks)
+        + "\n\n_The rest of each day: brain_recall, or sessions/<date>.md._\n"
+    )
 
 
 # ── backup ────────────────────────────────────────────────────────────────────
