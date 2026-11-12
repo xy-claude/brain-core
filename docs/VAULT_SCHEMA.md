@@ -16,6 +16,8 @@ Root: the folder `stores.vault` names in `brain.yaml` (one folder per agent). Al
 | `knowledge` (read-only) | `knowledge/<topic>.md` (files starting with `_` are skipped) | one record per heading | written by the agent through `/distill`; read and indexed here | — |
 | record meta | `record_meta.md` | one line per record id | `- <id16> \| keys: … \| learned: … \| source: … \| mission: … \| supersedes: <id16>` | append-only; a later line for the same id adds keys and replaces the rest |
 
+`models/<name>.md` holds the mental models `brain models` writes (frontmatter `type: model`, `question`, `records: N read, M cited`; bullets ending in `[file:line]`), with `<name>.prev.md` one generation back. They are not records: no kind reads them and the index leaves them out.
+
 Not written by `VaultStore`: `knowledge/` pages (compiled by the LLM through `/distill`; read and indexed, never written), `executive_state.md`, `session_critique.md` (whole-file rewrites by the agent).
 
 `record_meta.md` holds what a record's own line cannot carry. `keys` are the other words a memory would be asked for by, written by the agent at save time. `learned` are words from a question that missed and was then answered by this record (`brain_remember(kind='key')`), kept apart so they can be reviewed. `supersedes` names the record this one replaced. The id is the first 16 characters of the record id.

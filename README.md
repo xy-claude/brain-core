@@ -73,6 +73,17 @@ brain-core is the opposite: local, five tools, markdown files you own, and an ev
   <img src="docs/img/architecture-light.png" alt="Brain-Core sits between your AI agent and its memory. The agent uses five tools. Every memory is saved to the vault of text files first, then indexed by SQLite FTS5 with bm25 ranking, then optionally copied to the Hindsight vector memory. Searches run on the index and come back with their source. Hooks and scheduled jobs feed it, and a weak-match and miss-repair loop improves it with use." width="900">
 </picture>
 
+## Mental models
+
+Search answers a question. A mental model answers a standing one before it is asked: what the priorities are, how you like to work, what was decided and why. Add a `models:` block to `brain.yaml` and `brain models` writes each as a short markdown file in `vault/models/`:
+
+```
+- No git push unless told. He is sole commit author, one short subject line. [patterns.md:120][corrections.md:149]
+- Do only what was asked; never bundle "while I'm at it" edits. [patterns.md:94][patterns.md:112]
+```
+
+Every claim names the file and line it rests on, and a claim that cites nothing is dropped before the file is written. A model is marked stale only when a record it cited changes or disappears, or when new records match its question. The session start loads them; `brain daily` rewrites the stale ones. The writing is done by your own Claude Code login, or by the Anthropic API with a key (`runner: api`, `uv tool install 'brain-core-mcp[api]'`). They are briefings, not memory: recall never returns them, and the cited line is the source.
+
 ## The five tools
 
 | Tool | One call does |
@@ -92,7 +103,7 @@ Both. One Python package, three ways in:
 | Piece | What it is | Who uses it |
 |---|---|---|
 | `brain serve` | an MCP server that Claude Code starts from the agent's `.mcp.json` and that exposes five tools | the agent, every session, without you touching it |
-| `brain` command | a CLI: `brain init`, `brain adopt`, `brain doctor`, `brain version`, `brain index`, `brain graph`, `brain hindsight install`, `brain cron install`, `brain desktop`, `brain daily`, `brain weekly`; and `brain brief`, `brain capture`, `brain recall`, which the hooks call (`brain lessons` is an optional fourth) | you, once at setup, then cron and the hooks |
+| `brain` command | a CLI: `brain init`, `brain adopt`, `brain doctor`, `brain version`, `brain index`, `brain models`, `brain graph`, `brain hindsight install`, `brain cron install`, `brain desktop`, `brain daily`, `brain weekly`; and `brain brief`, `brain capture`, `brain recall`, which the hooks call (`brain lessons` is an optional fourth) | you, once at setup, then cron and the hooks |
 | `brain_core.Agent` | the Python library both of the above sit on | the eval runner, the demo script, your own scripts |
 
 ## Install details

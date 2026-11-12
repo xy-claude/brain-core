@@ -158,6 +158,8 @@ def daily_cmd(
     typer.echo(f"backup: {out['backup']}")
     if "update" in out:
         typer.echo(f"update: {out['update']}")
+    for n, line in out.get("models", {}).items():
+        typer.echo(f"model {n}: {line}")
 
 
 @app.command("weekly")
@@ -171,6 +173,8 @@ def weekly_cmd(
         out = weekly(agent)
     typer.echo(f"archived: {out['archived'] or 'nothing'}")
     typer.echo(f"mental models: {out['mental_models']}")
+    for n, line in out.get("models", {}).items():
+        typer.echo(f"model {n}: {line}")
 
 
 @app.command("cron")
@@ -569,6 +573,8 @@ def doctor_cmd(
         f"last close {ses['last_close'] or '-'}{flag}"
     )
     typer.echo(f"  pending    {st.get('pending_decisions', 0)} decision(s)")
+    if st.get("models"):
+        typer.echo("  models     " + " · ".join(f"{n} {s}" for n, s in st["models"].items()))
     if st.get("update"):
         typer.echo(f"  update     {st['update']}")
     if m := st.get("recall_misses"):
@@ -592,6 +598,27 @@ def doctor_cmd(
         f"  traits     {len(grown)}/{len(st.get('traits', {}))} grown: {', '.join(grown) or '-'}"
     )
     typer.echo(f"Brain: {'OK' if st['ok'] else 'ATTENTION'}")
+
+
+@app.command("models")
+def models_cmd(
+    path: Annotated[Path, typer.Argument(help="Agent directory or brain.yaml.")] = Path(),
+    name: Annotated[
+        list[str] | None, typer.Option("--name", help="Only this model. Repeatable.")
+    ] = None,
+    force: Annotated[bool, typer.Option("--force", help="Rewrite the fresh ones too.")] = False,
+    check: Annotated[bool, typer.Option("--status", help="Report state, write nothing.")] = False,
+) -> None:
+    """Write the mental models that are missing or stale: cited briefings in vault/models/."""
+    from brain_core import models
+
+    with _open(path) as agent:
+        if agent.config.models is None:
+            typer.echo("no `models:` block in brain.yaml; add `models: {}` for the five defaults")
+            raise typer.Exit(code=1)
+        out = models.status(agent) if check else models.refresh(agent, name, force=force)
+    for n, line in out.items():
+        typer.echo(f"  {n:20} {line}")
 
 
 @app.command("recall")

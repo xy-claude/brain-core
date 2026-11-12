@@ -47,6 +47,10 @@ def brain_status(agent: Agent) -> dict[str, Any]:
             if ln.startswith("- ") or (ln.startswith("|") and not _is_table_chrome(ln))
         )
     out["context"] = _context(agent)
+    if agent.config.models is not None:
+        from brain_core import models
+
+        out["models"] = models.status(agent)
     out["tools"] = tool_metrics(agent)
     if newer := update.notice(agent.data_dir):  # read from a file `brain daily` wrote; no network
         out["update"] = newer

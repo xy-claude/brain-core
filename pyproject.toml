@@ -27,6 +27,9 @@ dependencies = [
     "typer>=0.15",
 ]
 
+[project.optional-dependencies]
+api = ["anthropic>=1.0"]  # `models.runner: api`; the default runner is the Claude Code login
+
 [project.scripts]
 brain = "brain_core.cli.main:app"
 brain-core-mcp = "brain_core.cli.main:app"  # `uvx brain-core-mcp serve DIR` runs with nothing installed

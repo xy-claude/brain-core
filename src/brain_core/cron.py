@@ -24,7 +24,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from brain_core import traits, update
+from brain_core import models, traits, update
 from brain_core.session import _sections
 from brain_core.status import _frontmatter
 from brain_core.stores.hindsight import HindsightStore
@@ -116,6 +116,8 @@ def daily(agent: Agent, today: date | None = None, shadow: bool = False) -> dict
     for s in agent.stores:
         if isinstance(s, TranscriptStore):
             out["transcripts"] = s.index()
+    if cfg.models is not None:  # only the stale ones; a failed run keeps the old file
+        out["models"] = models.refresh(agent, today=today)
     return out
 
 
@@ -525,6 +527,8 @@ def weekly(agent: Agent, today: date | None = None) -> dict[str, Any]:
         "mental_models": refreshed,
         "rule_drafts": rule_drafts(vault.root, today),
         "reflection": reflect(agent, today),
+        # a full rebuild once a week: small updates drift, a fresh read does not
+        "models": models.refresh(agent, force=True, today=today) if agent.config.models else {},
     }
 
 

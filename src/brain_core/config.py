@@ -8,7 +8,7 @@ Pydantic v2 validates the schema; unknown fields fail at load time, not at first
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Self
+from typing import Literal, Self
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -70,6 +70,63 @@ class SessionConfig(BaseModel):
     marker: str | None = None  # clean-close marker; default data_dir/last_close.txt
 
 
+class ModelItem(BaseModel):
+    """One mental model: a standing question, answered from the records that bear on it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str  # the file is vault/models/<name>.md
+    question: str
+    search: str = ""  # extra words to find its records by
+    kinds: list[str] = Field(default_factory=list)  # also read the newest records of these kinds
+
+
+def _default_models() -> list[ModelItem]:
+    return [
+        ModelItem(
+            name="active-priorities",
+            question="What are the current priorities, missions and open loops, in order?",
+            search="priority mission blocked pending next step deadline goal",
+            kinds=["decision", "note"],
+        ),
+        ModelItem(
+            name="working-style",
+            question="How does the user prefer to work and be communicated with?",
+            search="prefers wants dislikes style tone format rule always never",
+            kinds=["correction", "pattern"],
+        ),
+        ModelItem(
+            name="key-decisions",
+            question="What was decided, why, and what was rejected?",
+            search="decided chose rejected reason instead of because",
+            kinds=["decision"],
+        ),
+        ModelItem(
+            name="system-architecture",
+            question="How is the system built: its parts, where they run, how they connect?",
+            search="architecture service server database port runs deploy config path",
+            kinds=["fact"],
+        ),
+        ModelItem(
+            name="recurring-lessons",
+            question="Which mistakes and lessons keep recurring, and what rule came of each?",
+            search="lesson mistake again repeated rule correction verify",
+            kinds=["correction"],
+        ),
+    ]
+
+
+class ModelsConfig(BaseModel):
+    """``brain models``: LLM-written briefings kept as cited markdown in ``vault/models/``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    runner: Literal["claude", "api"] = "claude"  # your Claude Code login, or an API key
+    model: str | None = None  # default: Claude Code's own, or claude-opus-5-5 on the API
+    records: int = 150  # read per question
+    items: list[ModelItem] = Field(default_factory=_default_models)
+
+
 class StatusConfig(BaseModel):
     """What ``brain_status`` measures as always-loaded context. Globs, relative to brain.yaml."""
 
@@ -113,6 +170,7 @@ class BrainConfig(BaseModel):
     session: SessionConfig = Field(default_factory=SessionConfig)
     status: StatusConfig = Field(default_factory=StatusConfig)
     cron: CronConfig = Field(default_factory=CronConfig)
+    models: ModelsConfig | None = None  # absent: no mental models are written
 
     @field_validator("name")
     @classmethod

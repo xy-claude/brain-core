@@ -257,6 +257,10 @@ def _peers(vault: VaultStore, cfg: SessionConfig) -> str:
 
 
 def _mental_models(agent: Agent, ids: list[str]) -> dict[str, str]:
+    if agent.config.models is not None:  # brain-core's own, read from vault/models/
+        from brain_core import models
+
+        return models.load(agent)
     h = _hindsight(agent)
     if h is None:
         return {"note": "hindsight not configured"}

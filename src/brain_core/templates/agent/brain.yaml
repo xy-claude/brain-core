@@ -19,6 +19,14 @@ session:
   queue: ./data/hindsight_queue.jsonl # hook captures wait here; brain_session('end') drains them
   # peers: [../*/last_standalone_session.md]  # other agents' sync files, read at session start
 
+# Mental models: briefings the agent reads at session start, written from its own records by an
+# LLM and kept as cited markdown in vault/models/. Off until this block exists. `brain models`
+# writes them; `brain daily` rewrites the stale ones, `brain weekly` all of them.
+# models:
+#   runner: claude        # your Claude Code login (personal use), or `api` with ANTHROPIC_API_KEY
+#   # model: claude-haiku-5-5   # default: Claude Code's own model, or claude-opus-5-5 on the API
+#   # items: [{name: working-style, question: "How does the user like to work?", kinds: [correction]}]
+
 status:
   context_files: [CLAUDE.md, .claude/rules/*.md]   # what counts as always-loaded context
 
