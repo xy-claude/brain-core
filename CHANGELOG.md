@@ -4,6 +4,8 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-12
+
 ### Added
 - A record index: every kind the vault holds (facts, patterns, decisions, corrections, session notes, raw sources, knowledge pages) and every notes folder is now in one SQLite FTS5 table, ranked by bm25 with stemming ("deployed" finds "deploy") and accent folding. Before, only facts and patterns were indexed; the rest was read from disk and scored word by word on every recall. The index is a cache: a file whose size or mtime changed is parsed again on the next search, a deleted file loses its rows, and dropping the table loses nothing. Knowledge pages and notes are searchable past their first 600 characters, and a record is found by its date (`2026-11-02`).
 - `tests/eval/run_gold.py`: a recall eval scored against hand-labelled record ids, with slices for reworded questions, changed values, dates, several records and questions the store cannot answer. It needs no judge and writes nothing to the database under test. `run_recall.py` judges by substring, which a query written in the note's own words always passes.
