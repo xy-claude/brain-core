@@ -177,7 +177,7 @@ def test_miss_repair_teaches_the_record_the_question_that_failed(tmp_path: Path)
         assert out["status"] == "written" and "backup" in out["learned"]
         again = a.brain_recall(missed)
         assert "weak_match" not in again and again["results"][0]["source"] == found["source"]
-        vault = next(s for s in a.stores if s.name == "vault")
+        vault = next(s for s in a.stores if isinstance(s, VaultStore))
         assert "backup" in vault.meta()[out["id"][:16]]["learned"]
         assert a.recent_events(event_type="recall_repair")[0].payload["id"] == out["id"]
         with pytest.raises(ValueError, match="no record has source"):
@@ -185,7 +185,7 @@ def test_miss_repair_teaches_the_record_the_question_that_failed(tmp_path: Path)
     import sys
 
     sys.path.insert(0, "tests/eval")
-    import from_repairs
+    import from_repairs  # type: ignore[import-not-found]
 
     assert from_repairs.questions(str(cfg)) == [
         {"s": "learned", "q": missed, "gold": [out["id"][:16]]}

@@ -18,6 +18,7 @@ class RankedStore(MemoryStore):
 
     name = "hindsight"
     ranked = True
+    recall = True
 
     def read(self, kind: Kind, query: str | None = None, limit: int = 50) -> list[Record]:
         return self.records[:limit] if kind == "fact" else []
