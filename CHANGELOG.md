@@ -4,6 +4,8 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-11-13
+
 ### Fixed
 - A mental model now goes stale on one new record of any kind that matches its question. Until now a record of a kind the model does not name had to arrive five times, so a model kept a claim ("the fixes are uncommitted") after a new fact said otherwise and still read `fresh`. A write that does not match the question still leaves it alone. Expect a model on an active vault to be rewritten about once a day.
 
