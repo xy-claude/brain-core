@@ -51,6 +51,8 @@ class StoresConfig(BaseModel):
     transcripts_cwd: Path | None = None  # the folder Claude Code runs in; default: brain.yaml's
     graph: GraphConfig | None = None
     notes: list[Path] = Field(default_factory=list)  # read-only markdown folders recall searches
+    # read-only folders of older memory (an export from another tool): searched, ranked below
+    archive: list[Path] = Field(default_factory=list)
 
 
 class SessionConfig(BaseModel):

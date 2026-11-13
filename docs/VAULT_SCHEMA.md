@@ -36,6 +36,6 @@ Not written by `VaultStore`: `knowledge/` pages (compiled by the LLM through `/d
 
 ## The record index
 
-Every record of every kind (facts, patterns, decisions, corrections, session notes, raw sources, knowledge pages) and every `stores.notes` folder is in one SQLite FTS5 table in `data/brain.db`, tokenised with stemming and accent folding, ranked by bm25. Search keys are indexed in their own column and never returned. A date stays one token, and a date asked in words ("August 21 2026") is turned into it.
+Every record of every kind (facts, patterns, decisions, corrections, session notes, raw sources, knowledge pages) and every `stores.notes` and `stores.archive` folder is in one SQLite FTS5 table in `data/brain.db`, tokenised with stemming and accent folding, ranked by bm25. Search keys are indexed in their own column and never returned. A date stays one token, and a date asked in words ("August 21 2026") is turned into it.
 
 The index is a cache. A file whose size or mtime changed is parsed again on the next search, a deleted file loses its rows, and deleting the table loses nothing: the vault rebuilds it.

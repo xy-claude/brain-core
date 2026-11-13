@@ -12,12 +12,13 @@ from brain_core.stores.base import Kind, Record, Store, WriteResult
 from brain_core.stores.fakes import MemoryStore
 from brain_core.stores.graph import GraphStore
 from brain_core.stores.hindsight import HindsightStore
-from brain_core.stores.notes import NotesStore
+from brain_core.stores.notes import ArchiveStore, NotesStore
 from brain_core.stores.sqlite import SqliteStore
 from brain_core.stores.transcripts import TranscriptStore
 from brain_core.stores.vault import VaultStore
 
 __all__ = [
+    "ArchiveStore",
     "GraphStore",
     "HindsightStore",
     "Kind",

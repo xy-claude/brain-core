@@ -176,7 +176,13 @@ def brain_recall(
 
     ordered = sorted(
         (
-            (r, s, sc * (0.5 if stale(r) else 1.0) * (0.7 if r.kind == "transcript" else 1.0))
+            (
+                r,
+                s,
+                sc
+                * (0.5 if stale(r) else 1.0)
+                * (0.7 if r.kind == "transcript" or s == "archive" else 1.0),
+            )
             for r, s, sc in hits.values()
         ),
         key=lambda h: (h[2], h[0].date),

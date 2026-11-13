@@ -57,3 +57,11 @@ class NotesStore:
         if missing:
             return (False, f"notes: folder missing: {', '.join(missing)}")
         return (True, f"notes files={n} folders={len(self.dirs)}")
+
+
+class ArchiveStore(NotesStore):
+    """Folders of older memory copied in from another tool (``stores.archive``). Read like
+    notes; recall ranks them below the agent's own records, so a copy never outranks the line
+    it was copied from and an old value never outranks the one that replaced it."""
+
+    name = "archive"

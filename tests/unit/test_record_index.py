@@ -9,7 +9,7 @@ import pytest
 
 from brain_core.recall import brain_recall
 from brain_core.storage import Database, migrate
-from brain_core.stores import NotesStore, VaultStore
+from brain_core.stores import ArchiveStore, NotesStore, VaultStore
 from brain_core.stores.index import RecordIndex, iso_dates, match_query
 
 DAY = date(2026, 11, 2)
@@ -77,6 +77,24 @@ def test_notes_folder_is_indexed_past_the_display_cap(tmp_path: Path, index: Rec
     n = NotesStore([d], index)
     assert n.read("knowledge", "zanzibar"), "words past the first 600 characters are searchable"
     assert NotesStore([d]).read("knowledge", "zanzibar") == [], "the unindexed read is capped"
+
+
+def test_an_archive_copy_ranks_below_the_record_it_was_copied_from(
+    tmp_path: Path, index: RecordIndex
+) -> None:
+    v = vault(tmp_path, index)
+    v.write("fact", "The billing service moved to port 9100 after the March outage", when=DAY)
+    d = tmp_path / "old"
+    d.mkdir()
+    page = f"---\nupdated: {DAY.isoformat()}\n---\n# Old\n\n## world 1\nBilling service port 9100\n"
+    (d / "2026-01-01.md").write_text(page)
+
+    def order(store: NotesStore) -> list[str]:
+        out = brain_recall([v, store], "billing service port", fmt="detailed", today=DAY)
+        return [r["store"] for r in out["results"]][:2]
+
+    assert order(NotesStore([d], index)) == ["notes", "vault"], "the shorter copy wins on bm25"
+    assert order(ArchiveStore([d], index)) == ["vault", "archive"], "an archive is ranked below"
 
 
 def test_recall_ranks_indexed_records_by_bm25(tmp_path: Path, index: RecordIndex) -> None:
