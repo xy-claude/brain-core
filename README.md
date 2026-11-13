@@ -73,6 +73,50 @@ brain-core is the opposite: local, five tools, markdown files you own, and an ev
   <img src="docs/img/architecture-light.png" alt="Brain-Core sits between your AI agent and its memory. The agent uses five tools. Every memory is saved to the vault of text files first, then indexed by SQLite FTS5 with bm25 ranking, then optionally copied to the Hindsight vector memory. Searches run on the index and come back with their source. Hooks and scheduled jobs feed it, and a weak-match and miss-repair loop improves it with use." width="900">
 </picture>
 
+## Is it RAG? Yes: keyword RAG, built for an agent's brain
+
+RAG means retrieval-augmented generation: find the relevant text first, then let the model answer from it. brain-core does that on every `brain_recall`. It finds the matching records in your files and hands them to the agent with their sources, and the agent answers from those.
+
+What it is not is vector RAG. There is no embedding model and no vector database. Retrieval runs on a keyword index (SQLite FTS5, ranked by bm25), and that is on purpose: it is built for an agent's own memory, and it is built to get better the longer the agent is used.
+
+**Why this shape fits an agent's brain.** Most RAG is built for a pile of documents nobody wrote for search: manuals, tickets, a wiki. An agent's memory is different. It is short records the agent writes on purpose, one fact, decision or correction at a time, so the work of making a record findable can be done once, at the moment it is saved, by the model that understands it.
+
+**How it gets smarter with use.**
+
+| Step | What happens | What it leaves behind |
+|---|---|---|
+| Saving | The agent saves a memory with `keys`: the other words you might ask for it by | A record that answers questions phrased differently from the text |
+| A weak search | `brain_recall` says `weak_match` when nothing holds most of what was asked | No guess passed off as an answer |
+| Repair | The agent searches again in other words, then calls `brain_remember(kind='key')` with the question that missed | That question finds the record next time, for every later session |
+| Review | `brain_status` lists the questions memory could not answer in the last 30 days | A list of gaps to fill |
+| Measurement | `tests/eval/from_repairs.py` turns repaired misses into labelled eval questions | A test that grows from real use |
+| Briefing | Mental models are rewritten when one new record matches their question | A summary that stays current |
+
+Every miss that gets repaired is a miss that does not happen again, and the repair is a line in a markdown file you can read. In CI, the fixture brain after thirty days of sessions scores higher than the same brain on day one.
+
+**Keyword index or vector database.**
+
+| | Keyword index (brain-core) | Vector database |
+|---|---|---|
+| How it matches | The words in the question against the words in the record; rare words count more | Text becomes a list of numbers; the closest numbers win |
+| Exact things: names, ports, versions, error text | Strong: `port 5432` finds the record that says 5432 | Weaker: returns anything about ports or databases |
+| Different wording with no shared words | Misses unless the record has search keys | Strong: "car" finds "vehicle" with nothing extra saved |
+| A value that changed | The new value ranks first and the old one is marked `superseded` | Old and new look almost identical, so the old one can come back first |
+| Speed | About 45 ms a search | About 2 s on the self-hosted store measured here |
+| What you run | One SQLite file, rebuilt from the vault | An embedding model and a vector store (about 2 GB for Hindsight) |
+| Why a result came back | You can see it: these words matched | Hard to say: the numbers were close |
+| Large piles of text nobody wrote keys for | Weaker: it only knows the words on the page | Strong: the job it was built for |
+
+**Why brain-core does not use a vector database.** It was tested, not assumed, on 143 hand-labelled questions from a real seven-month vault:
+
+- A local embedding model blended into the ranking found 113 of 143 against 110 for keywords alone, a gain inside the noise.
+- That blend returned a changed value ahead of its replacement. For a memory, serving the old value is the worst kind of error.
+- Search keys closed the wording gap instead: reworded questions went from 13 of 75 found to 51 of 75, at no cost at query time.
+- Hindsight on the recall path found the same 50 of 75 at about 2 s a query against about 45 ms.
+- A keyword index needs nothing installed or kept alive, so the lite install takes about a minute and the index can be deleted and rebuilt from the files.
+
+The limit is real: about a third of reworded questions still miss, and a vector database is the better tool for a large body of documents nobody has written keys for. Hindsight stays available as an optional second store for anyone who wants one. The full table and method are in [Does it work?](#does-it-work)
+
 ## Mental models
 
 Search answers a question. A mental model answers a standing one before it is asked: what the priorities are, how you like to work, what was decided and why. Add a `models:` block to `brain.yaml` and `brain models` writes each as a short markdown file in `vault/models/`:
