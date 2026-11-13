@@ -4,6 +4,8 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-13
+
 ### Added
 - `stores.archive`: read-only folders of older memory, for example an export from another memory tool. They are indexed and searched like `stores.notes`, one record per `## section`, but recall ranks them below the agent's own records (the same 0.7 a transcript gets), so a copy never outranks the line it was copied from and an old value never outranks its replacement. Measured on one vault with 2,076 exported records added: as plain notes the labelled eval fell from 115 to 112 of 143 and changed values from 6 to 4 of 9; as an archive it rose to 119 with no slice lower. Mental models do not read an archive.
 
