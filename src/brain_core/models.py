@@ -6,7 +6,7 @@ does not cite one, and writes ``vault/models/<name>.md``. Nothing here is a sour
 a briefing, kept out of the search index, and each claim names the line it rests on.
 
 A model is stale when a record it cited changed or went away, when a new record of a kind it
-names arrives (or several of any kind that match its question), or when the question itself
+names arrives or a new record of any kind matches its question, or when the question itself
 changed. An unrelated write does not touch it.
 """
 
@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 
 Runner = Callable[[str, str], str]  # (system, prompt) -> the model's text
 
-NEW_RECORDS = 5  # new records of other kinds matching the question before a model is stale
+NEW_RECORDS = 1  # one new record that matches the question may contradict a claim: stale
 RECORD_CHARS = 600  # of each record shown to the model
 BODY_CHARS = 2000  # of each model loaded at session start
 API_MODEL = "claude-opus-5-5"

@@ -110,6 +110,13 @@ def test_stale_only_when_what_it_rests_on_changes(tmp_path: Path) -> None:
         assert models.status(a)["working-style"] == "stale: 1 new pattern record(s)"
 
 
+def test_one_new_record_that_matches_the_question_is_enough(tmp_path: Path) -> None:
+    with make(tmp_path) as a:
+        models.refresh(a, run=answer("- Proof first {proof}"), today=TODAY)
+        a.brain_remember("The user likes to work from a written plan", "fact", domain="system")
+        assert models.status(a)["working-style"] == "stale: 1 new record(s) match the question"
+
+
 def test_a_failed_or_empty_run_keeps_the_file_it_had(tmp_path: Path) -> None:
     with make(tmp_path) as a:
         models.refresh(a, run=answer("- Proof first {proof}"), today=TODAY)
