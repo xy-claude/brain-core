@@ -56,6 +56,14 @@ def brain_status(agent: Agent) -> dict[str, Any]:
         # the index and every reply hold them masked; the files still hold the real thing
         out["secrets_masked"] = masked
     attention: list[str] = []
+    if vault is not None and (
+        lost := sorted(f for f, why in vault.unread.items() if why != "not UTF-8")
+    ):
+        # the store is up, so this is not "down"; but the records of these files are missing
+        attention.append(
+            f"vault: {len(lost)} file(s) could not be read, their records are missing or old: "
+            + ", ".join(lost[:3])
+        )
     if agent.vectors is not None:
         out["vectors"] = agent.vectors.stats()  # model, rows, rows waiting, worker up or down
     if agent.config.recall.judge == "model":

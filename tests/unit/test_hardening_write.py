@@ -398,6 +398,9 @@ def test_an_unreadable_file_is_skipped_and_named_in_health(tmp_path: Path, db: D
         assert [r.text for r in v.read("note", "zebra")] == ["the zebra codename is quokka"]
         ok, detail = v.health()
         assert ok and "not read cleanly: sessions/2026-11-05.md" in detail
+    # a process that has searched nothing yet names the file too
+    fresh = VaultStore(tmp_path, index=RecordIndex(db))
+    assert "not read cleanly: sessions/2026-11-05.md" in fresh.health()[1]
     clean = legacy(tmp_path / "clean")
     clean.read("note")
     assert "not read cleanly" not in clean.health()[1]

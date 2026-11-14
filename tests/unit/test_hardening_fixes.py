@@ -165,6 +165,20 @@ def test_a_private_key_block_is_masked_with_its_body() -> None:
     assert not any(line in redact(" ".join(block.split())) for line in body)
 
 
+def test_a_name_after_key_or_auth_is_not_a_secret_but_a_password_is() -> None:
+    # one letter-digit touch is a name after key, token or auth; after password it is a value
+    for name in (
+        "auth: oauth2-client-credentials",
+        "cache key: transcripts_fts_v2",
+        "SSH key id_ed25519_laptop_main",
+        "primary key: user_id_v2_index_main",
+    ):
+        assert not has_secret(name), name
+    # made-up values, joined here so a secret scanner does not read this file as a leak
+    assert has_secret('"pass' + 'word": "' + "pwAbCdEfGh" + 'IjKlMnOpQ7"')
+    assert has_secret("API_" + "KEY=" + "ab12cdefgh" + "ijklmnop7rst")  # two touches
+
+
 def test_the_shapes_a_pattern_can_and_cannot_see() -> None:
     """Common shapes of a credential, every value made up here. The ones left are those no
     pattern reaches; a shape that moves in or out of that list fails this test."""
@@ -670,3 +684,12 @@ def test_sqlite_only_rows_are_marked_and_the_mark_is_dropped_with_a_vault_copy(d
     assert [r.extra.get("sole") for r in sqlite.read("fact")] == ["1"]
     sqlite.write("fact", "The gateway listens on port 7001", path="facts.md", line="3")
     assert [r.extra.get("sole") for r in sqlite.read("fact")] == [None]
+
+
+def test_status_asks_for_attention_when_a_vault_file_cannot_be_read(tmp_path: Path) -> None:
+    with _agent(tmp_path) as agent:
+        (tmp_path / "vault" / "sessions").mkdir()
+        (tmp_path / "vault" / "sessions" / "2026-11-05.md").mkdir()  # exists, is not a file
+        st = agent.brain_status()  # a fresh process: nothing has been searched yet
+        assert st["stores"]["vault"]["ok"] is True, "one lost file is not a store that is down"
+        assert "sessions/2026-11-05.md" in st["attention"][0]

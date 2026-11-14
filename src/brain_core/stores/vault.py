@@ -34,8 +34,11 @@ _LABEL = re.compile(r"\*\*[^*]{1,60}\*\*:?$|[A-Za-z][^.]{0,40}:$|#{4,6} .{0,60}$
 # fields that file an entry, not what it says: two entries that differ only here are one entry
 _STATE = ("title", "classification", "confidence", "theme", "promoted")
 # Any key format the list below does not know: a label, then one unbroken value of 16 or more
-# characters in which a letter and a digit touch. A slug that ends in a year (risk-model-2026),
-# a path, a URL, a date and a version are not such a value. The label may end a longer name
+# characters in which a letter and a digit touch. After "password" or "secret" one touch is
+# enough; after key, token, auth, licence or credential it takes two, because one touch is a
+# name there (oauth2-client-credentials, transcripts_fts_v2, id_ed25519_laptop). A slug that
+# ends in a year (risk-model-2026), a path, a URL, a date and a version are not such a value.
+# The label may end a longer name
 # (API_KEY, authToken), may be followed by a short note in brackets ("key (staging): ...") and
 # may stand in the table cell before the value's. The rest of the value's run goes with it
 # (base64 has / in it, a JWT has dots) up to a space, a quote or one of , ; & so the next
@@ -44,9 +47,11 @@ _STATE = ("title", "classification", "confidence", "theme", "promoted")
 # "key=key=" after a label took seconds (16,000 characters: 1.4 s), and this pattern reads
 # every record at index time.
 _LABELLED = (
-    r"(?P<label>(?i:key|token|secret|password|passwd|pwd|licen[cs]e|auth|credential)s?"
+    r"(?P<label>(?:(?P<strong>(?i:secret|password|passwd|pwd))|(?i:key|token|licen[cs]e|auth"
+    r"|credential))s?"
     r"(?:\s*\([^()\n]{1,24}\))?[\s\"'`*:=|]+(?:(?i:is)[\s\"'`*]+)?)(?=[A-Za-z0-9])"
     r"(?=[A-Za-z0-9_+=-]{0,64}?(?:[A-Za-z]\d|\d[A-Za-z]))"
+    r"(?(strong)|(?=(?:[A-Za-z0-9_+=-]{0,64}?(?:[A-Za-z]\d|\d[A-Za-z])){2}))"
     r"(?P<value>[A-Za-z0-9_+=-]{16,})[^\s\"'`,;&]*"
 )
 # What a pattern cannot see: a short password, a passphrase of words, digits alone, a value
@@ -194,27 +199,32 @@ class VaultStore:
             if line not in text.splitlines():
                 self._save(path, text.rstrip("\n") + "\n" + line + "\n", when)
 
+    def _sync(self) -> None:
+        """Bring the record index in line with the files, as every search does first."""
+        assert self.index is not None
+        if not self.root.is_dir():
+            # a drive that is not mounted is not an empty vault: raised before the sync
+            # below, which would drop every row (and then every vector) of the files it
+            # cannot see. One missing file cannot be told from a deleted one, and is read
+            # as deleted
+            raise FileNotFoundError(f"vault root missing: {self.root}")
+        meta = self.root / META
+        sig = meta.stat().st_mtime_ns if meta.exists() else 0
+        if sig != self._meta_sig:  # keys changed on disk: bring the index in line
+            self.index.set_keys(
+                {
+                    i: "; ".join(d[k] for k in ("keys", "learned") if k in d)
+                    for i, d in self.meta().items()
+                    if "keys" in d or "learned" in d
+                }
+            )
+            self._meta_sig = sig
+        files = {p: k for k in _INDEXED for p in self._paths(k) if p.exists()}
+        self.index.sync(self.name, files, lambda k, p: self._parse(k, p, full=True))
+
     def read(self, kind: Kind, query: str | None = None, limit: int = 50) -> list[Record]:
         if query and self.index:
-            if not self.root.is_dir():
-                # a drive that is not mounted is not an empty vault: raised before the sync
-                # below, which would drop every row (and then every vector) of the files it
-                # cannot see. One missing file cannot be told from a deleted one, and is read
-                # as deleted
-                raise FileNotFoundError(f"vault root missing: {self.root}")
-            meta = self.root / META
-            sig = meta.stat().st_mtime_ns if meta.exists() else 0
-            if sig != self._meta_sig:  # keys changed on disk: bring the index in line
-                self.index.set_keys(
-                    {
-                        i: "; ".join(d[k] for k in ("keys", "learned") if k in d)
-                        for i, d in self.meta().items()
-                        if "keys" in d or "learned" in d
-                    }
-                )
-                self._meta_sig = sig
-            files = {p: k for k in _INDEXED for p in self._paths(k) if p.exists()}
-            self.index.sync(self.name, files, lambda k, p: self._parse(k, p, full=True))
+            self._sync()
             return self.index.search(self.name, [kind], query, limit)
         paths = self._paths(kind)
         out: list[Record] = []
@@ -572,6 +582,10 @@ class VaultStore:
             probe.unlink()
         except OSError as e:
             return (False, f"vault not writable: {e}")
+        if self.index:
+            # a file that cannot be read is tried again at every sync, so a process that has
+            # searched nothing yet names it too; only changed files are read
+            self._sync()
         bad = ", ".join(
             f"{rel} ({why})"
             for rel, why in sorted(self.unread.items())
