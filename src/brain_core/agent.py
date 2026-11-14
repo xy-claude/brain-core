@@ -175,14 +175,19 @@ class Agent:
         fmt: str = "concise",
         limit: int = 10,
         offset: int = 0,
+        judge: bool = True,
+        vectors: bool = True,
     ) -> dict[str, Any]:
-        """One query across every store, deduplicated and ranked. See :mod:`brain_core.recall`."""
-        vectors = self.vectors
-        if vectors is not None:
+        """One query across every store, deduplicated and ranked. See :mod:`brain_core.recall`.
+
+        ``judge=False`` and ``vectors=False`` switch those parts off for this call whatever the
+        config says: hooks and session start use them, where nobody reads a verdict."""
+        index = self.vectors if vectors else None
+        if index is not None:
             # the worker is about to be asked anyway: give recent saves their vectors first.
             # If it cannot be reached, recall reports that and answers from keywords
             with contextlib.suppress(EmbedUnavailable):
-                vectors.fill(limit=16)
+                index.fill(limit=16)
         out = brain_recall(
             self.stores,
             query,
@@ -190,9 +195,9 @@ class Agent:
             fmt=fmt,
             limit=limit,
             offset=offset,
-            vectors=vectors,
+            vectors=index,
             candidates=self._config.recall.candidates,
-            judge=self.judge,
+            judge=self.judge if judge else None,
             judge_candidates=self._config.recall.judge_candidates,
         )
         miss = out.pop("miss", None)

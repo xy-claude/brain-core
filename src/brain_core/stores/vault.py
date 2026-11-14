@@ -34,6 +34,17 @@ _SECRET = re.compile(
     r"|-----BEGIN [A-Z ]*PRIVATE KEY-----"
 )
 
+
+def has_secret(text: str) -> bool:
+    """True when ``text`` holds something that looks like a credential."""
+    return bool(_SECRET.search(text))
+
+
+def redact(text: str) -> str:
+    """``text`` with every credential-shaped run replaced, for indexing and for replies."""
+    return _SECRET.sub("[redacted]", text)
+
+
 FILES: dict[Kind, str] = {
     "fact": "facts.md",
     "pattern": "patterns.md",
