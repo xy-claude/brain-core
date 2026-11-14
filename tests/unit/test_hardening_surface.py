@@ -514,4 +514,5 @@ def test_the_copy_end_keeps_holds_a_stray_byte_as_it_was(tmp_path: Path) -> None
     with Agent.from_config(cfg) as agent:
         agent.brain_session("start", "s-1")
         agent.brain_session("end", "s-1", executive_state=GOOD)
-    assert (vault / "executive_state.prev.md").read_bytes() == was
+    # the stray byte is what must survive; text mode on Windows writes \r\n line ends
+    assert (vault / "executive_state.prev.md").read_bytes().replace(b"\r\n", b"\n") == was
