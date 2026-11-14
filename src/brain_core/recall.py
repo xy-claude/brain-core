@@ -201,14 +201,18 @@ def brain_recall(
     def stale(r: Record) -> bool:
         return normalize(r.text).lower() in superseded or r.id[:16] in retired
 
+    def halved(r: Record) -> float:
+        # a line a "Fact changed" banner quotes has no link to its replacement, so its score is
+        # cut. A linked record keeps its score: `_current` puts its replacement just above it,
+        # and a question about the past can still find the old value
+        return 0.5 if normalize(r.text).lower() in superseded else 1.0
+
     ordered = sorted(
         (
             (
                 r,
                 s,
-                sc
-                * (0.5 if stale(r) else 1.0)
-                * (0.7 if r.kind == "transcript" or s == "archive" else 1.0),
+                sc * halved(r) * (0.7 if r.kind == "transcript" or s == "archive" else 1.0),
             )
             for r, s, sc in hits.values()
         ),
@@ -230,7 +234,7 @@ def brain_recall(
     ):
         try:
             near = [
-                (r, s, sim * (0.5 if stale(r) else 1.0) * (0.7 if s == "archive" else 1.0))
+                (r, s, sim * halved(r) * (0.7 if s == "archive" else 1.0))
                 for r, s, sim in vectors.search(query, candidates)
                 if r.kind in kinds and scope in ("all", *KINDS, s)
             ]

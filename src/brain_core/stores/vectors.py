@@ -145,17 +145,6 @@ class VectorIndex:
                 out.append((Record(**d), row["store"], float(sims[int(i)])))
         return out
 
-    def index_record(self, rid: str) -> tuple[Record, str] | None:
-        """The record ``rid`` as the keyword index holds it, with its store."""
-        row = self.db.fetchone(
-            "SELECT record, store FROM records_fts WHERE rid = ? LIMIT 1", (rid,)
-        )
-        if not row:
-            return None
-        d = json.loads(row["record"])
-        d["date"] = date.fromisoformat(d["date"])
-        return Record(**d), row["store"]
-
     def stats(self) -> dict[str, Any]:
         row = self.db.fetchone(
             "SELECT count(*) AS n FROM record_vectors WHERE model = ?", (self.model,)

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -295,35 +294,6 @@ def test_one_record_can_replace_several_and_chains_resolve(tmp_path: Path) -> No
         vault.supersede("d" * 16, "c" * 16)  # type: ignore[attr-defined]
         got = vault.replaced()  # type: ignore[attr-defined]
         assert got == {"a" * 16: "c" * 16, "b" * 16: "c" * 16, "c" * 16: "d" * 16}
-
-
-def test_brain_links_writes_what_the_model_confirms_and_asks_once(tmp_path: Path) -> None:
-    from brain_core import links
-
-    with _agent(tmp_path) as agent:
-        _index(agent).fill()
-        asked: list[str] = []
-
-        def run(system: str, prompt: str) -> str:
-            asked.append(prompt)
-            n = [
-                i
-                for i, p in enumerate(prompt.split("Pair ")[1:], 1)
-                if "15432" in p.split("NEW")[0]
-            ]
-            return json.dumps({"replaced": n})
-
-        links.NEAR = 0.0  # the fake vectors are not close; every older neighbour is a candidate
-        try:
-            out = links.find(agent, run)
-            again = links.find(agent, run)
-        finally:
-            links.NEAR = 0.7
-        assert out["links"] >= 1 and out["failed"] == 0 and again["pairs"] == 0
-        vault = agent.stores[1]
-        old = next(r for r in vault.read("fact", None, 99) if "15432" in r.text)
-        assert old.id[:16] in vault.replaced()  # type: ignore[attr-defined]
-        assert "OLD (fact, 2026-04-01)" in asked[0]
 
 
 # ── dates ────────────────────────────────────────────────────────────────────

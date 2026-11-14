@@ -369,41 +369,6 @@ def index_cmd(
             typer.echo(f"vectors: {agent.vectors.stats()['rows']} records, none waiting")
 
 
-@app.command("links")
-def links_cmd(
-    path: Annotated[
-        Path, typer.Argument(help="Path to agent directory (contains brain.yaml).")
-    ] = Path(),
-    dry_run: Annotated[
-        bool, typer.Option("--dry-run", help="Show the links a model finds; write nothing.")
-    ] = False,
-    limit: Annotated[
-        int, typer.Option("--limit", help="Ask about at most this many pairs (0 = all).")
-    ] = 0,
-) -> None:
-    """Find records a newer record replaced and link them in the vault's record_meta.md, so
-    recall never shows the old value above the new one. Needs `stores.vectors` and a model
-    runner (`recall.runner`). Asks a model about each record's nearest older neighbours."""
-    from brain_core import links
-    from brain_core.models import run_api, run_claude
-
-    with _open(path) as agent:
-        cfg = agent.config.recall
-        fn = run_api if cfg.runner == "api" else run_claude
-        out = links.find(
-            agent, lambda s, p: fn(s, p, cfg.model), limit=limit or None, write=not dry_run
-        )
-    if "note" in out:
-        typer.echo(out["note"], err=True)
-        raise typer.Exit(code=1)
-    for old, new in out["found"]:
-        typer.echo(f"{new}  replaces  {old}")
-    typer.echo(
-        f"{out['pairs']} pairs asked, {out['links']} links "
-        f"{'found (dry run)' if dry_run else 'written'}, {out['failed']} left for the next run"
-    )
-
-
 @app.command("brief")
 def brief_cmd(
     path: Annotated[
