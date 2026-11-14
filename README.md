@@ -107,9 +107,9 @@ Every miss that gets repaired is a miss that does not happen again, and the repa
 | Why a result came back | You can see it: these words matched | Hard to say: the numbers were close |
 | Large piles of text nobody wrote keys for | Weaker: it only knows the words on the page | Strong: the job it was built for |
 
-**Why brain-core does not use a vector database.** It was tested, not assumed, on 143 hand-labelled questions from a real seven-month vault:
+**Why brain-core does not ship a vector database today.** A first test, on 143 hand-labelled questions from a real seven-month vault, did not show a gain worth its cost:
 
-- A local embedding model blended into the ranking found 113 of 143 against 110 for keywords alone, a gain inside the noise.
+- A small static embedding model blended into the ranking found 113 of 143 against 110 for keywords alone: seven questions fixed and four broken, a tie. That is one small model and one way of combining the two, not a verdict on vector search.
 - That blend returned a changed value ahead of its replacement. For a memory, serving the old value is the worst kind of error.
 - Search keys closed the wording gap instead: reworded questions went from 13 of 75 found to 51 of 75, at no cost at query time.
 - Hindsight on the recall path found the same 50 of 75 at about 2 s a query against about 45 ms.
@@ -427,7 +427,7 @@ The recall tasks there are judged by substring, and a question written in the no
 
 How to read it. The index alone took reworded questions from 13 to 31; search keys took them to 51, and those keys were written by a model that never saw the questions. A vault with no keys starts near 31. A third of reworded questions still miss, which is what miss repair is for. Median recall is about 45 ms on the keyword index; with Hindsight on the recall path it was about 2 s and found the same 50 of 75, which is why it can be switched off (`stores.hindsight.recall: false`). This is one vault and one author's questions, not a public benchmark.
 
-**Vector search was tested and left out.** With search keys in place, the same 143 questions were run with a local embedding model (potion-retrieval-32M, 3,153 records embedded in 0.1 s) blended into the keyword ranking. The best blend found 7 questions keywords missed and lost 4 that keywords had, for 113 of 143 against 110: a gain inside the noise, paid for with a changed value coming back ahead of its replacement and a missed date question. Meaning alone scored 89. Search keys and vectors catch largely the same misses, and keys cost nothing at query time, so brain-core ships no vector index. The same tie showed with Hindsight on the recall path (50 of 75 both ways).
+**A small embedding model was tested and tied.** With search keys in place, the same 143 questions were run with a local embedding model (potion-retrieval-32M, 3,153 records embedded in 0.1 s) blended into the keyword ranking. The best blend found 7 questions keywords missed and lost 4 that keywords had, for 113 of 143 against 110: a gain inside the noise, paid for with a changed value coming back ahead of its replacement and a missed date question. Meaning alone scored 89. Search keys and this model caught largely the same misses, and keys cost nothing at query time, so brain-core ships no vector index today. The test covers one small static model blended by score. A stronger model used as a second search beside keywords, with the scores never blended, has not been measured yet. The same tie showed with Hindsight on the recall path (50 of 75 both ways).
 
 ```bash
 python tests/eval/run_recall.py --config ~/Agents/Atlas/brain.yaml                          # the CI tasks, on your vault
