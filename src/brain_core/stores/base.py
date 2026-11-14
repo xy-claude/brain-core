@@ -45,6 +45,9 @@ class Record:
     line: int = 0
     extra: dict[str, str] = field(default_factory=dict)
     score: float = 0.0  # bm25 from the record index (higher is better); 0 = the store gave none
+    # the line carries no date of its own: `date` is only its file's, so it earns no recency,
+    # is not found by day, and is shown as undated
+    undated: bool = False
 
 
 def full_text(r: Record) -> str:
