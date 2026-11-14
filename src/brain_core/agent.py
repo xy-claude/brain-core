@@ -202,6 +202,11 @@ class Agent:
                 "A model read the closest records and none answers the question. Say it is "
                 "not on record; the results below are only the nearest topics."
             )
+        elif out.get("judged") == "partial":
+            out["thin_recall"] = (
+                "The records found hold only part of the answer. Search again in other words "
+                "for the missing part before answering."
+            )
         elif miss is not None and offset == 0:
             # a miss is an eval case waiting to be written; brain daily and brain_status list them
             self.log_event("recall_miss", {"query": query[:200], "scope": scope, **miss})

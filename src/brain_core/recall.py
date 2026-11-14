@@ -288,6 +288,8 @@ def brain_recall(
         "total": total,
         "results": results,
     }
+    if verdict:
+        out["judged"] = verdict  # answered | partial | not_in_memory, from the model judge
     if verdict == "not_in_memory":
         # a model read the candidates and none answers: stronger than a low keyword cover
         out["miss"] = {"best": round(best, 2), "hits": total, "judged": True}

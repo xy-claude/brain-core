@@ -148,6 +148,7 @@ def summary(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
         out[s] = {
             "n": len(rs),
             "hits": sum(r["hit"] for r in rs),
+            "any_gold": sum(r["rank"] is not None for r in rs),  # multi: at least one of them
             "top1": sum(r["rank"] == 1 for r in rs),
             "top5": sum(bool(r["rank"]) and r["rank"] <= 5 for r in rs),
             "answer_hits": sum(r["answer"] for r in keyed),
@@ -208,6 +209,11 @@ def main() -> int:
             f"{s:<9} {v['hits']:>4}/{v['n']:<4} {v['top5']:>5} {v['top1']:>5} "
             f"{v['answer_hits']:>4}/{v['answer_n']:<4} {v['mrr']:>6} {v['flagged_miss']:>8} "
             f"{v['median_ms']:>6}"
+        )
+    if multi := summary(rows).get("multi"):
+        print(
+            f"\nmulti: every needed record {multi['hits']}/{multi['n']}, "
+            f"at least one {multi['any_gold']}/{multi['n']}"
         )
     if a.depth:
         print(f"\nceiling: gold record anywhere in the top N (of {a.depth} asked)")

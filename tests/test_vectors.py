@@ -180,7 +180,7 @@ def test_judge_picks_go_first_and_an_unknown_number_is_dropped(tmp_path: Path) -
             return f'Here you go: {{"picks": [{n}, 99], "status": "answered"}}'
 
         out = brain_recall(agent.stores, "office server port", fmt="detailed", judge=run)
-        assert "coffee machine" in out["results"][0]["text"]
+        assert "coffee machine" in out["results"][0]["text"] and out["judged"] == "answered"
         assert out["results"][0]["found_by"] == ["judge"] and out["stores"]["judge"] == "answered"
         assert (
             "miss" not in out
@@ -261,6 +261,9 @@ def test_agent_reports_not_in_memory_when_the_judge_says_so(
         agent.config.recall.judge = "model"
         out = agent.brain_recall("database port office")
         assert "not_in_memory" in out and "weak_match" not in out
+        part = '{"picks": [1], "status": "partial"}'
+        monkeypatch.setattr("brain_core.agent.run_api", lambda system, prompt, model=None: part)
+        assert "thin_recall" in agent.brain_recall("database port office")
 
 
 # ── current beats old ────────────────────────────────────────────────────────
