@@ -427,7 +427,33 @@ The recall tasks there are judged by substring, and a question written in the no
 
 How to read it. The index alone took reworded questions from 13 to 31; search keys took them to 51, and those keys were written by a model that never saw the questions. A vault with no keys starts near 31. A third of reworded questions still miss, which is what miss repair is for. Median recall is about 45 ms on the keyword index; with Hindsight on the recall path it was about 2 s and found the same 50 of 75, which is why it can be switched off (`stores.hindsight.recall: false`). This is one vault and one author's questions, not a public benchmark.
 
-**A small embedding model was tested and tied.** With search keys in place, the same 143 questions were run with a local embedding model (potion-retrieval-32M, 3,153 records embedded in 0.1 s) blended into the keyword ranking. The best blend found 7 questions keywords missed and lost 4 that keywords had, for 113 of 143 against 110: a gain inside the noise, paid for with a changed value coming back ahead of its replacement and a missed date question. Meaning alone scored 89. Search keys and this model caught largely the same misses, and keys cost nothing at query time, so brain-core ships no vector index today. The test covers one small static model blended by score. A stronger model used as a second search beside keywords, with the scores never blended, has not been measured yet. The same tie showed with Hindsight on the recall path (50 of 75 both ways).
+**A small embedding model was tested and tied.** With search keys in place, the same 143 questions were run with a local embedding model (potion-retrieval-32M, 3,153 records embedded in 0.1 s) blended into the keyword ranking. The best blend found 7 questions keywords missed and lost 4 that keywords had, for 113 of 143 against 110: a gain inside the noise, paid for with a changed value coming back ahead of its replacement and a missed date question. Meaning alone scored 89. Search keys and this model caught largely the same misses, and keys cost nothing at query time, so brain-core ships no vector index today. The test covers one small static model blended by score. A stronger model used as a second search beside keywords, with the scores never blended, was measured next: see below. The same tie showed with Hindsight on the recall path (50 of 75 both ways).
+
+**Hybrid recall (optional, experimental).** `stores.vectors` adds a second search by meaning beside the keyword index, and `recall.judge: model` lets a model read the best candidates and pick the ones that answer, or say that none does. Both are off unless you set them, and without them recall is exactly the keyword recall above.
+
+```yaml
+stores:
+  vectors: {model: Qwen/Qwen3-Embedding-0.6B}   # pip install "brain-core-mcp[vectors]", then `brain index`
+recall:
+  judge: model          # default: agent (the calling agent reads the list itself)
+  runner: claude        # your own Claude Code login; `api` needs a key
+```
+
+Measured on the same vault with a larger set: 446 hand-checked questions (299 to tune on, 147 held out and opened once per stage), each run compared with the one before it question by question.
+
+| Recall | Tuning set (299) | Held out (147) | Broken against keywords |
+|---|---|---|---|
+| Keywords and search keys (the default) | 193 | 99 | |
+| + vector search, joined by rank | 221 | 116 | 9 and 4 |
+| + a model judge (three runs: 260, 260, 259) | 261 | 134 | 1 and 1 |
+
+What moved, on the held-out questions: reworded 31 to 46 of 53, questions that need several records 8 to 14 of 17, changed values 7 to 12 of 12, questions whose answer is not in memory correctly refused 14 to 19 of 19, exact identifiers 17 to 18 of 18. Answerable questions wrongly flagged as a miss fell from 40 to 4 of 128.
+
+How it works. Each search puts forward its best 150 records and the lists are joined by rank, never by score. A record holding an exact identifier from the question (a port, a version, a file name) goes first. A day named in the question adds that day's records. A record another one replaced never stands above its replacement. Then the judge reads the best 50 with their dates and returns the numbers of the ones that answer; it can only point at records it was shown, and if it fails, recall returns its own order.
+
+What it costs. The embedding model is held by one small worker per machine, shared by every agent, started on the first call and gone after five idle minutes: about 1.6 GB of memory while it answers (2.7 GB during a full index), 1.3 GB on disk, plus the library (about 850 MB). On an Apple Silicon GPU a question takes about 45 ms to embed once the worker is up and a 5,400-record vault indexes in about five minutes; on CPU alone indexing is too slow to be practical. The judge is one model call per recall, about 3 s with a small model. Unix only for now: on Windows the vector search stays off and recall answers from keywords.
+
+What is not solved. Two of 37 changed-value questions still showed an old value first, because the current record was not among the candidates. Embedding records together with their keys and dates was tried and dropped (8 fixed, 5 broken). A larger embedding model was not tried. It is one vault and one author's questions, most of them drafted by a model and checked, not a public benchmark.
 
 ```bash
 python tests/eval/run_recall.py --config ~/Agents/Atlas/brain.yaml                          # the CI tasks, on your vault
