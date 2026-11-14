@@ -14,8 +14,8 @@ from collections.abc import Sequence
 from datetime import date
 from typing import Any
 
-from brain_core.recall import WAS_CHARS, tokens
-from brain_core.stores.base import Kind, Record, Store, WriteResult, record_id
+from brain_core.recall import _WAS, WAS_CHARS, tokens
+from brain_core.stores.base import Kind, Record, Store, WriteResult, normalize, record_id
 from brain_core.stores.graph import relation_text
 from brain_core.stores.vault import _SECRET, redact
 
@@ -133,7 +133,15 @@ def _closest(stores: Sequence[Store], kind: Kind, text: str) -> tuple[Record, fl
             recs = store.read(kind, text if getattr(store, "ranked", False) else None, 2000)
         except Exception:
             continue
+        # so is a line a "Fact changed" banner quotes: a lite install and an older banner have
+        # no link, and every banner carries the quote
+        quoted: dict[str, set[str]] = {}
         for r in recs:
+            for m in _WAS.finditer(r.text):
+                quoted.setdefault(normalize(m.group(1)).lower(), set()).add(r.id)
+        for r in recs:
+            if quoted.get(normalize(redact(r.text)[:WAS_CHARS]).lower(), set()) - {r.id}:
+                continue
             # the same text again is let through: the vault gets the line, the row its copy
             if (
                 copies

@@ -237,17 +237,19 @@ def test_pages_with_the_judge_on_show_no_record_twice(tmp_path: Path) -> None:
         assert len(seen) >= 150
 
 
-def test_a_value_changed_back_is_a_change_not_a_duplicate(tmp_path: Path) -> None:
-    with _agent(tmp_path) as agent:
+@pytest.mark.parametrize("vault", [True, False], ids=["vault", "lite"])
+def test_a_value_changed_back_is_a_change_not_a_duplicate(tmp_path: Path, vault: bool) -> None:
+    if not vault:
+        (tmp_path / "brain.yaml").write_text("name: T\n")
+    with _agent(tmp_path) if vault else Agent.from_config(tmp_path / "brain.yaml") as agent:
         agent.brain_remember("The gateway listens on port 7001 for the staging cluster", "fact")
         agent.brain_remember("The gateway listens on port 7002 for the staging cluster", "fact")
         back = agent.brain_remember(
             "The gateway listens on port 7001 for the staging cluster", "fact"
         )
         assert back["status"] != "duplicate" and "contradiction" in back
-        first = agent.brain_recall("which port does the gateway listen on", fmt="detailed")[
-            "results"
-        ][0]
+        out = agent.brain_recall("which port does the gateway listen on", fmt="detailed")
+        first = out["results"][0]
         assert "7001" in first["text"].split("(was:")[0] and "superseded" not in first
 
 
