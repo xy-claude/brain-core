@@ -16,7 +16,7 @@ Honest table, as of 12 November 2026 (brain-core 0.5.1), from each project's own
 | Scaffolds the agent (rules, skills, hooks) | `brain init`, 32 files | no (plugin only) | no | no |
 | Vector search | optional: Hindsight (self-hosted, MIT); can be kept for writes and left out of recall | Chroma | Qdrant | none |
 | Works for agents other than Claude Code | yes, Python library + MCP | Claude Code plugin | any MCP client | Claude Code |
-| Published eval | a regression set in CI, and 143 hand-labelled questions on a real vault with the misses reported (README) | no | no | no |
+| Published eval | a regression set in CI, and 143 questions on a real vault, labelled by a model, with the misses reported (README) | no | no | no |
 | First install | one line; about a minute with `--lite`, about 2 GB more with Hindsight | `/plugin install` inside Claude Code | `make up` with Docker | none |
 | License | MIT | MIT | Apache-2.0 | n/a |
 

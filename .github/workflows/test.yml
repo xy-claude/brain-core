@@ -18,6 +18,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Nothing under local/ is tracked (it holds private eval data)
+        run: test -z "$(git ls-files local)"
+
       - name: Install uv
         uses: astral-sh/setup-uv@v10.3.3
         with:

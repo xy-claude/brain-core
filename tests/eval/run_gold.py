@@ -1,4 +1,4 @@
-"""Recall eval against hand-labelled record ids. No judge model, and nothing is logged.
+"""Recall eval against labelled record ids. No judge model, and nothing is logged.
 
     .venv/bin/python tests/eval/run_gold.py --config brain.yaml --questions questions.yaml \
         [--split dev|heldout] [--depth 500] [--out result.json] [--misses]
@@ -19,8 +19,9 @@ rewrites text (a vector store) returns the answer under another id.
 A question may carry ``split: dev|heldout``; one without it is held out when it is every third.
 ``--depth N`` asks a second time for the top N and reports how many questions have their gold
 record anywhere in the top 50, 100, 200 and N: the ceiling a reader of that list could reach.
-The last line counts the two ways "not in memory" goes wrong: a false answer (an absent question
-not flagged) and a false refusal (an answerable question flagged as a miss).
+The last line counts three errors: a false answer (an absent question not flagged), a false
+refusal (an answerable question flagged as a miss), and a miss with no warning (an answerable
+question whose record did not come back, with nothing in the reply to say so).
 
 It calls ``recall.brain_recall`` on the stores, never ``Agent.brain_recall``, so no
 ``recall_miss`` event is written to the database under test.
@@ -182,6 +183,10 @@ def refusals(rows: list[dict[str, Any]]) -> dict[str, int]:
         "answerable_n": len(rest),
         "false_refusals": sum(r["flagged_miss"] for r in rest),
         "refused_though_found": sum(r["flagged_miss"] and r["hit"] for r in rest),
+        # the error with no warning: an answerable question, the right record not returned,
+        # and nothing in the reply says so. An upper bound: a label can miss a second record
+        # that also answers
+        "missed_no_warning": sum(not r["hit"] and not r["flagged_miss"] for r in rest),
     }
 
 
@@ -226,7 +231,8 @@ def main() -> int:
     print(
         f"\nfalse answers {f['false_answers']}/{f['absent_n']} absent questions; "
         f"false refusals {f['false_refusals']}/{f['answerable_n']} answerable "
-        f"({f['refused_though_found']} of them had the record in the top k)"
+        f"({f['refused_though_found']} of them had the record in the top k); "
+        f"missed with no warning {f['missed_no_warning']}/{f['answerable_n']}"
     )
     errors = sorted({e for r in rows for e in r["errors"]})
     if errors:

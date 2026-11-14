@@ -47,13 +47,27 @@ These are ingestion-time gates — the paper shows downstream defenses fail, so 
 
 ## Also built, outside the six gates
 
-- **A secret filter on every write.** Text in a known secret format is refused before any store sees it. It knows formats, so an unusual key passes.
+- **A secret filter on every write, and a mask on every read.** Text that holds a credential is refused before any store sees it. The same patterns mask such text when a file written by hand is indexed, and again in every reply, in the session start block, the daily brief and the lessons hook. `brain_status` and `brain doctor` count the masked records (`secrets_masked`). What it knows: vendor formats (API keys, tokens, JWTs, private-key blocks, a password inside a URL, dash-joined licence keys) and a long mixed value after a label such as `key`, `token`, `password` or `secret`. What no pattern can see: a short password, a passphrase of plain words, a password with punctuation, digits alone, a random string with neither a label nor a vendor prefix. A match is masked or refused, never removed: the file still holds it, so rotate the credential and delete the line.
+- **Original text can stay in `data/brain.db`.** Masking happens when a record is indexed. A transcript row indexed before a pattern knew its format, and a fact that 0.8.0 copied into the SQLite table, keep their original text in the database file. No reply returns it (replies are masked on the way out), but the file itself should be treated like the vault: private, not shared, not committed.
+- **One match refuses the whole text.** `brain_remember`, `brain_distill` and `brain_session('end')` write nothing when any part of the text matches, including a `://user:password@` example in a page you distill. Remove the value and call again.
 - **A weak match is said to be weak.** `brain_recall` returns `weak_match` when no record holds most of what was asked, which keeps a near miss from being read as an answer.
 - **Files you can audit.** Every memory is a line in a markdown file with a date, so a poisoned entry can be found with grep and removed by hand.
 
 ## What leaves the machine
 
-Memory stays on disk. Three things go out: the LLM calls Hindsight makes to reason over memories (none in lite mode; the text of your memories is in those calls), one version check a day to PyPI (it sends nothing about you; `cron.update_check: false` stops it), and the pages you ask `brain_distill` to fetch.
+The vault, the database and the vector index stay on disk. What goes out depends on what you switch on:
+
+| Feature | What is sent | To whom | Off by default? How to turn it off |
+|---|---|---|---|
+| Keyword recall, `brain_remember`, the record index | Nothing | | Always local |
+| Vector search (`stores.vectors`) | Nothing about your memory. The embedding model (about 1.3 GB) is downloaded once | Hugging Face, for the download only. Once the model is on disk the worker loads it without contacting the hub | Off unless set |
+| Model judge (`recall.judge: model`) | On every recall: the question and up to `recall.judge_candidates` records (default 50), up to 700 characters each. Credential-shaped text is masked when a record is indexed, and a record that still matches a pattern is withheld whole. Roughly 7,000 tokens a call | Anthropic: your API key (`runner: api`) or your own Claude Code login (`runner: claude`). The model is `claude-haiku-5-5` unless `recall.model` names another | Off unless set (`judge: agent` is the default: the calling agent reads the list itself) |
+| Mental models (`brain models`) | Per model, per refresh: up to `models.records` records (default 150), up to 600 characters each; a record that matches a credential pattern is never sent | Anthropic, through `models.runner` | Runs only when you run it or schedule it |
+| Hindsight (`stores.hindsight`) | The text of what you save and ask, to the Hindsight service you configured, and from there to the LLM it uses | Your Hindsight server and its LLM provider | Off unless set |
+| `brain_distill` | A request for the page you name; the first run also fetches a pinned page reader from npm | The site you asked for, and npm | Only when called |
+| Update check | A version lookup that sends nothing about you | PyPI, once a day | `cron.update_check: false` |
+
+With the judge on, `brain_recall` tells the client it reaches outside the machine (`openWorldHint`).
 
 ## What this is *not*
 

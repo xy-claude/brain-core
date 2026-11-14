@@ -4,6 +4,59 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-14
+
+A hardening release. 0.8.0 was reviewed end to end (storage, write path, recall, sessions, operations, the eval) and this fixes what the review confirmed. Nothing is removed from a vault, and every record id of an existing vault stays the same.
+
+### Security
+- A credential in a file written by hand no longer comes back from recall. Text is masked as `[redacted]` when a record is indexed (vault, notes and archive folders, so the vector of that record is made from the masked text too) and again in every reply: recall results, the duplicate and contradiction replies of `brain_remember`, the session start block, the daily brief and the lessons hook. `brain_status` and `brain doctor` report `secrets_masked`, the number of indexed records that held one. The file is never changed: rotate the credential and delete the line.
+- The secret pattern knows more shapes: a private-key block with its body, a password inside a URL, Stripe, Google, Telegram, Hugging Face, npm, PyPI, GitLab, SendGrid, DigitalOcean and Slack webhook formats, dash-joined licence keys, and any long mixed value after a label (`key`, `token`, `auth`, `licence`, `credential`: a letter and a digit must touch twice, so `oauth2-client-credentials` is a name; `password`, `secret`: once). `domain` is checked on a write as well. `docs/THREAT_MODEL.md` lists what no pattern can see.
+- The judge is shown records inside a `<records>` block that a record cannot close, and is told they are stored data, never instructions. The `brain_recall` description tells the calling agent the same about result text.
+- `docs/THREAT_MODEL.md` now states what leaves the machine for each feature, with the judge on and off.
+
+### Changed
+- **The vault is the only truth for facts and patterns.** With a vault configured, the SQLite `facts` table is no longer searched and no longer used for the duplicate check, so a line you edit or delete by hand is what recall and `brain_remember` see. The copy still answers for rows no vault file ever held (saved with no vault, or when the vault write failed: new saves mark them), when asked by name (`scope='sqlite'`), and when the vault cannot be read. A row saved by 0.8.0 that is in no vault file is not shown by default; `scope='sqlite'` finds it.
+- **A line with no date of its own is undated.** A fact or pattern bullet without `(YYYY-MM-DD)` used to carry its file's date, which every later write moved to today. It now shows no date, is not found by day, never wins a tie as the newest, and is given to the judge and to the mental-model writer as `undated`. It still ranks as current, as a standing fact should (ranked as six months old, four right records left the keyword top ten).
+- **The reader takes in more of a hand-written vault**: decisions under a level-3 heading or with a time between the date and the dash, every field of a decision or correction (the rule a correction teaches is searchable), paragraphs, lists and tables in session files, and the text above a knowledge page's first heading. On one seven-month vault that is 427 more records; all 5,394 existing ids are unchanged.
+- A decision or correction saved under a title that an earlier entry has, with another body, is stored as `<title> (2)` instead of being dropped as a duplicate. A decision is linked to the one before it, so the newer one is shown first. The reply names the stored title.
+- `not_in_memory` now says how many candidates the judge read out of how many were gathered, calls the result a miss of this search and not proof of absence, and asks for one more search in other words before the agent says it is not on record. Every judged reply carries `judge_read`.
+- The `brain_recall` description asks for the full question in plain words with any exact name, number, date or file, and explains `judged`, `not_in_memory`, `thin_recall`, `weak_match`, `degraded`, `found_by` and `undated`.
+- `recall.judge: model` with no `recall.model` uses `claude-haiku-5-5`, the model the eval measured, on either runner. Before, it ran every recall on the runner's own default. `recall.judge_timeout` (60 s) bounds one judge call; past it, recall answers in its own order.
+- The failed-command hook and session start use the plain keyword search: no judge call, no vector search, no embed worker started, no miss logged. The hook searches for the last error line and prints a past line only when it holds at least half of that line's words.
+- The archive's 0.7 weight is taken off the vector list (cosines sit in a narrow band, where it sent the best archive record from place 3 to place 81). It stays on the keyword score.
+- A scope is honoured by the vector search, the date search and the identifier rule. Paging continues the order the judge gave the first page, with no second judge call. An empty question touches no store; a question over 1,000 characters is cut and the reply says so (`query_cut`).
+- `brain_session('end')` keeps the executive state and critique it replaces as `.prev.md`. An executive state without the headings `brain_session('start')` reads is written with a `warning` that names them, and start, status and doctor show a note instead of "0 pending".
+- Every fallback to keywords is logged (`recall_degraded`) and the reply says what fell back and why (`degraded`). `brain_status` counts them, `brain doctor` prints the vectors, judge and fallback lines, and both end in attention when recall fell back in the last day, when records wait for a vector that cannot be made, or when a vault file cannot be read.
+- An index built by 0.8.0 is upgraded on first use: every file is read once more, existing vectors are kept, and new or changed records get theirs on the next recall or `brain index`. 0.8.0 can still read the upgraded index.
+- Templates: rules 03 to 05 and the brain-check, session-end and distill skills describe the configured stores instead of naming Hindsight.
+
+### Fixed
+- A wrong `stores.vectors.model` name no longer wipes the vectors of the model before it: a row is replaced only when the new model has made that record's vector.
+- The embed worker loads a model that is on disk without contacting Hugging Face. A worker that cannot start is not started again by every recall: callers get the reason at once for five minutes.
+- A missing `numpy`, an unreadable vector or a vector of the wrong length makes recall answer from keywords (and say so) instead of raising. Vector search fetches its nearest records in one query (236 ms to 8 ms on 5,400 records).
+- A vault folder that is missing (a drive not mounted) is an error, not an empty vault: the index and the vectors are left alone and SQLite answers. One file that cannot be read is skipped and named, not the end of the read; a byte that is not UTF-8 costs one character and is written back unchanged. `brain_status` no longer raises when a session file cannot be read.
+- The capture hook retries a message whose vault write failed instead of counting it as a duplicate and moving on.
+- "mark 3", "decision 5" and "3 decisions" are no longer read as dates.
+- A "Fact changed" banner quotes the start of the old line, so a fact that changes often does not grow by its history, and recall marks a long old line as replaced. A current line is never marked by the quote it carries itself.
+- A pattern saved again under its bold title is a duplicate, and a changed number in one is caught.
+- A field under a `####` to `######` heading no longer overwrites the entry above it. A decision or correction with a blank title falls back to its text.
+- Two overlapping sessions that both close no longer raise the recovery flag.
+- `npx defuddle` is pinned to a version in `brain_distill`.
+
+### Eval
+- Re-measured on the frozen vault (446 questions, 0.8.0 against 0.9.0): keywords 292 to 295, with vectors 343 to 346, with the judge 395 to 398. No path is lower in total. Lower by slice: keyword reworded 85 to 83 and own-words 9 to 8 (new records now compete for the ten places; the labels predate them), vectors several-record questions 38 to 37, judged reworded 131 to 130 (one run each; three runs of 0.8.0 differed by one), and without the judge one more question that is not in memory goes unflagged (19 against 18 of 57). The labelled record stands first less often: 186 against 203 with vectors, 273 against 297 with the judge, where it is at place two to four in 32 of the 37 questions that lost first place.
+- `run_gold.py` reports a third error beside false answers and false refusals: missed with no warning (an answerable question whose record did not come back, with nothing in the reply to say so). With the judge it is 36 of 389; keywords alone 70.
+- The README no longer calls the questions hand-labelled: a model wrote them and their labels, a second model checked the drafted ones once, and no person has checked them yet. The gain is stated as a range by who wrote the question (12 points on the older 143, 28 on the 303 drafted).
+- The judge reading 100 candidates instead of 50: 403 against 398 (13 fixed, 8 broken, p 0.38) for twice the tokens. The default stays 50.
+- CI fails when anything under `local/` is tracked.
+
+### Known limits
+- A line of free text inside `decisions_log.md` or `corrections.md` that belongs to no entry is still in no record.
+- Plain keyword paging (no judge, no vectors) can repeat or skip a record across pages, as before.
+- A short fact changed twice can quote the first value again in its second banner, so the middle value is not marked superseded.
+- Rows of the transcript index made before a pattern knew a format keep their original text in `brain.db`; no reply returns it.
+- The judge still picks an on-topic record planted to mislead about one time in three in a small test.
+
 ## [0.8.0] - 2026-11-14
 
 ### Added
@@ -60,7 +113,7 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ### Added
 - A record index: every kind the vault holds (facts, patterns, decisions, corrections, session notes, raw sources, knowledge pages) and every notes folder is now in one SQLite FTS5 table, ranked by bm25 with stemming ("deployed" finds "deploy") and accent folding. Before, only facts and patterns were indexed; the rest was read from disk and scored word by word on every recall. The index is a cache: a file whose size or mtime changed is parsed again on the next search, a deleted file loses its rows, and dropping the table loses nothing. Knowledge pages and notes are searchable past their first 600 characters, and a record is found by its date (`2026-11-02`).
-- `tests/eval/run_gold.py`: a recall eval scored against hand-labelled record ids, with slices for reworded questions, changed values, dates, several records and questions the store cannot answer. It needs no judge and writes nothing to the database under test. `run_recall.py` judges by substring, which a query written in the note's own words always passes.
+- `tests/eval/run_gold.py`: a recall eval scored against labelled record ids, with slices for reworded questions, changed values, dates, several records and questions the store cannot answer. It needs no judge and writes nothing to the database under test. `run_recall.py` judges by substring, which a query written in the note's own words always passes.
 
 - Search keys: `brain_remember` takes `keys`, the other words a memory would be asked for by (synonyms, plain names, the question it answers). They are indexed beside the text and never returned, and they can be added later to a record that already exists. Keys, `source` and `mission` are kept in the vault, in `record_meta.md`, one append-only line per record id; before, `source` and `mission` never reached the vault. Measured on one live agent, with keys written for 407 records by a model that did not see the questions: reworded questions whose answer is one of those records went from 25 of 51 to 43 of 51 in the top ten.
 

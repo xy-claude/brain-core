@@ -49,7 +49,7 @@ Every step, every flag and the common problems: [Install details](#install-detai
 - **Five tools, not thirty.** One local MCP server the agent uses by itself.
 - **Files you can read.** Memory is markdown in a folder on your disk, indexed by SQLite and, optionally, by [Hindsight](https://github.com/vectorize-io/hindsight), a self-hosted vector memory.
 - **Nothing in someone's cloud.** Memory stays on your disk. What does go out: the LLM calls Hindsight makes to reason over memories (none with `--lite`), one version check a day to PyPI, and the pages you ask it to distill.
-- **Search you can check.** Every result names its file and date, a weak match is reported as weak, and recall is scored against hand-labelled answers. The numbers, including the ones that are not flattering, are in [Does it work?](#does-it-work)
+- **Search you can check.** Every result names its file and date, a weak match is reported as weak, and recall is scored against labelled answers (the labels were written by a model and have not yet been checked by a person). The numbers, including the ones that are not flattering, are in [Does it work?](#does-it-work)
 
 It is for one person running one or more agents on their own computer. It is not a hosted service and not a team product.
 
@@ -107,7 +107,7 @@ Every miss that gets repaired is a miss that does not happen again, and the repa
 | Why a result came back | You can see it: these words matched | Hard to say: the numbers were close |
 | Large piles of text nobody wrote keys for | Weaker: it only knows the words on the page | Strong: the job it was built for |
 
-**Why brain-core does not ship a vector database today.** A first test, on 143 hand-labelled questions from a real seven-month vault, did not show a gain worth its cost:
+**Why brain-core does not ship a vector database today.** A first test, on 143 labelled questions from a real seven-month vault, did not show a gain worth its cost:
 
 - A small static embedding model blended into the ranking found 113 of 143 against 110 for keywords alone: seven questions fixed and four broken, a tie. That is one small model and one way of combining the two, not a verdict on vector search.
 - That blend returned a changed value ahead of its replacement. For a memory, serving the old value is the worst kind of error.
@@ -414,7 +414,7 @@ Two evals, and they answer different questions.
 
 The recall tasks there are judged by substring, and a question written in the note's own words always passes. They are a regression test, not proof of recall.
 
-**On a real vault, against labelled answers.** 143 questions on one agent's vault of seven months (about 3,200 records), each labelled by hand with the record that answers it. A question asked in other words can fail, and many did. "Found" means the right record is in the top ten.
+**On a real vault, against labelled answers.** 143 questions on one agent's vault of seven months (about 3,200 records), each labelled with the record that answers it. The questions and the labels were written by a model reading the records (11 use the owner's own past words); no person has checked them yet. A question asked in other words can fail, and many did. "Found" means the right record is in the top ten.
 
 | Question type | 0.4 | 0.5.1 |
 |---|---|---|
@@ -425,7 +425,7 @@ The recall tasks there are judged by substring, and a question written in the no
 | Needs several records | 2 / 8 | 5 / 8 |
 | Not in memory: must be flagged, not answered | 6 / 12 | 11 / 12 |
 
-How to read it. The index alone took reworded questions from 13 to 31; search keys took them to 51, and those keys were written by a model that never saw the questions. A vault with no keys starts near 31. A third of reworded questions still miss, which is what miss repair is for. Median recall is about 45 ms on the keyword index; with Hindsight on the recall path it was about 2 s and found the same 50 of 75, which is why it can be switched off (`stores.hindsight.recall: false`). This is one vault and one author's questions, not a public benchmark.
+How to read it. The index alone took reworded questions from 13 to 31; search keys took them to 51, and those keys were written by a model that never saw the questions. A vault with no keys starts near 31. A third of reworded questions still miss, which is what miss repair is for. Median recall is about 45 ms on the keyword index; with Hindsight on the recall path it was about 2 s and found the same 50 of 75, which is why it can be switched off (`stores.hindsight.recall: false`). This is one vault and one set of model-written questions, not a public benchmark.
 
 **A small embedding model was tested and tied.** With search keys in place, the same 143 questions were run with a local embedding model (potion-retrieval-32M, 3,153 records embedded in 0.1 s) blended into the keyword ranking. The best blend found 7 questions keywords missed and lost 4 that keywords had, for 113 of 143 against 110: a gain inside the noise, paid for with a changed value coming back ahead of its replacement and a missed date question. Meaning alone scored 89. Search keys and this model caught largely the same misses, and keys cost nothing at query time, so brain-core ships no vector index today. The test covers one small static model blended by score. A stronger model used as a second search beside keywords, with the scores never blended, was measured next: see below. The same tie showed with Hindsight on the recall path (50 of 75 both ways).
 
@@ -437,23 +437,38 @@ stores:
 recall:
   judge: model          # default: agent (the calling agent reads the list itself)
   runner: claude        # your own Claude Code login; `api` needs a key
+  # model: claude-haiku-5-5   # the default, and the model the numbers below were measured with
 ```
 
-Measured on the same vault with a larger set: 446 hand-checked questions (299 to tune on, 147 held out and opened once per stage), each run compared with the one before it question by question.
+With the judge on, every recall sends the question and up to 50 records to that model; with it off, recall sends nothing anywhere. [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) lists what each feature sends.
+
+Measured on the same vault with a larger set: 446 questions (299 to tune on, 147 held out and opened once per stage), each run compared with the one before it question by question. The 143 above are in it; the other 303 were drafted by a model from the records and each answerable one was checked once by a second model. No person has checked the labels yet, and the judge is a model of the same family, so read the numbers as a comparison between settings, not as an absolute score. These are the figures of 0.9.0.
 
 | Recall | Tuning set (299) | Held out (147) | Broken against keywords |
 |---|---|---|---|
-| Keywords and search keys (the default) | 193 | 99 | |
-| + vector search, joined by rank | 221 | 116 | 9 and 4 |
-| + a model judge (three runs: 260, 260, 259) | 261 | 134 | 1 and 1 |
+| Keywords and search keys (the default) | 197 | 98 | |
+| + vector search, joined by rank | 231 | 115 | 4 and 1 |
+| + a model judge (`claude-haiku-5-5`) | 264 | 134 | 0 and 0 |
 
-What moved, on the held-out questions: reworded 31 to 46 of 53, questions that need several records 8 to 14 of 17, changed values 7 to 12 of 12, questions whose answer is not in memory correctly refused 14 to 19 of 19, exact identifiers 17 to 18 of 18. Answerable questions wrongly flagged as a miss fell from 40 to 4 of 128.
+How large the gain is depends on who wrote the question. With everything on, the 143 older questions go from 110 to 127 (12 points) and the 303 drafted ones from 185 to 271 (28 points). On the 11 questions in the owner's own past words it is 8 to 10, too few to conclude from. Expect something between 12 and 28 points on a vault like this one, and less on a vault whose records carry no search keys: the question set over-samples records that have them.
 
-How it works. Each search puts forward its best 150 records and the lists are joined by rank, never by score. A record holding an exact identifier from the question (a port, a version, a file name) goes first. A day named in the question adds that day's records. A record another one replaced never stands above its replacement. Then the judge reads the best 50 with their dates and returns the numbers of the ones that answer; it can only point at records it was shown, and if it fails, recall returns its own order.
+What moved, on the held-out questions: reworded 30 to 47 of 53, questions that need several records 8 to 14 of 17, changed values 7 to 11 of 12, questions whose answer is not in memory correctly refused 14 to 19 of 19, exact identifiers 17 to 18 of 18.
 
-What it costs. The embedding model is held by one small worker per machine, shared by every agent, started on the first call and gone after five idle minutes: about 1.6 GB of memory while it answers (2.7 GB during a full index), 1.3 GB on disk, plus the library (about 850 MB). On an Apple Silicon GPU a question takes about 45 ms to embed once the worker is up and a 5,400-record vault indexes in about five minutes; on CPU alone indexing is too slow to be practical. The judge is one model call per recall, about 3 s with a small model. Unix only for now: on Windows the vector search stays off and recall answers from keywords.
+The three ways a recall goes wrong, on all 446 questions:
 
-What is not solved. Two of 37 changed-value questions still showed an old value first, because the current record was not among the candidates. Embedding records together with their keys and dates was tried and dropped (8 fixed, 5 broken). A larger embedding model was not tried. It is one vault and one author's questions, most of them drafted by a model and checked, not a public benchmark.
+| | Keywords | + vectors | + judge |
+|---|---|---|---|
+| False answer: not in memory, and not flagged | 19 of 57 | 19 of 57 | 2 of 57 |
+| False refusal: answerable, flagged as a miss | 104 of 389 | 104 of 389 | 12 of 389 |
+| Missed with no warning: answerable, the right record not returned, nothing says so | 70 of 389 | 42 of 389 | 36 of 389 |
+
+The last row is the one that matters most and the judge does not remove it: about one answerable question in eleven comes back without its record and without a warning. It is an upper bound (a label can miss a second record that also answers), and it is why `not_in_memory` and `thin_recall` tell the agent to search again in other words before it answers.
+
+How it works. Each search puts forward its best 150 records and the lists are joined by rank, never by score. A record holding an exact identifier from the question (a port, a version, a file name) goes first. A day named in the question adds that day's records. A record another one replaced never stands above its replacement. Then the judge reads the best 50 with their dates and returns the numbers of the ones that answer; it can only point at records it was shown, and if it fails or takes longer than `recall.judge_timeout` (60 s), recall returns its own order and says so. Reading 100 instead of 50 was measured: 403 against 398 of 446 (13 fixed, 8 broken, p 0.38) for twice the tokens, so the default stays 50 (`recall.judge_candidates`).
+
+What it costs. The embedding model is held by one small worker per machine, shared by every agent, started on the first call and gone after five idle minutes: about 1.6 GB of memory while it answers (2.7 GB during a full index), 1.3 GB on disk, plus the library (about 850 MB). On an Apple Silicon GPU a question takes about 45 ms to embed once the worker is up and a 5,400-record vault indexes in about five minutes; on CPU alone indexing is too slow to be practical. A recall takes about 45 ms on keywords, 150 ms with vectors, and about 4 s with the judge, which is one model call of roughly 7,000 tokens per recall. Unix only for now: on Windows the vector search stays off and recall answers from keywords.
+
+What is not solved. Three of 37 changed-value questions still do not show the current value first. Against 0.8.0 the totals are level (keywords 295 against 292, vectors 346 against 343, judge 398 against 395), but the labelled record stands first less often (with the judge 273 against 297): the reader now takes in more records and the judge orders its picks differently, and in 32 of the 37 questions that lost first place the labelled record is at place two to four. The test asks plain questions and counts a hit anywhere in the top ten; agents often send keyword strings and ask for fewer results, and that has not been measured. Embedding records together with their keys and dates was tried and dropped (8 fixed, 5 broken). A larger embedding model was not tried. It is one vault and model-written questions, not a public benchmark.
 
 ```bash
 python tests/eval/run_recall.py --config ~/Agents/Atlas/brain.yaml                          # the CI tasks, on your vault

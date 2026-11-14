@@ -25,7 +25,7 @@
 | 20 | Record index (0.5.0): every vault kind and every notes folder in one SQLite FTS5 table, ranked by bm25 with stemming; a cache rebuilt from the files | ✅ |
 | 21 | Search keys (0.5.0): `brain_remember(keys=…)`, kept with source, mission and replaced values in `record_meta.md` | ✅ |
 | 22 | Honest recall (0.5.0): `weak_match` returned to the agent, retired values marked `superseded`, miss repair with `kind='key'`, `stores.hindsight.recall: false` | ✅ |
-| 23 | Labelled eval (0.5.0): `run_gold.py`, 143 hand-labelled questions on a real vault; reworded questions 13 → 51 of 75; `from_repairs.py` grows the set from real misses | ✅ |
+| 23 | Labelled eval (0.5.0): `run_gold.py`, 143 questions on a real vault, labelled by a model; reworded questions 13 → 51 of 75; `from_repairs.py` grows the set from real misses | ✅ |
 | 24 | Smaller session start (0.5.0): the brief's session replay cut from 3,551 to 330 tokens, the SessionStart hook capped at `session.brief_tokens` | ✅ |
 | 25 | 0.5.1: dates asked in words are found (date questions 4 → 7 of 8); the memory traits read the labelled eval | ✅ |
 

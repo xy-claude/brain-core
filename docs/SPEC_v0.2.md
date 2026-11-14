@@ -7,7 +7,7 @@
 - **Hindsight** is optional (`--lite`), and can be kept for writes while left out of recall (`stores.hindsight.recall: false`).
 - **The entity graph** is a `relations` table in `brain.db`, not a Kuzu graph behind a script (section 3).
 - **The `claude-code` provider** is now the keyless default of the installer, for personal use (section 3 said it was not part of the install story).
-- **The eval** in section 4 judged by substring and passed 100%. It is now a regression test; recall is measured by `tests/eval/run_gold.py` against hand-labelled record ids.
+- **The eval** in section 4 judged by substring and passed 100%. It is now a regression test; recall is measured by `tests/eval/run_gold.py` against labelled record ids.
 - **`brain_remember`** takes `keys` and `kind='key'`; **`brain_recall`** returns `weak_match` and marks `superseded` values.
 - **Packaging** (section 5): the PyPI name is `brain-core-mcp` and the command is `brain`.
 **Goal:** one local MCP that is the whole front door to an agent's memory, dogfooded on the reference agent (the author's own assistant) until it runs every session, then packaged the way Hindsight was self-hosted: local, no bill, no login.
