@@ -70,7 +70,7 @@ brain-core is the opposite: local, five tools, markdown files you own, and an ev
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/architecture-dark.png">
-  <img src="docs/img/architecture-light.png" alt="Brain-Core sits between your AI agent and its memory. The agent uses five tools. Every memory is saved to the vault of text files first, then indexed by SQLite FTS5 with bm25 ranking, then optionally copied to the Hindsight vector memory. Mental models, short cited briefings, are written into the vault. An optional read-only archive holds memory imported from another tool and ranks below the originals. Searches run on the index and come back with their source. Hooks and scheduled jobs feed it, and a weak-match and miss-repair loop improves it with use." width="900">
+  <img src="docs/img/architecture-light.png" alt="Brain-Core sits between your AI agent and its memory. The agent uses five tools. Every memory is saved to the vault of text files first, then indexed by SQLite FTS5 with bm25 ranking, and optionally given a vector for search by meaning, made by one worker shared by every agent. Mental models, short cited briefings, are written into the vault. An optional read-only archive holds memory imported from another tool and ranks below the originals. Searches run on the index and come back with their source. Hooks and scheduled jobs feed it, and a weak-match and miss-repair loop improves it with use." width="900">
 </picture>
 
 ## Is it RAG? Yes: keyword RAG, built for an agent's brain
