@@ -105,10 +105,10 @@ def test_end_drains_queue_writes_stubs_and_marker(tmp_path: Path) -> None:
     assert len(set(docs)) == len(docs), "a shared document id makes Hindsight drop earlier writes"
     assert json.loads((tmp_path / "queue.jsonl").read_text())["agent"] == "OTHER"
     assert e["hsam"] == "written" and e["executive_state"].startswith("unchanged")
-    assert e["critique"] == "stub" and e["sync"] == "rewritten"
-    crit = (vault / "session_critique.md").read_text()
-    assert crit.startswith("---\ntype: log\nowner: t\n") and "Fact changed" in crit
-    assert "**Status:** fine" in (vault / "last_standalone_session.md").read_text()
+    assert e["critique"].startswith("unchanged") and e["sync"] == "rewritten"
+    assert not (vault / "session_critique.md").exists(), "no stub stands in for a critique"
+    sync = (vault / "last_standalone_session.md").read_text()
+    assert sync.startswith("---\ntype: log\nowner: t\n") and "**Status:** fine" in sync
     assert Path(e["marker"]).read_text().strip() == "s1"
     day = next((vault / "sessions").glob("*.md")).read_text()
     assert "closed" in day and "decision×1, fact×2" in day

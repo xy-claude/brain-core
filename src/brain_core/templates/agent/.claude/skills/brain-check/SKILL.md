@@ -10,13 +10,15 @@ description: Health check for this agent's brain. Use at session start when some
 
 ```
 Agent: <name> — Brain Check
-Stores:      sqlite OK | vault OK | hindsight OK/DOWN (<detail>) | graph OK/absent
+Stores:      <each store in `stores`> OK/DOWN (<detail>)
+Recall:      vectors <rows> rows, <pending> waiting, worker <up/down> · judge <model> · fell back to keywords <count>× in 7 days (<latest>); only the parts `brain_status` returns
 Knowledge:   <pages> pages, <raw> raw, <issue_count> lint issues → <first three>
 Context:     <tokens> always-loaded tokens (<per-file breakdown>)
 Session:     last start <id> · last close <id> · unclosed: yes/no
-Pending:     <n> decisions waiting for $user
+Pending:     <n> decisions waiting for $user, or the `executive_state` note when that file cannot be read
+Secrets:     <secrets_masked> indexed record(s) hold what looks like a credential (only when present)
 Traits:      <grown>/12 grown · <trait: value/n> for each defensible signal that moved the wrong way
 Status:      HEALTHY | DEGRADED | CRITICAL
 ```
 
-3. Rules: any store down → **CRITICAL**, tell $user not to proceed until it is back (Hindsight: `launchctl kickstart -k gui/$(id -u)/io.vectorize.hindsight`, then `/mcp`). Lint issues or `unclosed: yes` → **DEGRADED**, say what to fix (`/distill --lint`, or read the unclosed session file). Context tokens above the number recorded in `vault/facts.md` → say by how much and what grew.
+3. Rules: any store down → **CRITICAL**, tell $user not to proceed until it is back (a store that is a service: restart it, then `/mcp`). Lint issues, `unclosed: yes` or anything in `attention` → **DEGRADED**, say what to fix (`/distill --lint`, read the unclosed session file, or the reason recall fell back to keywords). `secrets_masked` → tell $user to rotate those credentials and remove them from the files: recall masks them, the files still hold them. Context tokens above the number recorded in `vault/facts.md` → say by how much and what grew.

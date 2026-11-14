@@ -19,7 +19,7 @@ Re-scan the conversation. Anything not yet stored (URLs, numbers, names, ideas, 
 
 ### 3. Close
 
-`brain_session('end', executive_state=<body>, critique=<body>, sync=<body>)`. It drains the Hindsight queue, appends the close line to today's session file, writes the three files, and writes the close marker. Report its reply: writes this session, queue drained, files rewritten.
+`brain_session('end', executive_state=<body>, critique=<body>, sync=<body>)`. It drains the capture queue, appends the close line to today's session file, writes the three files (the executive state and critique it replaces stay beside them as `.prev.md`), and writes the close marker. A `warning` in the reply means the executive state lacks the headings `brain_session('start')` reads: fix the body and call it again. Report its reply: writes this session, queue drained, files rewritten.
 
 ### 4. Done
 

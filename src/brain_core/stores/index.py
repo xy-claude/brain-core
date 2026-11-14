@@ -4,6 +4,9 @@ The files stay the truth. A file whose size or mtime changed is parsed again on 
 search, a file that is gone loses its rows, and dropping both tables loses nothing: the next
 search rebuilds them. Stores that share this index share one bm25 scale, so their hits can be
 merged by ``Record.score``.
+
+The index holds a masked copy: a credential-shaped run in a file is stored, searched, returned
+and embedded as ``[redacted]``. The file itself is never touched.
 """
 
 from __future__ import annotations
@@ -12,7 +15,7 @@ import json
 import math
 import re
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -84,7 +87,11 @@ _STOP = frozenset(
 
 
 _MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
-_MON = r"(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?"
+# a month's name or its usual short form, nothing longer: "mark 3" and "3 decisions" are not dates
+_MON = (
+    r"(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?"
+    r"|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?"
+)
 _DAY = r"(\d{1,2})(?:st|nd|rd|th)?"
 _YEAR = r"(?:,?\s+(\d{4}))?"
 _SPOKEN = re.compile(  # "august 21 2026", "nov 1st", "21 august 2026"
@@ -99,7 +106,7 @@ def iso_dates(query: str, today: date | None = None) -> str:
 
     def fix(m: re.Match[str]) -> str:
         mon, day, year = (m[1], m[2], m[3]) if m[1] else (m[5], m[4], m[6])
-        month = _MONTHS.index(mon) + 1
+        month = _MONTHS.index(mon[:3]) + 1
         try:
             d = date(int(year) if year else today.year, month, int(day))
             if not year and d > today:
@@ -150,6 +157,32 @@ def match_query(query: str) -> str:
     return " OR ".join(f'"{t}"' for t in terms(query))
 
 
+# Bumped when the reader or what the index stores changes: it is part of every file's stamp, so
+# the next sync reads every file again. Rows come back under the same record ids, which is why
+# a re-read costs no stored vector.
+FORMAT = 3
+
+
+def _masked(r: Record) -> Record:
+    """``r`` with every credential-shaped run replaced: what the index stores, returns and
+    hands to the embed worker. The id stays that of the original text."""
+    from brain_core.stores.vault import redact  # vault imports this module
+
+    return replace(
+        r,
+        text=redact(r.text),
+        domain=redact(r.domain),
+        extra={k: redact(v) for k, v in r.extra.items()},
+    )
+
+
+def stored(doc: str, score: float = 0.0) -> Record:
+    """A row of the index back as a record. ``undated`` is read off the parser's mark."""
+    d = json.loads(doc)
+    d["date"] = date.fromisoformat(d["date"])
+    return Record(**{**d, "score": score, "undated": d["extra"].get("legacy") == "undated"})
+
+
 class RecordIndex:
     def __init__(self, db: Database) -> None:
         self.db = db
@@ -168,7 +201,8 @@ class RecordIndex:
     def sync(
         self, store: str, files: Mapping[Path, Kind], parse: Callable[[Kind, Path], list[Record]]
     ) -> None:
-        """Bring the rows of ``store`` in line with ``files``. Only a changed file is parsed."""
+        """Bring the rows of ``store`` in line with ``files``. Only a changed file is parsed,
+        and every file once after ``FORMAT`` changed."""
         known = {
             r["path"]: r["sig"]
             for r in self.db.fetchall("SELECT path, sig FROM index_files WHERE store = ?", (store,))
@@ -179,10 +213,10 @@ class RecordIndex:
             seen.add(key)
             try:
                 st = p.stat()
-                sig = f"{st.st_mtime_ns}:{st.st_size}"
+                sig = f"{FORMAT}:{st.st_mtime_ns}:{st.st_size}"
                 if known.get(key) == sig:
                     continue
-                records = parse(kind, p)
+                records = [_masked(r) for r in parse(kind, p)]
             except OSError:
                 continue  # a file a sync service has evicted: keep the rows it has
             with self.db.transaction():
@@ -190,9 +224,16 @@ class RecordIndex:
                     "DELETE FROM records_fts WHERE store = ? AND path = ?", (store, key)
                 )
                 for r in records:
-                    # the heading and the date are searchable; the record keeps its own text
-                    body = f"{r.domain} {full_text(r)} {r.date.isoformat()}"
+                    # the heading and the date are searchable; the record keeps its own text.
+                    # An undated line has only its file's date, which is not a day to find it by
+                    body = f"{r.domain} {full_text(r)}"
+                    if not r.undated:
+                        body += f" {r.date.isoformat()}"
                     row = {**asdict(r), "date": r.date.isoformat()}
+                    # 0.8.0 reads these rows too and its Record has no `undated`: the mark
+                    # the parser leaves in `extra` carries it, see `stored`
+                    if row.pop("undated"):
+                        row["extra"] = {**r.extra, "legacy": "undated"}
                     n = len(next(iter(self.keys), ""))
                     self.db.execute(
                         "INSERT INTO records_fts (body, keys, store, kind, path, rid, record) "
@@ -268,24 +309,29 @@ class RecordIndex:
         )
         if not row:
             return None
-        d = json.loads(row["record"])
-        d["date"] = date.fromisoformat(d["date"])
-        return Record(**d), row["store"]
+        return stored(row["record"]), row["store"]
+
+    def redacted(self) -> int:
+        """How many indexed records had a credential masked: their stored text says so."""
+        row = self.db.fetchone(
+            "SELECT count(DISTINCT rid) AS n FROM records_fts WHERE instr(record, '[redacted]')"
+        )
+        return int(row["n"]) if row else 0
 
     def dated(self, day: str, limit: int) -> list[tuple[Record, str]]:
-        """Records dated ``day`` (ISO), with their store, in file order."""
+        """Records dated ``day`` (ISO), with their store, in file order. A record with no date
+        of its own is left out: its file's date says nothing about the day it was written."""
         out: list[tuple[Record, str]] = []
         seen: set[str] = set()
         for row in self.db.fetchall(
             "SELECT record, store, rid FROM records_fts "
-            "WHERE json_extract(record, '$.date') = ? LIMIT ?",
+            "WHERE json_extract(record, '$.date') = ? "
+            "AND coalesce(json_extract(record, '$.extra.legacy'), '') != 'undated' LIMIT ?",
             (day, limit * 2),
         ):
             if row["rid"] not in seen and len(out) < limit:
                 seen.add(row["rid"])
-                d = json.loads(row["record"])
-                d["date"] = date.fromisoformat(d["date"])
-                out.append((Record(**d), row["store"]))
+                out.append((stored(row["record"]), row["store"]))
         return out
 
     def holding(self, token: str, limit: int) -> list[tuple[Record, str]]:
@@ -300,9 +346,7 @@ class RecordIndex:
             "SELECT record, store, rid FROM records_fts WHERE records_fts MATCH ? LIMIT ?",
             (f'body : "{q}"', limit * 5),
         ):
-            d = json.loads(row["record"])
-            d["date"] = date.fromisoformat(d["date"])
-            r = Record(**d)
+            r = stored(row["record"])
             if row["rid"] not in seen and holds(token, full_text(r)):
                 seen.add(row["rid"])
                 out.append((r, row["store"]))
@@ -322,10 +366,5 @@ class RecordIndex:
             "ORDER BY rank LIMIT ?",
             (q, store, *kinds, limit),
         )
-        out: list[Record] = []
-        for row in rows:
-            d = json.loads(row["record"])
-            d["date"] = date.fromisoformat(d["date"])
-            d["score"] = -float(row["rank"])  # FTS5 bm25 is negative, best first
-            out.append(Record(**d))
-        return out
+        # FTS5 bm25 is negative, best first
+        return [stored(row["record"], -float(row["rank"])) for row in rows]

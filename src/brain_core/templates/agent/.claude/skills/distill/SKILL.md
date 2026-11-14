@@ -33,7 +33,7 @@ Add or update the row in `_index.md` (`| [[page]] | domain | updated | summary |
 
 ### Step 5 — Propagate
 
-3–5 operational facts: `brain_remember(kind='fact', domain=…, source='raw/<file>')`. New relationships: `kind='relation'`. A change in how you work: `kind='pattern'`. One Hindsight-level summary: `brain_remember(kind='note', extra={section: 'What We Discussed'})`.
+3–5 operational facts: `brain_remember(kind='fact', domain=…, source='raw/<file>')`. New relationships: `kind='relation'`. A change in how you work: `kind='pattern'`. One summary line: `brain_remember(kind='note', extra={section: 'What We Discussed'})`.
 
 ### Step 5b — Brain Impact (hard rule)
 

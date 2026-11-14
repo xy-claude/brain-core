@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any, Literal, Protocol
 
 Role = Literal["query", "document"]
+RETRY_AFTER = 300.0  # seconds a worker start that failed is remembered before the next try
 
 
 class EmbedUnavailable(RuntimeError):
@@ -31,7 +32,8 @@ class EmbedUnavailable(RuntimeError):
 
 
 def home() -> Path:
-    """Where the worker's socket, lock and log live. One per user, shared by every agent."""
+    """Where the worker's socket, lock, log and failed-start stamp live. One per user, shared
+    by every agent."""
     return Path(os.environ.get("BRAIN_EMBED_HOME", "~/.brain-core")).expanduser()
 
 
@@ -100,6 +102,18 @@ class WorkerEmbedder:
         """Start the worker and wait for its socket. Losing the race to another agent is fine:
         the lock lets one worker live, and both callers connect to it."""
         home().mkdir(parents=True, exist_ok=True)
+        # a start that failed is not tried again on every recall: one caller pays the wait,
+        # the rest go straight to keywords until the stamp is old
+        stamp = home() / "embed.failed"
+        try:
+            age = time.time() - stamp.stat().st_mtime
+        except OSError:
+            age = RETRY_AFTER
+        if 0 <= age < RETRY_AFTER:
+            raise EmbedUnavailable(
+                f"the embed worker did not start {int(age)}s ago; next try in "
+                f"{int(RETRY_AFTER - age)}s, or now if {stamp} is deleted; see embed.log there"
+            )
         with (home() / "embed.log").open("ab") as log:
             subprocess.Popen(
                 [sys.executable, "-m", "brain_core.embed_worker"],
@@ -111,36 +125,55 @@ class WorkerEmbedder:
         deadline = time.monotonic() + self.start_timeout
         while time.monotonic() < deadline:
             try:
-                return self._connect()
+                conn = self._connect()
             except OSError:
                 time.sleep(0.05)
+            else:
+                stamp.unlink(missing_ok=True)
+                return conn
+        stamp.touch()
         raise EmbedUnavailable(f"the embed worker did not start; see {home() / 'embed.log'}")
+
+    def _ask(self, texts: Sequence[str], role: Role) -> list[bytes] | None:
+        """One request. None when the worker went away without a word: it was on its way out."""
+        try:
+            conn = self._connect()
+        except OSError:
+            conn = self._start()
+        with conn:
+            conn.settimeout(self.timeout)
+            req = {
+                "model": self.model,
+                "role": role,
+                "texts": list(texts),
+                "idle": self.idle_minutes * 60,
+            }
+            try:
+                conn.sendall(json.dumps(req).encode() + b"\n")
+                line = read_line(conn)
+            except (BrokenPipeError, ConnectionResetError):
+                return None
+            if not line:
+                return None
+            head: dict[str, Any] = json.loads(line)
+            if not head.get("ok"):
+                raise EmbedUnavailable(str(head.get("error", "no reply from the embed worker")))
+            size = int(head["dim"]) * 4
+            blob = _read_exact(conn, size * len(texts))
+        return [blob[i * size : (i + 1) * size] for i in range(len(texts))]
 
     def embed(self, texts: Sequence[str], role: Role = "document") -> list[bytes]:
         if not texts:
             return []
         try:
-            try:
-                conn = self._connect()
-            except OSError:
-                conn = self._start()
-            with conn:
-                conn.settimeout(self.timeout)
-                req = {
-                    "model": self.model,
-                    "role": role,
-                    "texts": list(texts),
-                    "idle": self.idle_minutes * 60,
-                }
-                conn.sendall(json.dumps(req).encode() + b"\n")
-                head: dict[str, Any] = json.loads(read_line(conn) or b"{}")
-                if not head.get("ok"):
-                    raise EmbedUnavailable(str(head.get("error", "no reply from the embed worker")))
-                size = int(head["dim"]) * 4
-                blob = _read_exact(conn, size * len(texts))
+            # a call that lands just as an idle worker exits gets no answer: ask once more,
+            # which starts the next worker
+            out = self._ask(texts, role) or self._ask(texts, role)
         except (OSError, ValueError) as e:
             raise EmbedUnavailable(f"{type(e).__name__}: {e}") from e
-        return [blob[i * size : (i + 1) * size] for i in range(len(texts))]
+        if out is None:
+            raise EmbedUnavailable("no reply from the embed worker")
+        return out
 
 
 class FakeEmbedder:

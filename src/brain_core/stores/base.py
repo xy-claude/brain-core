@@ -51,9 +51,13 @@ class Record:
 
 
 def full_text(r: Record) -> str:
-    """Title plus the body fields a decision or correction carries in `extra`."""
+    """Title plus every field a decision or correction carries in `extra`, in file order, so
+    the rule a correction teaches can be found too. Other kinds are their own text."""
+    if r.kind not in ("decision", "correction"):
+        return r.text
+    # the title is already the text; `context` and `fact_type` are Hindsight's own labels
     body = " ".join(
-        v for k, v in r.extra.items() if k in ("decision", "reason", "error", "correction")
+        v for k, v in r.extra.items() if k not in ("title", "context", "fact_type") and v
     )
     return f"{r.text} — {body}" if body else r.text
 

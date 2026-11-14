@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
+from brain_core.session import _sections
 from brain_core.status import _frontmatter, _is_table_chrome
 from brain_core.stores.vault import VaultStore, frontmatter
 from brain_core.stores.vault import read_text as _read
@@ -504,26 +505,32 @@ def _names(words: set[str], other: set[str]) -> bool:
 
 def _corrections(text: str) -> list[tuple[date, str, dict[str, str]]]:
     out: list[tuple[date, str, dict[str, str]]] = []
+    inside = False
     for ln in text.splitlines():
-        if m := _CORRECTION.match(ln):
-            try:
-                out.append((date.fromisoformat(m.group(1)), m.group(2), {}))
-            except ValueError:
-                continue
-        elif out and (m := _FIELD.match(ln)):
+        if ln.startswith("#"):
+            # any heading ends a correction: a field under another one is not its own
+            inside = False
+            if m := _CORRECTION.match(ln):
+                try:
+                    out.append((date.fromisoformat(m.group(1)), m.group(2), {}))
+                    inside = True
+                except ValueError:
+                    continue
+        elif inside and (m := _FIELD.match(ln)):
             out[-1][2][m.group(1).lower()] = m.group(2).strip()
     return out
 
 
+_ITEM = re.compile(r"(?:- |\d+[.)] )(.*)")  # a bullet or a numbered item
+
+
 def _pending_rows(exec_text: str) -> list[list[str]]:
-    sec = re.split(r"^(?=## )", exec_text, flags=re.M)
-    block = next((p for p in sec if p.startswith("## Pending Decisions")), "")
     rows = []
-    for ln in block.splitlines()[1:]:
+    for ln in _sections(exec_text, ("Pending Decisions",)).splitlines()[1:]:
         if ln.startswith("|") and not _is_table_chrome(ln):
             rows.append([c.strip() for c in ln.strip("|").split("|")])
-        elif ln.startswith("- ") and ln[2:].strip().lower() not in ("none", ""):
-            rows.append([ln[2:].strip()])
+        elif (m := _ITEM.match(ln)) and m[1].strip().lower() not in ("none", ""):
+            rows.append([m[1].strip()])
     return rows
 
 

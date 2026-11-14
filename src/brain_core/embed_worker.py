@@ -41,7 +41,12 @@ class ModelBackend:
 
             self.model = None  # free the old one before loading the next
             device = "mps" if torch.backends.mps.is_available() else None
-            self.model = SentenceTransformer(model, device=device)
+            try:
+                # a model already on disk is loaded without asking the hub: a start needs no
+                # network, and the weights stay the ones the stored vectors were made with
+                self.model = SentenceTransformer(model, device=device, local_files_only=True)
+            except Exception:  # not on disk yet, or a library older than the flag: fetch it
+                self.model = SentenceTransformer(model, device=device)
             self.model.max_seq_length = MAX_TOKENS
             self.name = model
         # a model that ships a query instruction expects it on questions, never on documents

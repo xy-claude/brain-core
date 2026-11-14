@@ -112,7 +112,7 @@ def capture(agent: Agent, transcript: Path, session_id: str = "") -> dict[str, A
     )
     cursor = end = int(row["line"] or 0) if row else 0
     lines = transcript.read_text(encoding="utf-8").splitlines() if transcript.exists() else []
-    items: list[tuple[str, str]] = []
+    items: list[tuple[str, str, int]] = []  # text, section, the line it came from (1-based)
     seen_urls: set[str] = set()
     for raw in lines[cursor:]:
         if len(items) >= MAX_ITEMS:
@@ -125,13 +125,13 @@ def capture(agent: Agent, transcript: Path, session_id: str = "") -> dict[str, A
                 if url in seen_urls or _LOCAL.match(url) or url.lower().endswith(_NOISE):
                     continue
                 seen_urls.add(url)
-                items.append((f"URL {url}", LINKS))
+                items.append((f"URL {url}", LINKS, end))
             if role == "user" and not text.startswith(("$ ", "[", "→")):
-                items.append((text[:USER_CHARS], SAID))
+                items.append((text[:USER_CHARS], SAID, end))
     queue = agent.config.session.queue
     stores = [s for s in agent.stores if not isinstance(s, HindsightStore)]
-    written, duplicate, queued = 0, 0, []
-    for text, section in items:
+    written, duplicate, failed, queued = 0, 0, 0, []
+    for i, (text, section, at) in enumerate(items):
         try:
             out = brain_remember(
                 stores,
@@ -145,6 +145,12 @@ def capture(agent: Agent, transcript: Path, session_id: str = "") -> dict[str, A
         if out["status"] == "written":
             written += 1
             queued.append(text)
+        elif out["layers"].get("vault", {}).get("status") == "failed":
+            # not filed: the cursor stays before this line, so the next run tries it again.
+            # shortcut: a write that fails every time holds the cursor here, add a retry cap
+            # if one is ever seen
+            failed, end = len(items) - i, at - 1
+            break
         else:
             duplicate += 1
     if queued and queue:
@@ -165,7 +171,13 @@ def capture(agent: Agent, transcript: Path, session_id: str = "") -> dict[str, A
                 )
     agent.log_event(
         "capture",
-        {"transcript": key, "line": end, "written": written, "duplicate": duplicate},
+        {
+            "transcript": key,
+            "line": end,
+            "written": written,
+            "duplicate": duplicate,
+            "failed": failed,
+        },
         session_id=session_id or None,
     )
     return {
@@ -173,5 +185,6 @@ def capture(agent: Agent, transcript: Path, session_id: str = "") -> dict[str, A
         "scanned": end - cursor,
         "written": written,
         "duplicate": duplicate,
+        "failed": failed,
         "queued": len(queued) if queue else 0,
     }

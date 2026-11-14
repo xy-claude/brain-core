@@ -66,9 +66,9 @@ class RunnerError(RuntimeError):
 # ── runners ───────────────────────────────────────────────────────────────────
 
 
-def run_claude(system: str, prompt: str, model: str | None = None) -> str:
+def run_claude(system: str, prompt: str, model: str | None = None, timeout: float = 600.0) -> str:
     """The user's own Claude Code login, isolated: no tools, no settings, no hooks, no MCP,
-    no saved session, in an empty folder so no CLAUDE.md is read."""
+    no saved session, in an empty folder so no CLAUDE.md is read. ``timeout`` in seconds."""
     exe = shutil.which("claude")
     if not exe:
         raise RunnerError("`claude` is not on PATH; install Claude Code, or use models.runner: api")
@@ -80,10 +80,10 @@ def run_claude(system: str, prompt: str, model: str | None = None) -> str:
     with tempfile.TemporaryDirectory() as cwd:
         try:
             p = subprocess.run(
-                cmd, input=prompt, capture_output=True, text=True, cwd=cwd, env=env, timeout=600
+                cmd, input=prompt, capture_output=True, text=True, cwd=cwd, env=env, timeout=timeout
             )
         except subprocess.TimeoutExpired as e:
-            raise RunnerError("claude did not answer within 10 minutes") from e
+            raise RunnerError(f"claude did not answer within {timeout:g} seconds") from e
     try:
         out = json.loads(p.stdout)
     except ValueError as e:
@@ -93,8 +93,9 @@ def run_claude(system: str, prompt: str, model: str | None = None) -> str:
     return str(out["result"])
 
 
-def run_api(system: str, prompt: str, model: str | None = None) -> str:
-    """The Anthropic API with the official SDK (optional extra: ``brain-core-mcp[api]``)."""
+def run_api(system: str, prompt: str, model: str | None = None, timeout: float = 600.0) -> str:
+    """The Anthropic API with the official SDK (optional extra: ``brain-core-mcp[api]``).
+    ``timeout`` in seconds, for each attempt: the SDK tries a failed request twice more."""
     try:
         anthropic: Any = importlib.import_module("anthropic")
     except ImportError as e:
@@ -108,12 +109,16 @@ def run_api(system: str, prompt: str, model: str | None = None) -> str:
     if model.startswith(_FALLBACKS):  # a declined request is re-run on a fallback model
         extra = {"betas": ["server-side-fallback-2026-07-01"], "fallbacks": "default"}
     try:
-        r = anthropic.Anthropic().beta.messages.create(
-            model=model,
-            max_tokens=16000,
-            system=system,
-            messages=[{"role": "user", "content": prompt}],
-            **extra,
+        r = (
+            anthropic.Anthropic()
+            .with_options(timeout=timeout)
+            .beta.messages.create(
+                model=model,
+                max_tokens=16000,
+                system=system,
+                messages=[{"role": "user", "content": prompt}],
+                **extra,
+            )
         )
     except anthropic.AuthenticationError as e:
         raise RunnerError(
@@ -124,6 +129,8 @@ def run_api(system: str, prompt: str, model: str | None = None) -> str:
         raise RunnerError("rate limited by the API; the next run will try again") from e
     except anthropic.APIStatusError as e:
         raise RunnerError(f"API error {e.status_code}: {str(e.message)[:160]}") from e
+    except anthropic.APITimeoutError as e:  # a kind of connection error: named first
+        raise RunnerError(f"the API did not answer within {timeout:g} seconds") from e
     except anthropic.APIConnectionError as e:
         raise RunnerError("could not reach the API") from e
     if r.stop_reason in ("refusal", "max_tokens"):
@@ -155,7 +162,7 @@ def gather(agent: Agent, item: ModelItem, n: int) -> list[dict[str, str]]:
         text = str(h["text"]) + (" (superseded)" if h.get("superseded") else "")
         out[str(h["id"])[:16]] = {
             "kind": str(h["kind"]),
-            "date": str(h["date"]),
+            "date": str(h["date"]) or "undated",  # the writer must not date it by its file
             "source": str(h["source"]),
             "text": text,
         }
@@ -167,7 +174,8 @@ def gather(agent: Agent, item: ModelItem, n: int) -> list[dict[str, str]]:
             if _hook(r.kind, r.domain):
                 continue
             src = f"{r.path}:{r.line}" if r.line else r.path
-            row = {"kind": r.kind, "date": r.date.isoformat(), "source": src, "text": r.text}
+            when = "undated" if r.undated else r.date.isoformat()
+            row = {"kind": r.kind, "date": when, "source": src, "text": r.text}
             out.setdefault(r.id[:16], row)
     # a record that looks like it holds a secret is never sent to a model
     return [{"id": i, **d} for i, d in out.items() if not _SECRET.search(d["text"])]
@@ -335,5 +343,11 @@ def load(agent: Agent) -> dict[str, str]:
             continue
         text = _read(_file(vault, item.name))
         body = text.split("\n---\n", 1)[-1].split("\n\n", 2)[-1].strip()
-        out[item.name] = f"({st})\n{body[:BODY_CHARS]}"
+        cut = (
+            f"\n…(cut at {BODY_CHARS} of {len(body)} characters; the rest is in "
+            f"models/{item.name}.md)"
+            if len(body) > BODY_CHARS
+            else ""
+        )
+        out[item.name] = f"({st})\n{body[:BODY_CHARS]}{cut}"
     return out

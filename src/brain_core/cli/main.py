@@ -3,17 +3,18 @@
 from __future__ import annotations
 
 import io
+import re
 import sys
 from pathlib import Path
 from typing import Annotated
 
 import typer
 
-from brain_core import __version__
+from brain_core import __version__, recall
 from brain_core.agent import Agent
 from brain_core.cli.init import init_agent
 from brain_core.embed import EmbedUnavailable
-from brain_core.stores.vault import VaultStore
+from brain_core.stores.vault import VaultStore, redact
 
 if (
     sys.platform == "win32"
@@ -118,7 +119,10 @@ def adopt_cmd(
         if v is not None:
             for kind in ("fact", "pattern"):
                 for r in v.read(kind, limit=1_000_000):
-                    res = sq.write(kind, r.text, domain=r.domain, path=r.path, line=str(r.line))
+                    # masked, as the index is: the copy in brain.db holds no key at rest
+                    res = sq.write(
+                        kind, redact(r.text), domain=r.domain, path=r.path, line=str(r.line)
+                    )
                     if res.status == "written":
                         agent.db.execute(
                             "UPDATE facts SET created_at = ?, updated_at = ? WHERE id = ?",
@@ -343,7 +347,10 @@ def index_cmd(
         written = exists = 0
         for kind in ("fact", "pattern"):
             for r in vault.read(kind, limit=1_000_000):
-                res = sqlite.write(kind, r.text, domain=r.domain, path=r.path, line=str(r.line))
+                # masked, as the index is: the copy in brain.db holds no key at rest
+                res = sqlite.write(
+                    kind, redact(r.text), domain=r.domain, path=r.path, line=str(r.line)
+                )
                 if res.status != "written":
                     exists += 1
                     continue
@@ -394,7 +401,8 @@ def brief_cmd(
     with _open(path) as agent:
         vault = next((s for s in agent.stores if isinstance(s, VaultStore)), None)
         brief = (vault.root / agent.config.session.brief) if vault else None
-        text = brief.read_text(encoding="utf-8") if brief and brief.exists() else ""
+        # masked: a brief written before the pattern knew a format still holds it in clear
+        text = redact(brief.read_text(encoding="utf-8")) if brief and brief.exists() else ""
         if not text.strip() and not resume:
             return
         if not hook:
@@ -587,7 +595,26 @@ def doctor_cmd(
         f"  session    last start {ses['last_start'] or '-'} · "
         f"last close {ses['last_close'] or '-'}{flag}"
     )
-    typer.echo(f"  pending    {st.get('pending_decisions', 0)} decision(s)")
+    # no count when the executive state could not be read: 0 would say nothing waits
+    pending = st.get("executive_state") or f"{st.get('pending_decisions', 0)} decision(s)"
+    typer.echo(f"  pending    {pending}")
+    if v := st.get("vectors"):
+        typer.echo(
+            f"  vectors    {v['model']} · {v['rows']} rows · {v['pending']} waiting · "
+            f"worker {v['worker']}"
+        )
+    if j := st.get("judge"):
+        typer.echo(f"  judge      {j['mode']} · runner {j['runner']} · model {j['model']}")
+    if d := st.get("recall_degraded"):
+        typer.echo(
+            f"  fallback   recall fell back to keywords {d['count']} time(s) in "
+            f"{d['window_days']} days, latest: {d['latest']}"
+        )
+    if n := st.get("secrets_masked"):
+        typer.echo(
+            f"  secrets    {n} indexed record(s) hold what looks like a credential: masked in "
+            "the index and in replies, still readable in the files"
+        )
     if st.get("models"):
         typer.echo("  models     " + " · ".join(f"{n} {s}" for n, s in st["models"].items()))
     if st.get("update"):
@@ -612,6 +639,8 @@ def doctor_cmd(
     typer.echo(
         f"  traits     {len(grown)}/{len(st.get('traits', {}))} grown: {', '.join(grown) or '-'}"
     )
+    for line in st.get("attention", []):
+        typer.echo(f"  attention  {line}")
     typer.echo(f"Brain: {'OK' if st['ok'] else 'ATTENTION'}")
 
 
@@ -639,9 +668,28 @@ def models_cmd(
         typer.echo(f"  {n:20} {line}")
 
 
+# what a line that says why a command failed tends to hold
+_ERROR_LINE = re.compile(r"(?i)error|exception|fatal|fail|denied|not found|no such|cannot|unable")
+
+
+def _error_line(output: str) -> str:
+    """The line of a failed command's output to search past sessions for: the last one that
+    reads like an error (a traceback ends with it), else the last line. The first line is
+    whatever the command printed before it failed."""
+    lines = [ln.strip() for ln in output.splitlines()]
+    lines = [ln for ln in lines if ln and not ln.startswith("Exit code")]
+    last = lines[-1] if lines else ""
+    return next((ln for ln in reversed(lines) if _ERROR_LINE.search(ln)), last)[:200]
+
+
 @app.command("recall")
 def recall_cmd(
-    query: Annotated[str, typer.Argument(help="Free-text search; keywords beat sentences.")] = "",
+    query: Annotated[
+        str,
+        typer.Argument(
+            help="The full question in plain words, with any exact name, number or file you know."
+        ),
+    ] = "",
     scope: Annotated[str, typer.Option("--scope", help="all, a kind, or a store.")] = "all",
     limit: Annotated[int, typer.Option("--limit", help="Max results after dedup.")] = 10,
     path: Annotated[
@@ -652,19 +700,18 @@ def recall_cmd(
         typer.Option(
             "--hook",
             help="PostToolUseFailure mode: read the hook JSON from stdin, search the transcripts "
-            "for the error, print additionalContext JSON when past sessions hit it.",
+            "for the error line, print additionalContext JSON when a past session holds it.",
         ),
     ] = False,
 ) -> None:
-    """brain_recall from the shell: one line per hit, `[kind] date source: text`."""
+    """brain_recall from the shell: one line per hit, `[kind] date source: text`. Ask the full
+    question in plain words, with any exact name, number or file you know."""
     import json
     import sys
 
     if hook:
         payload = json.loads(sys.stdin.read() or "{}")
-        # "Exit code 1\nModuleNotFoundError: ..." -> the first line that says what went wrong
-        lines = [ln.strip() for ln in str(payload.get("error", "")).splitlines()]
-        query = next((ln for ln in lines if ln and not ln.startswith("Exit code")), "")[:200]
+        query = _error_line(str(payload.get("error", "")))
         scope, limit = "transcripts", 3  # the store, so no other store is asked
     if not query.strip():
         if hook:
@@ -672,11 +719,25 @@ def recall_cmd(
         typer.echo("ERROR: query is empty", err=True)
         raise typer.Exit(code=1)
     with _open(path) as agent:
-        out = agent.brain_recall(query, scope=scope, fmt="detailed", limit=limit)
+        if hook:
+            # the plain search: an error line is not a question, so no judge, no vectors (a
+            # failed command must never start a model) and no entry in the miss log
+            out = recall.brain_recall(agent.stores, query, scope=scope, fmt="detailed", limit=limit)
+        else:
+            out = agent.brain_recall(query, scope=scope, fmt="detailed", limit=limit)
     hits = out["results"]
     if hook:
-        # the failure that just happened is in this session's transcript too; skip it
-        hits = [h for h in hits if h["extra"].get("session") != payload.get("session_id")]
+        words = recall.tokens(query)
+        hits = [
+            h
+            for h in hits
+            # the failure that just happened is in this session's transcript too; skip it
+            if h["extra"].get("session") != payload.get("session_id")
+            # a line is a match when it holds half of the error's words; the search returns
+            # its nearest lines for any text
+            and words
+            and len(words & recall.tokens(h["text"])) * 2 >= len(words)
+        ]
         if hits:
             body = "\n".join(f"{h['date']} {h['text'][:300]}" for h in hits)
             typer.echo(
@@ -684,14 +745,15 @@ def recall_cmd(
                     {
                         "hookSpecificOutput": {
                             "hookEventName": "PostToolUseFailure",
-                            "additionalContext": f"Past sessions hit this error:\n{body}",
+                            "additionalContext": "Past session lines that hold this error's "
+                            f"words (possibly related):\n{body}",
                         }
                     }
                 )
             )
         return
     for h in hits:
-        typer.echo(f"[{h['kind']}] {h['date']} {h['source']}: {h['text']}")
+        typer.echo(f"[{h['kind']}] {h['date'] or 'undated'} {h['source']}: {h['text']}")
     if not hits:
         typer.echo(out.get("note", "no hits"))
 

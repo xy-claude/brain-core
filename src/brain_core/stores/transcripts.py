@@ -23,7 +23,7 @@ from typing import Any
 from brain_core.storage.db import Database
 from brain_core.stores.base import Kind, Record, WriteResult
 from brain_core.stores.sqlite import fts_query
-from brain_core.stores.vault import _SECRET
+from brain_core.stores.vault import redact
 
 RECENT_MINUTES = 10  # transcript lines younger than this are the running conversation
 
@@ -100,7 +100,7 @@ def _rows(raw: bytes, stem: str) -> list[tuple[str, str, str, str, str]]:
         text = _WS.sub(" ", text).strip()
         if len(text) < _MIN_CHARS or text.startswith("<"):
             continue
-        text = _CLI_SECRET.sub(r"\1 [redacted]", _SECRET.sub("[redacted]", text))[:_TEXT_CHARS]
+        text = _CLI_SECRET.sub(r"\1 [redacted]", redact(text))[:_TEXT_CHARS]
         out.append((f"{uuid}:{i}" if uuid else f"{stem}:{ts}:{i}", session, ts, role, text))
     return out
 

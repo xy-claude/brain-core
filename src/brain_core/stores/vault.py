@@ -25,13 +25,53 @@ else:
 _FRONTMATTER = re.compile(r"^---\n(.*?)\n---\n", re.S)
 _HEADING = re.compile(r"^(#{1,3}) (.+?)\s*$")
 _BULLET = re.compile(r"^- (.+?)(?:\s*\((\d{4}-\d{2}-\d{2})\))?\s*$")
-_DECISION = re.compile(r"^## (\d{4}-\d{2}-\d{2}) — (.+?)\s*$")
+# hand-written logs nest them, and put a time or a note between the date and the dash
+_DECISION = re.compile(r"^###? (\d{4}-\d{2}-\d{2})[^—]*— (.+?)\s*$")
 _CORRECTION = re.compile(r"^### \[(\d{4}-\d{2}-\d{2})\] (.+?)\s*$")
+_FIELD = re.compile(r"^(?:- )?\*\*(\w[\w ]*):\*\*\s*(.*)$")
+# a line that only names what follows it: bold, ending in a colon, or a deeper heading
+_LABEL = re.compile(r"\*\*[^*]{1,60}\*\*:?$|[A-Za-z][^.]{0,40}:$|#{4,6} .{0,60}$")
+# fields that file an entry, not what it says: two entries that differ only here are one entry
+_STATE = ("title", "classification", "confidence", "theme", "promoted")
+# Any key format the list below does not know: a label, then one unbroken value of 16 or more
+# characters in which a letter and a digit touch. A slug that ends in a year (risk-model-2026),
+# a path, a URL, a date and a version are not such a value. The label may end a longer name
+# (API_KEY, authToken), may be followed by a short note in brackets ("key (staging): ...") and
+# may stand in the table cell before the value's. The rest of the value's run goes with it
+# (base64 has / in it, a JWT has dots) up to a space, a quote or one of , ; & so the next
+# field of a list or a query string stays readable. The value starts at a letter or digit and
+# the touch is looked for in its first 64 characters: unbounded, a line of "=" or of
+# "key=key=" after a label took seconds (16,000 characters: 1.4 s), and this pattern reads
+# every record at index time.
+_LABELLED = (
+    r"(?P<label>(?i:key|token|secret|password|passwd|pwd|licen[cs]e|auth|credential)s?"
+    r"(?:\s*\([^()\n]{1,24}\))?[\s\"'`*:=|]+(?:(?i:is)[\s\"'`*]+)?)(?=[A-Za-z0-9])"
+    r"(?=[A-Za-z0-9_+=-]{0,64}?(?:[A-Za-z]\d|\d[A-Za-z]))"
+    r"(?P<value>[A-Za-z0-9_+=-]{16,})[^\s\"'`,;&]*"
+)
+# What a pattern cannot see: a short password, a passphrase of words, digits alone, a value
+# with a / in its first 16 characters (one AWS secret key in four), and a random string with
+# neither a label nor a vendor's prefix.
 _SECRET = re.compile(
     r"hsk_[A-Za-z0-9]{8,}|(?i:bearer)\s+(?=[A-Za-z0-9._-]*\d)[A-Za-z0-9._-]{16,}|\bsk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}"
     r"|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}"
-    r"|eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"  # a JWT
-    r"|-----BEGIN [A-Z ]*PRIVATE KEY-----"
+    # a JWT. Not looked for inside a longer run: tried from every "eyJ" of one, 128,000
+    # characters took 3 s
+    r"|(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"
+    # a key block with its body: the header alone left every line of the key readable
+    r"|-----BEGIN [A-Z ]*PRIVATE KEY-----[A-Za-z0-9+/=\s]{0,8000}"
+    r"(?:-----END [A-Z ]*PRIVATE KEY-----)?"
+    # Stripe, Google, Telegram, Hugging Face, npm, PyPI, GitLab, SendGrid, DigitalOcean, Slack
+    r"|\b[sr]k_(?:live|test)_[A-Za-z0-9]{16,}|whsec_[A-Za-z0-9]{24,}|AIza[0-9A-Za-z_-]{35}"
+    r"|GOCSPX-[A-Za-z0-9_-]{28}|\b\d{8,10}:AA[A-Za-z0-9_-]{33}|\bhf_[A-Za-z0-9]{30,}"
+    r"|\bnpm_[A-Za-z0-9]{36}|pypi-AgEI[A-Za-z0-9_-]{50,}|glpat-[A-Za-z0-9_-]{20,}"
+    r"|SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}|dop_v1_[a-f0-9]{64}"
+    r"|https://hooks\.slack\.com/services/[A-Za-z0-9/]{20,}"
+    r"|(?<=://)[^\s/:@]{0,40}:[^\s/@]{3,}(?=@)"  # user:password@ in a URL
+    # a licence key wherever it stands: 4 to 6 dash-joined groups of capitals and digits
+    r"|(?<![A-Za-z0-9-])(?=[A-Z0-9-]{0,41}\d)(?=[A-Z0-9-]{0,41}[A-Z])"
+    r"[A-Z0-9]{4,6}(?:-[A-Z0-9]{4,6}){3,5}(?![A-Za-z0-9-])"
+    r"|" + _LABELLED
 )
 
 
@@ -41,8 +81,14 @@ def has_secret(text: str) -> bool:
 
 
 def redact(text: str) -> str:
-    """``text`` with every credential-shaped run replaced, for indexing and for replies."""
-    return _SECRET.sub("[redacted]", text)
+    """``text`` with every credential-shaped run replaced, for indexing and for replies.
+    A label stays, so "the staging password" still finds the line that held one."""
+    values = {m.group("value") or m.group(0) for m in _SECRET.finditer(text)}
+    text = _SECRET.sub(lambda m: (m.group("label") or "") + "[redacted]", text)
+    for value in values:
+        if len(value) >= 8:  # the same value again, where no label or prefix marks it
+            text = text.replace(value, "[redacted]")
+    return text
 
 
 FILES: dict[Kind, str] = {
@@ -75,6 +121,7 @@ class VaultStore:
         self.index = index
         self.ranked = index is not None  # with an index a query comes back in bm25 order
         self._meta_sig = -1  # mtime of record_meta.md when its keys were last loaded
+        self.unread: dict[str, str] = {}  # file -> why it could not be read cleanly, for health
 
     # ── read ────────────────────────────────────────────────────────────────
 
@@ -138,7 +185,7 @@ class VaultStore:
         path = self.root / META
         line = f"- {rid[:16]} | " + " | ".join(f"{k}: {v}" for k, v in fields.items())
         with self._locked(path):
-            text = read_text(path) or (
+            text = read_text(path, "surrogateescape") or (
                 f"---\ntype: index\nowner: {self.owner}\nstatus: active\n"
                 f"updated: {when.isoformat()}\n---\n# Record meta\n\n"
                 "Search keys, source and mission of each record, by record id. "
@@ -149,6 +196,12 @@ class VaultStore:
 
     def read(self, kind: Kind, query: str | None = None, limit: int = 50) -> list[Record]:
         if query and self.index:
+            if not self.root.is_dir():
+                # a drive that is not mounted is not an empty vault: raised before the sync
+                # below, which would drop every row (and then every vector) of the files it
+                # cannot see. One missing file cannot be told from a deleted one, and is read
+                # as deleted
+                raise FileNotFoundError(f"vault root missing: {self.root}")
             meta = self.root / META
             sig = meta.stat().st_mtime_ns if meta.exists() else 0
             if sig != self._meta_sig:  # keys changed on disk: bring the index in line
@@ -169,23 +222,42 @@ class VaultStore:
         for p in paths:
             if not p.exists():
                 continue
-            for r in self._parse(kind, p):
+            try:
+                parsed = self._parse(kind, p)
+            except OSError:
+                continue  # one unreadable file is skipped (health names it), not the store
+            for r in parsed:
                 if not q or q in r.text.lower() or q in r.domain.lower():
                     out.append(r)
         out.sort(key=lambda r: r.date, reverse=True)
         return out[:limit]
 
     def _parse(self, kind: Kind, path: Path, full: bool = False) -> list[Record]:
-        text = path.read_text(encoding="utf-8")
+        rel = path.relative_to(self.root).as_posix()
+        try:
+            text = path.read_text(encoding="utf-8")
+            self.unread.pop(rel, None)
+        except (OSError, UnicodeDecodeError) as e:
+            self.unread[rel] = (
+                "not UTF-8" if isinstance(e, UnicodeDecodeError) else type(e).__name__
+            )
+            if isinstance(e, OSError):
+                raise  # the caller skips this file and keeps the rest
+            text = read_text(path)  # a stray byte costs one character, not the file
         fm = self._frontmatter(text)
         fallback = _parse_date(fm.get("updated")) or date.fromtimestamp(path.stat().st_mtime)
-        rel = path.relative_to(self.root).as_posix()
+        return self._records(kind, text, rel, fallback, full)
+
+    def _records(
+        self, kind: Kind, text: str, rel: str, fallback: date, full: bool = False
+    ) -> list[Record]:
+        fm = self._frontmatter(text)
         if kind == "raw":
             return [
                 Record(
                     fm.get("sha256", record_id(text)),
                     "raw",
-                    fm.get("title", path.stem),
+                    fm.get("title", Path(rel).stem),
                     _parse_date(fm.get("fetched")) or fallback,
                     "",
                     rel,
@@ -196,12 +268,16 @@ class VaultStore:
         if kind == "knowledge":
             return knowledge_records(text, rel, fallback, cap=None if full else 600)
         if kind == "note":
-            fallback = _parse_date(path.stem) or fallback
+            fallback = _parse_date(Path(rel).stem) or fallback
+        # a correction written in the decisions' heading shape is an entry too, not lost fields
+        heads = {"decision": (_DECISION,), "correction": (_CORRECTION, _DECISION)}.get(kind, ())
         records: list[Record] = []
         domain = ""
         entry: dict[str, str] | None = None
-        for n, line in enumerate(text.splitlines(), 1):
-            if kind == "decision" and (m := _DECISION.match(line)):
+        block: list[str] = []  # a run of lines in a session file that are not top-level bullets
+        start = 0
+        for n, line in enumerate([*text.splitlines(), ""], 1):  # the blank closes a last block
+            if m := next(filter(None, (h.match(line) for h in heads)), None):
                 entry = {"title": m.group(2)}
                 records.append(
                     Record(
@@ -216,33 +292,31 @@ class VaultStore:
                     )
                 )
                 continue
-            if kind == "correction" and (m := _CORRECTION.match(line)):
-                entry = {"title": m.group(2)}
-                records.append(
-                    Record(
-                        record_id(m.group(2)),
-                        kind,
-                        m.group(2),
-                        _parse_date(m.group(1)) or fallback,
-                        domain,
-                        rel,
-                        n,
-                        entry,
-                    )
-                )
-                continue
-            if (
-                kind in ("decision", "correction")
-                and entry is not None
-                and (m := re.match(r"^(?:- )?\*\*(\w[\w ]*):\*\*\s*(.*)$", line))
-            ):
+            if entry is not None and re.match(r"#{4,6} ", line):
+                entry = None  # any other heading ends an entry, the deeper ones too
+            if entry is not None and (m := _FIELD.match(line)):
                 entry[m.group(1).lower()] = m.group(2)
                 continue
-            if m := _HEADING.match(line):
-                domain = m.group(2)
+            heading, bullet = _HEADING.match(line), _BULLET.match(line)
+            if kind == "note" and domain and not heading and not bullet and line.strip():
+                # a paragraph, a numbered or nested list, a quote, a table: one record per block
+                if re.search(r"\w", line):  # a rule or a table's |---| row carries nothing
+                    start = start if block else n
+                    block.append(line.strip())
                 continue
-            if kind in ("fact", "pattern", "note") and (m := _BULLET.match(line)):
-                body, d = m.group(1), m.group(2)
+            if block:
+                body = " ".join(block)
+                if len(block) > 1 or not _LABEL.match(body):  # a label alone says nothing
+                    records.append(
+                        Record(record_id(body), kind, body, fallback, domain, rel, start)
+                    )
+                block = []
+            if heading:
+                # a field line under another heading belongs to no entry above it
+                domain, entry = heading.group(2), None
+            elif kind in ("fact", "pattern", "note") and bullet:
+                body, d = bullet.group(1), bullet.group(2)
+                undated = not d and kind != "note"  # a note's day is its file's name
                 records.append(
                     Record(
                         record_id(body),
@@ -252,7 +326,8 @@ class VaultStore:
                         domain,
                         rel,
                         n,
-                        {} if (d or kind == "note") else {"legacy": "undated"},
+                        {"legacy": "undated"} if undated else {},
+                        undated=undated,
                     )
                 )
         return records
@@ -272,6 +347,9 @@ class VaultStore:
     ) -> WriteResult:
         if _SECRET.search(text):
             return WriteResult(self.name, "", "refused", "text looks like it contains a secret")
+        # new input must be valid text: `_save` passes a lone surrogate through as a raw byte,
+        # which is meant only for a stray byte the file already had
+        "".join([text, domain, *map(str, extra.values())]).encode()
         when = when or date.today()
         if kind != "raw":
             text = " ".join(text.split())  # one bullet line; the id is hashed the same way
@@ -309,27 +387,25 @@ class VaultStore:
                 when,
                 kind,
             )
-        if kind in ("decision", "correction"):
-            rid = record_id(extra.get("title", text[:60]))  # _parse keys these by heading
+        # _parse keys these by heading: one line, never empty (a title of spaces is no title)
+        title = " ".join(extra.get("title", "").split()) or " ".join(text[:60].split())
         if kind == "decision":
-            block = (
-                f"## {when.isoformat()} — {extra.get('title', text[:60])}\n"
+            body = (
                 f"**Decision:** {text}\n**Reason:** {extra.get('reason', '')}\n"
                 f"**Classification:** {extra.get('classification', 'reversible × low-risk')}\n"
                 f"**Confidence:** {extra.get('confidence', 'medium')}\n"
             )
-            return self._insert_entry(self.root / FILES[kind], rid, block, when, after_heading=None)
+            return self._insert_entry(self.root / FILES[kind], kind, title, body, when)
         if kind == "correction":
-            block = (
-                f"### [{when.isoformat()}] {extra.get('title', text[:60])}\n"
-                f"- **Error:** {extra.get('error', text)}\n"
+            # the text is always on disk: as the error, or beside one that was passed
+            said = f"- **Summary:** {text}\n" if extra.get("error", text) != text else ""
+            body = (
+                f"{said}- **Error:** {extra.get('error', text)}\n"
                 f"- **Correction:** {extra.get('correction', '')}\n"
                 f"- **Implied rule:** {extra.get('rule', '')}\n"
                 f"- **Theme:** {extra.get('theme', 'execution')}\n- **Promoted:** No\n"
             )
-            return self._insert_entry(
-                self.root / FILES[kind], rid, block, when, after_heading="## Corrections"
-            )
+            return self._insert_entry(self.root / FILES[kind], kind, title, body, when)
         if kind == "raw":
             return self._write_raw(text, when, extra)
         return WriteResult(
@@ -351,7 +427,7 @@ class VaultStore:
     ) -> WriteResult:
         with self._locked(path):
             text = (
-                path.read_text(encoding="utf-8")
+                read_text(path, "surrogateescape")
                 if path.exists()
                 else self._new_file(kind, when, create_header)
             )
@@ -376,27 +452,44 @@ class VaultStore:
         )
 
     def _insert_entry(
-        self, path: Path, rid: str, block: str, when: date, after_heading: str | None
+        self, path: Path, kind: Kind, title: str, body: str, when: date
     ) -> WriteResult:
-        kind: Kind = "correction" if after_heading else "decision"
+        rel = path.relative_to(self.root).as_posix()
+        mark = f"## {when.isoformat()} — " if kind == "decision" else f"### [{when.isoformat()}] "
         with self._locked(path):
             if not path.exists():
                 self._save(path, self._new_file(kind, when, ""), when)
-            if rid in {r.id for r in self._parse(kind, path)}:
-                return WriteResult(self.name, rid, "exists", path.relative_to(self.root).as_posix())
-            text = path.read_text(encoding="utf-8")
-            lines = text.split("\n")
-            if after_heading:
-                start = next((i for i, ln in enumerate(lines) if ln.strip() == after_heading), None)
-                anchor = (start + 1) if start is not None else len(lines)
-                if start is None:
-                    lines += ["", after_heading]
+            old = self._parse(kind, path)
+            new = _says(self._records(kind, f"{mark}{title}\n{body}", rel, when)[0])
+            name, n, last = title, 1, ""
+            # A title that is taken: the same entry again, or a later one with something new to
+            # say. The later one is numbered, so it has an id of its own and the first keeps its.
+            while same := [r for r in old if r.id == record_id(name)]:
+                if any(new <= _says(r) for r in same):
+                    return WriteResult(self.name, same[0].id, "exists", rel)
+                n, last = n + 1, same[0].id
+                name = f"{title} ({n})"
+            lines = read_text(path, "surrogateescape").split("\n")
+            if kind == "correction":
+                after = "## Corrections"
+                at = next((i for i, ln in enumerate(lines) if ln.strip() == after), None)
+                anchor = (at + 1) if at is not None else len(lines)
+                if at is None:
+                    lines += ["", after]
                     anchor = len(lines)
-            else:  # decisions: newest first, before the first existing entry
-                anchor = next((i for i, ln in enumerate(lines) if _DECISION.match(ln)), len(lines))
-            lines[anchor:anchor] = ["", *block.rstrip("\n").split("\n")]
+            else:  # decisions: newest first, before the first existing level-2 entry
+                anchor = next(
+                    (i for i, ln in enumerate(lines) if ln[:3] == "## " and _DECISION.match(ln)),
+                    len(lines),
+                )
+            lines[anchor:anchor] = ["", mark + name, *body.rstrip("\n").split("\n")]
             self._save(path, "\n".join(lines).rstrip("\n") + "\n", when)
-        return WriteResult(self.name, rid, "written", path.relative_to(self.root).as_posix())
+        if last and kind == "decision":
+            # a decision made again under its title replaces the one before it, so recall
+            # ranks it above. A correction that recurs is another occurrence: nothing is replaced
+            self.supersede(record_id(name), last, when)
+        taken = f" (as '{name}': the title was taken)" if last else ""
+        return WriteResult(self.name, record_id(name), "written", rel + taken)
 
     def _write_raw(self, body: str, when: date, meta: dict[str, str]) -> WriteResult:
         slug = re.sub(r"[^a-z0-9]+", "-", meta.get("title", "untitled").lower()).strip("-")[:60]
@@ -404,10 +497,13 @@ class VaultStore:
         path = self.root / "raw" / f"{when.isoformat()}-{slug or 'untitled'}.md"
         if path.exists():  # same title, different source: raw/ is immutable, never overwrite
             path = path.with_name(f"{path.stem}-{sha[:8]}.md")
+        src = meta.get("source", "")
+        # only a URL names one document; a label for pasted text can come back with a new body
+        url = src.startswith(("http://", "https://"))
         existing = [
             r
             for r in self.read("raw", limit=10_000)
-            if r.id == sha or r.extra.get("source") == meta.get("source")
+            if r.id == sha or (url and r.extra.get("source") == src)
         ]
         if existing:
             return WriteResult(self.name, existing[0].id, "exists", existing[0].path)
@@ -450,7 +546,8 @@ class VaultStore:
         tmp = path.with_suffix(path.suffix + ".tmp")
         for attempt in range(5):
             try:
-                tmp.write_text(text, encoding="utf-8")
+                # surrogateescape: a stray byte read from the file goes back as it was
+                tmp.write_text(text, encoding="utf-8", errors="surrogateescape")
                 os.replace(tmp, path)
                 return
             except OSError as e:  # iCloud EDEADLK / EAGAIN: back off and retry
@@ -475,7 +572,16 @@ class VaultStore:
             probe.unlink()
         except OSError as e:
             return (False, f"vault not writable: {e}")
-        return (True, f"{self.root} ({sum(1 for _ in self.root.rglob('*.md'))} notes)")
+        bad = ", ".join(
+            f"{rel} ({why})"
+            for rel, why in sorted(self.unread.items())
+            if (self.root / rel).exists()
+        )
+        notes = sum(1 for _ in self.root.rglob("*.md"))
+        return (
+            True,
+            f"{self.root} ({notes} notes)" + (f"; not read cleanly: {bad}" if bad else ""),
+        )
 
 
 def _lock_dir() -> Path:
@@ -524,9 +630,15 @@ def _bump_updated(text: str, when: date) -> str:
     return text
 
 
-def read_text(path: Path) -> str:
-    """A vault file as text, empty if missing; a stray non-UTF-8 byte never stops a read."""
-    return path.read_text(encoding="utf-8", errors="replace") if path.exists() else ""
+def read_text(path: Path, errors: str = "replace") -> str:
+    """A vault file as text, empty if missing; a stray non-UTF-8 byte never stops a read. A
+    caller that saves the text back passes ``surrogateescape``, which keeps that byte."""
+    return path.read_text(encoding="utf-8", errors=errors) if path.exists() else ""
+
+
+def _says(r: Record) -> set[str]:
+    """What a decision or correction states: its fields, without the ones that only file it."""
+    return {" ".join(v.split()) for k, v in r.extra.items() if k not in _STATE and v.strip()}
 
 
 def _parse_date(value: str | None) -> date | None:
@@ -537,9 +649,10 @@ def _parse_date(value: str | None) -> date | None:
 
 
 def knowledge_records(text: str, rel: str, when: date, cap: int | None = 600) -> list[Record]:
-    """One record per `## section` of a page: title › heading: body. A page without `## `
-    sections (a plain note, a Claude Code memory file) is one record of its body. ``cap``
-    cuts the body for a whole-store read; the index passes None so every word is searchable."""
+    """One record per `## section` of a page: title › heading: body. The text before the first
+    section is a record too (title: text); for a page without `## ` sections (a plain note, a
+    Claude Code memory file) that is its whole body. ``cap`` cuts the body for a whole-store
+    read; the index passes None so every word is searchable."""
     fm = frontmatter(text)
     m = _FRONTMATTER.match(text)
     skip = m.group(0).count("\n") if m else 0  # frontmatter lines: never body, never a title
@@ -551,6 +664,7 @@ def knowledge_records(text: str, rel: str, when: date, cap: int | None = 600) ->
     records: list[Record] = []
     heading, start = "", 0
     body: list[str] = []
+    lead: list[str] = []  # a memory file states its rule here, above the detail sections
     for n, line in enumerate(lines, 1):
         if line.startswith("## "):
             if heading:
@@ -558,12 +672,12 @@ def knowledge_records(text: str, rel: str, when: date, cap: int | None = 600) ->
             heading, body, start = line[3:].strip(), [], n
         elif heading and line.strip() and not line.startswith("---"):
             body.append(line.strip())
+        elif not heading and n > skip and line.strip() and line[0] != "#":
+            lead.append(line.strip())
     if heading:
         records.append(_knowledge_record(title, heading, body, rel, start, when, cap))
-    if not records:
-        plain = [ln.strip() for ln in lines[skip:] if ln.strip() and ln[0] != "#"]
-        if plain:
-            records.append(_knowledge_record(title, "", plain, rel, 1, when, cap))
+    if lead:
+        records.insert(0, _knowledge_record(title, "", lead, rel, 1, when, cap))
     return records
 
 

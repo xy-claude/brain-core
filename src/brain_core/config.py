@@ -76,7 +76,8 @@ class RecallConfig(BaseModel):
     judge_candidates: int = 50  # how many of the best candidates the model reads
     # as for `models`: api needs a key; claude is your own Claude Code login on your machine
     runner: Literal["api", "claude"] = "api"
-    model: str | None = None
+    model: str | None = None  # default: judge.JUDGE_MODEL, the small model the eval measured
+    judge_timeout: float = 60  # seconds a judge call may take before recall answers without it
 
 
 class SessionConfig(BaseModel):

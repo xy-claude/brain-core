@@ -42,7 +42,8 @@ class SqliteStore:
                 next((t.split(":", 1)[1] for t in f.tags if t.startswith("domain:")), ""),
                 f.metadata.get("path", f"sqlite://facts/{f.id}"),
                 int(f.metadata.get("line", 0)),
-                {"fact_id": str(f.id)},
+                # `sole`: no vault file held the line when it was saved (see brain_remember)
+                {"fact_id": str(f.id), **({"sole": "1"} if f.metadata.get("sole") else {})},
             )
             for f in facts
         ]
@@ -58,6 +59,12 @@ class SqliteStore:
         fact = structured.remember(self.db, text, kind=_KINDS[kind], tags=tags, metadata=extra)
         after = self.db.fetchone("SELECT COUNT(*) AS n FROM facts")
         grew = bool(before and after and after["n"] > before["n"])
+        if not grew and fact.metadata.get("sole") and not extra.get("sole"):
+            # saved again, and this time a vault file holds the line: the row is a copy now
+            self.db.execute(
+                "UPDATE facts SET metadata = json_remove(metadata, '$.sole') WHERE id = ?",
+                (fact.id,),
+            )
         return WriteResult(self.name, rid, "written" if grew else "exists", f"facts/{fact.id}")
 
     def health(self) -> tuple[bool, str]:

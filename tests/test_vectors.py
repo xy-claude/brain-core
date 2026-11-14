@@ -255,13 +255,16 @@ def test_agent_reports_not_in_memory_when_the_judge_says_so(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     reply = '{"picks": [], "status": "not_in_memory"}'
-    monkeypatch.setattr("brain_core.agent.run_api", lambda system, prompt, model=None: reply)
+    # the judge passes its own time limit to the runner (recall.judge_timeout)
+    monkeypatch.setattr("brain_core.agent.run_api", lambda system, prompt, model=None, **kw: reply)
     with _agent(tmp_path, vectors=False) as agent:
         agent.config.recall.judge = "model"
         out = agent.brain_recall("database port office")
         assert "not_in_memory" in out and "weak_match" not in out
         part = '{"picks": [1], "status": "partial"}'
-        monkeypatch.setattr("brain_core.agent.run_api", lambda system, prompt, model=None: part)
+        monkeypatch.setattr(
+            "brain_core.agent.run_api", lambda system, prompt, model=None, **kw: part
+        )
         assert "thin_recall" in agent.brain_recall("database port office")
 
 

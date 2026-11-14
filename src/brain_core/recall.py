@@ -11,13 +11,21 @@ records nearest in meaning. The two lists are joined by rank, never by score, so
 numbers can drown the other's; a record that holds an exact identifier from the question (a
 port, a version, a file name) is put first; and each result says which net found it. If no
 vector can be made the keyword result is returned as it is, with the reason in ``stores``.
+
+Where a vault has a record index, the SQLite fact table answers only for the rows no vault
+file held when they were saved (a save before the vault was configured, or while its write
+failed): the index reads the files as they are now, and the table never learns of a line
+edited or deleted by hand. A lite install, with no such index, answers from the whole table,
+and so does a call whose vault could not be read.
 """
 
 from __future__ import annotations
 
+import contextlib
 import json
 import re
-from collections.abc import Sequence
+from collections import Counter
+from collections.abc import Callable, Mapping, Sequence
 from datetime import date
 from typing import Any, get_args
 
@@ -25,12 +33,16 @@ from brain_core import judge as judging
 from brain_core.embed import EmbedUnavailable
 from brain_core.stores.base import Kind, Record, Store, full_text, holds, normalize
 from brain_core.stores.index import RecordIndex, days_asked
+from brain_core.stores.vault import redact
 from brain_core.stores.vectors import VectorIndex
 
 KINDS: tuple[Kind, ...] = get_args(Kind)
 DEFAULT_TOKENS = 6_000
 MAX_TOKENS = 25_000
 _CONCISE_CHARS = 600
+# a question is a sentence or two: a pasted log is cut here before it is embedded, sent to the
+# judge or echoed back (a 24,000-character one used to crowd every result out of the reply)
+_QUERY_CHARS = 1000
 # Below this share of the query's words in the best written record, recall is a miss. Measured
 # 2026-11-09 on one live agent: 11 real queries scored 0.50 to 0.92, 8 absent topics 0.00 to 0.40.
 # "No results" cannot be the test: a vector store returns its nearest records for any query.
@@ -77,7 +89,16 @@ _NETS = ("vault", "notes", "archive")  # the stores whose records carry vectors
 _IDENT = re.compile(r"[a-z0-9#][a-z0-9_./:#-]*[a-z0-9]")
 _DATEISH = re.compile(r"(?:19|20)\d\d(?:-\d\d){0,2}|\d{1,2}(?:st|nd|rd|th)")
 _PIN_MAX = 20  # an identifier more records than this hold names nothing in particular
+# under a scope the vector net is asked for this many, then cut down to the scope: all of a
+# vault up to this size, and below the 32,766 values SQLite takes in one statement
+_SCOPED_NET = 20_000
+# An undated line's date is only its file's, so its age is unknown: it is ranked as if six
+# months old, neither as new as its file nor as the oldest line there is. Measured 2026-11-14,
+# keywords only, 380 questions with a gold record: 269 in the top ten at this value, 260 at 0
+# (the undated lines of that vault are its oldest curated facts), 273 at 1.
+_UNDATED_FRESH = 1 / 3
 _WAS = re.compile(r"\(was: (.+?)\)(?:\s*\(\d{4}-\d{2}-\d{2}\))?\s*$")
+WAS_CHARS = 120  # how much of the old line a "Fact changed" banner quotes
 
 
 def tokens(text: str) -> set[str]:
@@ -94,6 +115,12 @@ def recency(when: date, today: date) -> float:
     return 1.0 / (1.0 + max((today - when).days, 0) / 90.0)
 
 
+def _when(r: Record) -> date:
+    """The date two records of one score are ordered by. An undated one has only its file's,
+    which every later write moves to today, so it never wins a tie as the newest."""
+    return date.min if r.undated else r.date
+
+
 def brain_recall(
     stores: Sequence[Store],
     query: str,
@@ -107,16 +134,30 @@ def brain_recall(
     candidates: int = 150,
     judge: judging.Runner | None = None,
     judge_candidates: int = 50,
+    picked: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """``picked``: the ``judgement`` an earlier call of the same question returned. A later
+    page (``offset`` > 0) passes it so the page continues the judged order; the judge itself
+    is only ever asked for the first page."""
     today = today or date.today()
     names = [s.name for s in stores]
     asked = [s for s in stores if getattr(s, "recall", True)]  # a store can opt out of recall
+    # the vault's index holds every fact and pattern as its file has it now; the SQLite copy
+    # never learns of a hand edit. So beside such an index it answers only for the rows no
+    # file ever held, unless it is asked by name or the vault cannot be read. It is asked
+    # last: by then it is known whether the vault answered
+    spare: list[Store] = []
+    if any(
+        s.name == "vault" and isinstance(getattr(s, "index", None), RecordIndex) for s in stores
+    ):
+        spare = [s for s in asked if s.name == "sqlite"]
+        asked = [s for s in asked if s.name != "sqlite"] + spare
     if scope == "all":
         kinds, chosen = KINDS, asked
     elif scope in KINDS:
         kinds, chosen = (scope,), asked
     elif scope in names:
-        kinds, chosen = KINDS, [s for s in stores if s.name == scope]
+        kinds, chosen, spare = KINDS, [s for s in stores if s.name == scope], []
     else:
         raise ValueError(
             f"scope must be 'all', a kind ({'|'.join(KINDS)}) or a store ({'|'.join(names)})"
@@ -128,6 +169,21 @@ def brain_recall(
     if offset < 0:
         raise ValueError("offset must be >= 0")
     max_tokens = min(max_tokens, MAX_TOKENS)
+    query = query.strip()
+    if not query:  # nothing was asked: no store is searched and no model is called
+        return {
+            "query": "",
+            "scope": scope,
+            "stores": {},
+            "total": 0,
+            "results": [],
+            "note": "the question is empty: nothing was searched",
+        }
+    asked_chars = len(query)
+    query = query[:_QUERY_CHARS]
+
+    def in_scope(r: Record, store: str) -> bool:
+        return r.kind in kinds and scope in ("all", *KINDS, store)
 
     q_norm, q_tok = normalize(query).lower(), tokens(query)
     # a transcript line holding the query's words is often the same question, asked before
@@ -142,13 +198,17 @@ def brain_recall(
             whole = bool(getattr(store, "whole", False))
             for kind in kinds[:1] if whole else kinds:
                 want = (offset + limit) * 2 if ranked else 10**6
-                if vectors is not None and ranked:
-                    want = max(want, candidates)  # the keyword net puts forward as many
+                if ranked and (vectors is not None or judge is not None or picked is not None):
+                    # the keyword net puts forward as many as the vector net; and what a judge
+                    # reads must not depend on the page, or its pages repeat and skip records
+                    want = max(want, candidates)
                 recs = store.read(kind, query if ranked else None, want)
+                # the vault answered: of the SQLite rows, only those no file ever held
+                sole = store in spare and "vault" not in report
                 found[store.name] += [
                     (r, (1.0 - i / (len(recs) + 1)) * 0.6 if ranked else 0.0)
                     for i, r in enumerate(recs)
-                    if not whole or r.kind in kinds
+                    if (not whole or r.kind in kinds) and (not sole or r.extra.get("sole"))
                 ]
         except Exception as e:  # a dead store must not kill recall
             report[store.name] = f"error: {type(e).__name__}: {str(e)[:120]}"
@@ -171,7 +231,8 @@ def brain_recall(
             rel = r.score / top + phrase if r.score > 0 else max(overlap + phrase, place)
             if rel <= 0:
                 continue
-            score = 0.75 * min(rel, 1.5) / 1.5 + 0.25 * recency(r.date, today)
+            fresh = _UNDATED_FRESH if r.undated else recency(r.date, today)
+            score = 0.75 * min(rel, 1.5) / 1.5 + 0.25 * fresh
             key = normalize(r.text).lower()
             if r.id in hits or key in seen_text:
                 if r.id in hits:
@@ -188,24 +249,43 @@ def brain_recall(
 
     # a value a "Fact changed" banner superseded is kept on disk but ranks below the banner;
     # a transcript line is what was said, not what was decided, so written memory outranks it
-    superseded = {
-        normalize(m.group(1)).lower() for r, _s, _sc in hits.values() for m in _WAS.finditer(r.text)
-    }
+    quotes = [(m.group(1), r.id) for r, _s, _sc in hits.values() for m in _WAS.finditer(r.text)]
+    superseded = {normalize(q).lower() for q, _rid in quotes}
+    # a quote of full length is the start of a longer old line, which is known by that start:
+    # start -> the banners that quote it. A banner is never the line it quotes (a second
+    # change on one day quotes a banner that starts like itself), and a start that two other
+    # lines share names neither of them
+    cut: dict[str, set[str]] = {}
+    for q, rid in quotes:
+        if len(q) == WAS_CHARS:
+            cut.setdefault(normalize(q).lower(), set()).add(rid)
+    starts = Counter(
+        k
+        for r, _s, _sc in hits.values()
+        if (k := normalize(r.text[:WAS_CHARS]).lower()) in cut and r.id not in cut[k]
+    )
     # a record another one names in `supersedes` (record_meta.md) is retired the same way
     replaced: dict[str, str] = {}
     for store in stores:  # the links live in the vault whatever the scope
         if hasattr(store, "replaced"):
-            replaced |= store.replaced()
+            with contextlib.suppress(OSError):  # a folder that cannot be read has no links
+                replaced |= store.replaced()
     retired = set(replaced)
 
+    def quoted(r: Record) -> bool:
+        k = normalize(r.text[:WAS_CHARS]).lower()
+        return normalize(r.text).lower() in superseded or (
+            k in cut and r.id not in cut[k] and starts[k] < 2
+        )
+
     def stale(r: Record) -> bool:
-        return normalize(r.text).lower() in superseded or r.id[:16] in retired
+        return quoted(r) or r.id[:16] in retired
 
     def halved(r: Record) -> float:
         # a line a "Fact changed" banner quotes has no link to its replacement, so its score is
         # cut. A linked record keeps its score: `_current` puts its replacement just above it,
         # and a question about the past can still find the old value
-        return 0.5 if normalize(r.text).lower() in superseded else 1.0
+        return 0.5 if quoted(r) else 1.0
 
     ordered = sorted(
         (
@@ -216,7 +296,7 @@ def brain_recall(
             )
             for r, s, sc in hits.values()
         ),
-        key=lambda h: (h[2], h[0].date),
+        key=lambda h: (h[2], _when(h[0])),
         reverse=True,
     )
     index = next(
@@ -232,17 +312,23 @@ def brain_recall(
         and scope not in ("transcript", "relation")
         and (scope in ("all", *KINDS) or scope in _NETS)
     ):
+        # a scope is cut out of the whole net, not out of the nearest few: a small kind (45
+        # decisions among 5,400 records) got next to nothing from the nearest 150
+        fetch = candidates if scope == "all" else max(candidates, _SCOPED_NET)
         try:
+            # the archive's 0.7 stays on the keyword score only: cosines sit in a narrow band,
+            # where it sent the best archive record from place 3 to place 81
             near = [
-                (r, s, sim * halved(r) * (0.7 if s == "archive" else 1.0))
-                for r, s, sim in vectors.search(query, candidates)
-                if r.kind in kinds and scope in ("all", *KINDS, s)
+                (r, s, sim * halved(r))
+                for r, s, sim in vectors.search(query, fetch)
+                if in_scope(r, s)
             ]
         except EmbedUnavailable as e:
             report["vectors"] = f"unavailable: {str(e)[:120]}"
         else:
-            report["vectors"] = len(near)
             near.sort(key=lambda h: h[2], reverse=True)
+            near = near[:candidates]
+            report["vectors"] = len(near)
             nets = {"keyword": ordered[:candidates], "vector": near}
             if index is not None and (days := days_asked(query, today)):
                 # a day named in the question is a third net: it adds that day's records and
@@ -251,31 +337,42 @@ def brain_recall(
                 on_day = [
                     (r, s, 0.0)
                     for day in days
-                    for r, s in index.dated(day, candidates)
-                    if r.kind in kinds and scope in ("all", *KINDS, s)
+                    for r, s in [h for h in index.dated(day, fetch) if in_scope(*h)][:candidates]
                 ]
                 on_day.sort(key=lambda h: seen.get(h[0].id, len(seen)))
                 nets["date"] = on_day
                 report["date"] = len(on_day)
             ordered = _join(nets, found_by)
-            ordered = _pin(ordered, query, index, found_by)
+            ordered = _pin(ordered, query, index, found_by, in_scope)
     ordered = _current(ordered, replaced, index, found_by)
-    verdict = ""
-    if judge is not None and ordered and offset == 0:
+    # what the judge said: its status, the ids it picked, how many it read of those gathered
+    judgement = dict(picked) if picked is not None else None
+    if judgement is None and judge is not None and ordered and offset == 0:
         read = ordered[:judge_candidates]
         try:
-            picks, verdict = judging.judge(
-                judge, query, [(r, stale(r)) for r, _s, _sc in read], today
+            picks, status = judging.judge(
+                judge, query, [(r, stale(r)) for r, _s, _sc in read], today, len(ordered)
             )
         except judging.JudgeError as e:
             report["judge"] = f"unavailable: {str(e)[:120]}"
         else:
-            report["judge"] = verdict
-            chosen_ids = {read[i][0].id for i in picks}
-            for i in picks:
-                found_by.setdefault(read[i][0].id, []).append("judge")
-            ordered = [read[i] for i in picks] + [h for h in ordered if h[0].id not in chosen_ids]
-            ordered = _current(ordered, replaced, index, found_by)  # holds for the judge too
+            judgement = {
+                "status": status,
+                "picks": [read[i][0].id for i in picks],
+                "read": len(read),
+                "gathered": len(ordered),
+            }
+    verdict = ""
+    if judgement is not None:
+        # by id and not by place, so a later page puts the same records first and continues
+        # after them: cut from the unjudged order it showed a pick twice and skipped another
+        report["judge"] = verdict = str(judgement["status"])
+        at = {h[0].id: h for h in ordered}
+        front = [at[i] for i in judgement["picks"] if i in at]
+        for r, _s, _sc in front:
+            found_by.setdefault(r.id, []).append("judge")
+        ordered = front + [h for h in ordered if h[0].id not in judgement["picks"]]
+        ordered = _current(ordered, replaced, index, found_by)  # holds for the judge too
     total = len(ordered)
     results = [
         _item(r, s, sc, fmt, stale(r), found_by.get(r.id))
@@ -292,10 +389,17 @@ def brain_recall(
         "total": total,
         "results": results,
     }
-    if verdict:
+    if asked_chars > _QUERY_CHARS:
+        out["query_cut"] = (
+            f"the question was cut to its first {_QUERY_CHARS} of {asked_chars} characters"
+        )
+    if judgement is not None:
         out["judged"] = verdict  # answered | partial | not_in_memory, from the model judge
+        # the verdict covers what the judge read, not everything the search gathered
+        out["judge_read"] = {k: judgement[k] for k in ("read", "gathered")}
+        out["judgement"] = judgement  # for the caller: pass it back as `picked` on later pages
     if verdict == "not_in_memory":
-        # a model read the candidates and none answers: stronger than a low keyword cover
+        # a model read the first candidates and none answers: stronger than a low keyword cover
         out["miss"] = {"best": round(best, 2), "hits": total, "judged": True}
     elif verdict:
         pass  # the judge found an answer; a low keyword cover no longer means a miss
@@ -317,7 +421,7 @@ def brain_recall(
             out.get("note", f"{len(results)} of {total} results")
             + f"; call again with offset={shown} for the rest"
         )
-    if not results:
+    if not results and "note" not in out:  # results dropped for size keep the note that says so
         out["note"] = (
             f"offset {offset} is past the last result ({total})"
             if total
@@ -343,7 +447,7 @@ def _join(nets: dict[str, list[Hit]], found_by: dict[str, list[str]]) -> list[Hi
             found_by.setdefault(rid, []).append(net)
     return sorted(
         ((r, s, worth[r.id]) for r, s, _sc in keep.values()),
-        key=lambda h: (h[2], h[0].date),
+        key=lambda h: (h[2], _when(h[0])),
         reverse=True,
     )
 
@@ -395,17 +499,24 @@ def identifiers(query: str) -> list[str]:
 
 
 def _pin(
-    ordered: list[Hit], query: str, index: RecordIndex | None, found_by: dict[str, list[str]]
+    ordered: list[Hit],
+    query: str,
+    index: RecordIndex | None,
+    found_by: dict[str, list[str]],
+    in_scope: Callable[[Record, str], bool] = lambda r, s: True,
 ) -> list[Hit]:
     """Records holding an exact identifier from the question go first, in the order they had.
-    Every record is scanned for it, not only the candidates."""
+    Every record is scanned for it, not only the candidates. How many hold it is counted over
+    all of them; only those the scope asked for are pinned."""
     front: dict[str, Hit] = {}
     for token in identifiers(query):
         holders = {r.id: (r, s, sc) for r, s, sc in ordered if holds(token, full_text(r))}
-        if index is not None:
-            for r, s in index.holding(token, _PIN_MAX + 1):
+        others = index.holding(token, _PIN_MAX + 1) if index is not None else []
+        count = len({*holders, *(r.id for r, _s in others)})
+        for r, s in others:
+            if in_scope(r, s):
                 holders.setdefault(r.id, (r, s, 0.0))
-        if 0 < len(holders) <= _PIN_MAX:
+        if holders and count <= _PIN_MAX:
             for rid, hit in holders.items():
                 front.setdefault(rid, hit)
                 if "exact" not in found_by.setdefault(rid, []):
@@ -421,23 +532,34 @@ def _item(
     stale: bool = False,
     found_by: list[str] | None = None,
 ) -> dict[str, Any]:
-    r = Record(r.id, r.kind, full_text(r), r.date, r.domain, r.path, r.line, r.extra)
-    text = (
-        r.text
-        if fmt == "detailed" or len(r.text) <= _CONCISE_CHARS
-        else r.text[:_CONCISE_CHARS] + "…"
-    )
+    # masked again on the way out, behind the index's own masking: a credential-shaped run
+    # never leaves in a reply, whatever the stored row holds
+    full = redact(full_text(r))
     item: dict[str, Any] = {
-        "name": "-".join(_WORD.findall(r.text.lower())[:6]) or r.kind,
+        "name": "-".join(_WORD.findall(full.lower())[:6]) or r.kind,
         "kind": r.kind,
-        "date": r.date.isoformat(),
+        # an undated line has only its file's date: empty, so no reader takes that for a fact
+        "date": "" if r.undated else r.date.isoformat(),
         "source": f"{r.path}:{r.line}" if r.line else r.path or store,
-        "text": text,
+        "text": (
+            full
+            if fmt == "detailed" or len(full) <= _CONCISE_CHARS
+            else full[:_CONCISE_CHARS] + "…"
+        ),
     }
     if stale:
         item["superseded"] = True  # a newer record replaced this value; kept for its history
     if found_by:
         item["found_by"] = found_by  # keyword, vector, exact, judge: what put it forward
     if fmt == "detailed":
-        item.update(id=r.id, store=store, score=round(score, 3), domain=r.domain, extra=r.extra)
+        item.update(
+            id=r.id,
+            store=store,
+            score=round(score, 3),
+            domain=redact(r.domain),
+            # a store may hand over a value that is not text (a timestamp): it passes as it is
+            extra={k: redact(v) if isinstance(v, str) else v for k, v in r.extra.items()},
+        )
+        if r.undated:
+            item["undated"] = True
     return item

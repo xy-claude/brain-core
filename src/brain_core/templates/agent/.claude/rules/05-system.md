@@ -4,7 +4,7 @@
 
 - **Git staging:** stage only files you changed this session. Never `git add -A` or `git add .`. `git status` before every commit.
 - **Commit authorship:** $user is the sole author. One short imperative subject line under 72 characters. No `Co-Authored-By`, no `Generated with`, no agent trailers.
-- **Secrets:** never in a tracked file, a vault file, a Hindsight retain, or a chat reply. Keychain or an untracked `.env`. A blocked push means fix the file, never bypass the hook (`--no-verify`, `SKIP_GITLEAKS`).
+- **Secrets:** never in a tracked file, a vault file, any memory store, or a chat reply. Keychain or an untracked `.env`. A blocked push means fix the file, never bypass the hook (`--no-verify`, `SKIP_GITLEAKS`).
 - **Push needs $user.** "push" is the approval; nothing else is.
 - **Verify before claim.** Paste the test or build output. "No error" is not "done". Witness a fix before reporting it. A list endpoint's field is not the object's: fetch one by id before calling anything empty.
 - **Prior art first.** Before writing anything unfamiliar, search for two or three existing implementations and say what you reused.
@@ -23,4 +23,4 @@
 
 ## Scores
 
-`brain_status` plus the session critique are the health signal. Memory failing → audit the vault and Hindsight reachability. Learning failing → `/distill --lint`. Structure failing → `brain doctor`.
+`brain_status` plus the session critique are the health signal. Memory failing → audit the vault and every store `brain_status` reports down. Learning failing → `/distill --lint`. Structure failing → `brain doctor`.

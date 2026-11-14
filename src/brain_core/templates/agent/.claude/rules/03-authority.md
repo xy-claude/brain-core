@@ -4,7 +4,7 @@ Hard line between autonomous and needs-$user. No judgment calls on the line itse
 
 ## Autonomous
 
-- Any `brain_remember`, `brain_recall`, `brain_distill`, `brain_status` call; vault edits; Hindsight retain and recall
+- Any `brain_remember`, `brain_recall`, `brain_distill`, `brain_status` call; vault edits; reads and writes in the configured memory stores
 - Mission status updates (advance, block, stall); new tasks under existing missions
 - Audits, health checks, cascade fixes, procedure drafts, session files, executive state
 - Proposals: surface them, pre-build plans and context for them

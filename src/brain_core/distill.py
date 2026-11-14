@@ -26,6 +26,8 @@ if TYPE_CHECKING:
     from brain_core.agent import Agent
 
 MIN_WORDS = 200  # below this a web capture is suspect (JS page, paywall)
+# an exact version: `npx -y` with a bare name runs whatever npm resolves that day
+DEFUDDLE = "defuddle@0.19.6"
 _GITHUB = re.compile(r"^https?://github\.com/([^/]+)/([^/#?]+)/?$")
 _YOUTUBE = re.compile(r"^https?://(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)([\w-]+)")
 _TAG = re.compile(r"<[^>]+>")
@@ -139,7 +141,7 @@ def _defuddle(url: str) -> tuple[str, dict[str, str]]:
         return "", {}
     try:
         md = subprocess.run(
-            ["npx", "-y", "defuddle", "parse", url, "--markdown"],
+            ["npx", "-y", DEFUDDLE, "parse", url, "--markdown"],
             capture_output=True,
             text=True,
             timeout=90,
@@ -147,7 +149,7 @@ def _defuddle(url: str) -> tuple[str, dict[str, str]]:
         if md.returncode != 0:
             return "", {}
         js = subprocess.run(
-            ["npx", "-y", "defuddle", "parse", url, "--json"],
+            ["npx", "-y", DEFUDDLE, "parse", url, "--json"],
             capture_output=True,
             text=True,
             timeout=90,

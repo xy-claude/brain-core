@@ -15,6 +15,7 @@ from typing import Any
 
 from brain_core import traits
 from brain_core.recall import tokens
+from brain_core.stores.vault import redact
 
 MAX_LESSONS = 2
 MIN_SHARED = 2  # distinct words a prompt and a correction must have in common
@@ -83,7 +84,7 @@ def render(hits: list[dict[str, Any]]) -> str:
     lines += [
         f"- [{h['date']}] {h['title']}" + (f": {h['rule']}" if h["rule"] else "") for h in hits
     ]
-    return "\n".join(lines)
+    return redact("\n".join(lines))  # a rule can quote the secret it is about
 
 
 def _words(text: str) -> set[str]:

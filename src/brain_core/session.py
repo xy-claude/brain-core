@@ -2,8 +2,10 @@
 
 START reads what cron and the last session left behind (daily brief, executive state, mental
 models, inbox) and recalls the active missions. END drains the Hindsight queue, finalises the
-HSAM day file, rewrites critique and cross-agent sync (from the agent's text or a stub built
-from this session's ``brain_remember`` events), and writes the clean-close marker.
+HSAM day file, replaces executive state and critique with the agent's text (the file it
+replaces is kept as ``.prev.md``; one that is not passed stays as it is), writes the
+cross-agent sync (the agent's text, or a stub built from this session's ``brain_remember``
+events), and writes the clean-close marker.
 """
 
 from __future__ import annotations
@@ -18,8 +20,9 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from brain_core import recall
 from brain_core.stores.hindsight import HindsightStore, document_id
-from brain_core.stores.vault import _SECRET, VaultStore, _Lock
+from brain_core.stores.vault import _SECRET, VaultStore, _Lock, redact
 from brain_core.stores.vault import read_text as _read
 
 if TYPE_CHECKING:
@@ -28,7 +31,8 @@ from brain_core.config import SessionConfig
 
 START_TOKENS = 6_000
 INJECT_WINDOW_MIN = 15  # a brief injected by the SessionStart hook this recently is not repeated
-_SECTION = re.compile(r"^## (.+)$", re.M)
+# the `## ` headings of the executive state that start, status and the traits read
+EXEC_SECTIONS = ("Primary Objective", "Top Missions", "Pending Decisions")
 _BRIEF_DATE = re.compile(r"Daily Brief — (\d{4}-\d{2}-\d{2})")
 
 
@@ -37,10 +41,8 @@ def session_start(agent: Agent, session_id: str | None = None) -> dict[str, Any]
     sid = session_id or f"s-{today.strftime('%Y%m%d')}-{uuid.uuid4().hex[:6]}"
     cfg, vault = agent.config.session, _vault(agent)
     prev = agent.recent_events(event_type="session_start", limit=1)
-    marker = _marker(agent)
-    last_close = marker.read_text().strip() if marker.exists() else ""
     recovery = None
-    if prev and prev[0].payload.get("session_id") not in (last_close, sid):
+    if prev and prev[0].payload.get("session_id") not in (*closed(agent), sid):
         recovery = {
             "unclosed": prev[0].payload.get("session_id"),
             "started": prev[0].occurred_at.isoformat(),
@@ -63,11 +65,11 @@ def session_start(agent: Agent, session_id: str | None = None) -> dict[str, Any]
             "not repeated here"
         )
     else:
-        out["brief"] = brief or f"missing: {cfg.brief}"
+        out["brief"] = redact(brief) or f"missing: {cfg.brief}"  # masked, as recall's text is
     out["brief_stale"] = m is not None and (today - date.fromisoformat(m.group(1))).days > 1
     exec_text = _read(vault.root / cfg.executive)
-    out["executive_state"] = _sections(
-        exec_text, ("Primary Objective", "Top Missions", "Pending Decisions")
+    out["executive_state"] = redact(_sections(exec_text, EXEC_SECTIONS)) or exec_note(
+        exec_text, cfg.executive
     )
     inbox = _read(vault.root / cfg.inbox)
     out["inbox"] = (
@@ -78,7 +80,10 @@ def session_start(agent: Agent, session_id: str | None = None) -> dict[str, Any]
     out["peers"] = _peers(vault, cfg)
     out["mental_models"] = _mental_models(agent, cfg.mental_models)
     missions = _mission_lines(exec_text)
-    out["missions"] = {q: agent.brain_recall(q, limit=3)["results"] for q in missions[:2]}
+    # the plain search: a mission line is not a question, so no judge, no vectors, no miss log
+    out["missions"] = {
+        q: recall.brain_recall(agent.stores, q, limit=3)["results"] for q in missions[:2]
+    }
     _cap(out, START_TOKENS)
     return out
 
@@ -112,16 +117,31 @@ def session_end(
             when=today,
         )
         out["hsam"] = hs.status
+        # the file being replaced is kept, unless it is itself without the headings and a
+        # copy with them is already kept: the retry the warning below asks for would
+        # otherwise put the malformed text over the last good state
+        was = vault.root / cfg.executive
         out["executive_state"] = _put(
-            vault, cfg.executive, executive_state, today, "unchanged (pass executive_state=...)"
-        )
-        out["critique"] = _put(
             vault,
-            cfg.critique,
-            critique or _critique_stub(sid, writes, today),
+            cfg.executive,
+            executive_state,
             today,
-            "",
-            stub=critique is None,
+            "unchanged (pass executive_state=...)",
+            keep=not (
+                exec_note(_read(was), cfg.executive)
+                and _sections(_read(was.with_suffix(".prev.md")), EXEC_SECTIONS)
+            ),
+        )
+        if out["executive_state"] == "rewritten" and (
+            note := exec_note(executive_state or "", cfg.executive)
+        ):
+            out["warning"] = (
+                f"{note} It was written as passed and the file it replaced is kept beside it "
+                "as .prev.md: call brain_session('end') again with those headings."
+            )
+        # a critique that is not passed stays: a stub used to replace the last real one
+        out["critique"] = _put(
+            vault, cfg.critique, critique, today, "unchanged (pass critique=...)", keep=True
         )
         out["sync"] = _put(
             vault,
@@ -133,9 +153,10 @@ def session_end(
         )
     marker = _marker(agent)
     marker.parent.mkdir(parents=True, exist_ok=True)
-    marker.write_text(_closing(agent, sid, session_id is not None) + "\n")
+    closing = _closing(agent, sid, session_id is not None)
+    marker.write_text(closing + "\n")
     out["marker"] = str(marker)
-    agent.log_event("session_end", {"session_id": sid, "writes": len(writes)})
+    agent.log_event("session_end", {"session_id": sid, "closed": closing, "writes": len(writes)})
     agent.end_session()
     return out
 
@@ -211,6 +232,30 @@ def _marker(agent: Agent) -> Path:
     return agent.resolve(m) if m else agent.data_dir / "last_close.txt"
 
 
+def closed(agent: Agent) -> set[str]:
+    """Ids of the sessions that closed cleanly: the one in the marker file and those of the
+    journal's last ``session_end`` events. The marker holds one id, so of two sessions open
+    at once it remembers only the one that closed last."""
+    marker = _marker(agent)
+    ids = {marker.read_text().strip()} if marker.exists() else set()
+    for e in agent.recent_events(event_type="session_end"):
+        ids.add(str(e.payload.get("closed") or e.payload.get("session_id")))
+    return ids
+
+
+def exec_note(text: str, rel: str) -> str:
+    """Why start has no objective, missions or pending decisions to show; empty when it has."""
+    if _sections(text, EXEC_SECTIONS):
+        return ""
+    if not text.strip():
+        return f"missing: {rel}"
+    heads = ", ".join(f"## {h}" for h in EXEC_SECTIONS)
+    return (
+        f"{rel} has none of the sections brain_session('start') reads ({heads}): its "
+        "objective, missions and pending decisions cannot be read from it."
+    )
+
+
 def _sections(text: str, wanted: tuple[str, ...]) -> str:
     parts, keep = re.split(r"^(?=## )", text, flags=re.M), []
     for p in parts:
@@ -251,7 +296,7 @@ def _peers(vault: VaultStore, cfg: SessionConfig) -> str:
     out = []
     for when, p in sorted(found, reverse=True):
         age = (date.today() - when).days
-        body = "\n".join(_read(p).splitlines()[:15])
+        body = redact("\n".join(_read(p).splitlines()[:15]))
         out.append(f"### {p.parent.name} ({when}, {age}d{', idle' if age > 7 else ''})\n{body}")
     return "\n\n".join(out)
 
@@ -339,9 +384,16 @@ def _drain_locked(agent: Agent, path: Path) -> int:
 
 
 def _put(
-    vault: VaultStore, rel: str, body: str | None, today: date, unchanged: str, stub: bool = False
+    vault: VaultStore,
+    rel: str,
+    body: str | None,
+    today: date,
+    unchanged: str,
+    stub: bool = False,
+    keep: bool = False,
 ) -> str:
-    if body is None:
+    """Replace a session file with ``body``. ``keep``: the file it replaces stays as .prev.md."""
+    if body is None or not body.strip():  # an empty body would blank the file
         return unchanged
     if _SECRET.search(body):
         return "refused: looks like it contains a secret"
@@ -349,7 +401,11 @@ def _put(
         f"---\ntype: log\nowner: {vault.owner}\ndomain: system\nstatus: active\n"
         f"updated: {today.isoformat()}\n---\n"
     )
-    vault._save(vault.root / rel, fm + body.strip() + "\n", today)
+    path = vault.root / rel
+    if keep and path.exists():  # one generation back, as mental models keep
+        # surrogateescape: a stray byte in the file is in the copy as it was
+        vault._save(path.with_suffix(".prev.md"), _read(path, "surrogateescape"), today, bump=False)
+    vault._save(path, fm + body.strip() + "\n", today)
     return "stub" if stub else "rewritten"
 
 
@@ -358,17 +414,6 @@ def _count(writes: list[dict[str, Any]]) -> dict[str, int]:
     for w in writes:
         out[w.get("kind", "?")] = out.get(w.get("kind", "?"), 0) + 1
     return out
-
-
-def _critique_stub(sid: str, writes: list[dict[str, Any]], today: date) -> str:
-    changed = [w for w in writes if w.get("contradiction")]
-    return (
-        f"# Session Critique — {today.isoformat()}\n\n## What Went Well\n"
-        f"- {len(writes)} brain writes through brain_remember in session {sid}.\n\n"
-        f"## What To Improve\n- (stub: the agent did not pass critique=...)\n\n"
-        f"## Facts Changed\n"
-        + ("".join(f"- {w.get('text', '')[:160]}\n" for w in changed) or "- none\n")
-    )
 
 
 def _sync_stub(agent_name: str, writes: list[dict[str, Any]], today: date) -> str:

@@ -29,7 +29,7 @@ from brain_core.session import _sections
 from brain_core.status import _frontmatter
 from brain_core.stores.hindsight import HindsightStore
 from brain_core.stores.transcripts import TranscriptStore
-from brain_core.stores.vault import _DECISION, VaultStore, _parse_date
+from brain_core.stores.vault import _DECISION, VaultStore, _parse_date, redact
 from brain_core.stores.vault import read_text as _read
 
 if TYPE_CHECKING:
@@ -76,7 +76,8 @@ def daily(agent: Agent, today: date | None = None, shadow: bool = False) -> dict
         _stale_knowledge(vault.root / "knowledge", today),
         _warmup(vault.root / "sessions"),
     ]
-    brief = "\n".join(p for p in parts if p)
+    # the brief copies session lines and the executive state: masked like every other exit
+    brief = redact("\n".join(p for p in parts if p))
     live = vault.root / cfg.session.brief
     target = live.with_name(f"{live.stem}.shadow.md") if shadow else live
     target.write_text(brief, encoding="utf-8")
@@ -203,7 +204,8 @@ def _health(st: dict[str, Any]) -> str:
         f"- Last session: start `{st['session']['last_start'] or '-'}`, "
         f"close `{st['session']['last_close'] or '-'}`"
         + (" — **UNCLOSED, recover first**" if st["session"]["unclosed"] else "")
-        + f"\n- Pending decisions: {st.get('pending_decisions', 0)}\n"
+        # no count when the executive state could not be read: 0 would say nothing waits
+        + f"\n- Pending decisions: {st.get('executive_state') or st.get('pending_decisions', 0)}\n"
     )
 
 

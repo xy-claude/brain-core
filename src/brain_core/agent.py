@@ -33,7 +33,7 @@ from typing import Any, Self, cast, get_args
 from brain_core.config import BrainConfig
 from brain_core.distill import brain_distill
 from brain_core.embed import EmbedUnavailable, WorkerEmbedder
-from brain_core.judge import Runner
+from brain_core.judge import JUDGE_MODEL, Runner
 from brain_core.memory import episodic
 from brain_core.memory.episodic import Event
 from brain_core.models import run_api, run_claude
@@ -58,6 +58,12 @@ from brain_core.stores.index import RecordIndex, terms
 from brain_core.stores.vault import _SECRET
 from brain_core.stores.vectors import VectorIndex
 
+# what the reply says about each part of recall that could not run
+_DEGRADED = {
+    "vectors": "the search by meaning was unavailable, so these results come from keywords alone",
+    "judge": "the model judge was unavailable, so no model read whether these results answer",
+}
+
 
 class Agent:
     """The five brain_* operations over every configured store, plus the session journal."""
@@ -72,6 +78,8 @@ class Agent:
         self._current_session: str | None = None
         self._stores: list[Store] | None = None
         self._vectors: VectorIndex | None = None
+        # (question, scope) -> what the judge said on its first page, for the pages after it
+        self._judged: dict[tuple[str, str], dict[str, Any]] = {}
 
     # ── construction ─────────────────────────────────────────────────────────
 
@@ -156,7 +164,11 @@ class Agent:
         if cfg.judge != "model":
             return None
         fn = run_api if cfg.runner == "api" else run_claude
-        return lambda system, prompt: fn(system, prompt, cfg.model)
+        # no recall.model: the small model the eval measured, never the runner's own default.
+        # The judge has its own short limit: recall must not wait ten minutes for a verdict
+        return lambda system, prompt: fn(
+            system, prompt, cfg.model or JUDGE_MODEL, timeout=cfg.judge_timeout
+        )
 
     @property
     def vectors(self) -> VectorIndex | None:
@@ -181,8 +193,12 @@ class Agent:
         """One query across every store, deduplicated and ranked. See :mod:`brain_core.recall`.
 
         ``judge=False`` and ``vectors=False`` switch those parts off for this call whatever the
-        config says: hooks and session start use them, where nobody reads a verdict."""
-        index = self.vectors if vectors else None
+        config says, for a caller that reads no verdict. (The hooks and session start do not
+        come through here: they call :func:`brain_core.recall.brain_recall`, which has neither
+        unless it is handed one.) The judge reads the first page only; a later page
+        (``offset``) continues the order it gave."""
+        key = (query.strip(), scope)
+        index = self.vectors if vectors and query.strip() else None
         if index is not None:
             # the worker is about to be asked anyway: give recent saves their vectors first.
             # If it cannot be reached, recall reports that and answers from keywords
@@ -199,18 +215,52 @@ class Agent:
             candidates=self._config.recall.candidates,
             judge=self.judge if judge else None,
             judge_candidates=self._config.recall.judge_candidates,
+            # a later page continues the order the judge gave the first one, with no new call
+            picked=self._judged.get(key) if judge and offset else None,
         )
+        judgement = out.pop("judgement", None)
+        if offset == 0:
+            self._judged.pop(key, None)
+            if judgement is not None:
+                self._judged[key] = judgement
+                while len(self._judged) > 8:  # the last few questions are all paging needs
+                    self._judged.pop(next(iter(self._judged)))
+        down = [
+            (part, str(state).removeprefix("unavailable: "))
+            for part in _DEGRADED
+            if str(state := out["stores"].get(part, "")).startswith("unavailable")
+        ]
+        for part, reason in down:
+            # a fallback nobody hears of can last for days: the event is what a health check counts
+            self.log_event("recall_degraded", {"part": part, "reason": reason})
+        if down:
+            out["degraded"] = (
+                "Recall fell back: "
+                + "; ".join(f"{_DEGRADED[part]} ({reason})" for part, reason in down)
+                + ". Say that memory search is degraded, and search again in other words "
+                "before saying something is not on record."
+            )
+        read = out.get("judge_read", {})
         miss = out.pop("miss", None)
         if miss is not None and miss.get("judged"):
-            self.log_event("recall_miss", {"query": query[:200], "scope": scope, **miss})
+            if offset == 0:
+                self.log_event("recall_miss", {"query": query[:200], "scope": scope, **miss})
+            # the judge is right about what it read; the miss is usually the search's, so the
+            # verdict is reported as what was read and never as an order to deny
             out["not_in_memory"] = (
-                "A model read the closest records and none answers the question. Say it is "
-                "not on record; the results below are only the nearest topics."
+                f"A model read the {read.get('read')} closest of {read.get('gathered')} candidates "
+                "and none answers. That is a miss of this search, not proof of absence: search "
+                "once more in other words (a synonym, the name it would be filed under, a date "
+                "or a scope). When a retry finds it, teach it: brain_remember(kind='key', "
+                "text=<this question>, source=<that result's source>). Only if the retry finds "
+                "nothing either, say it is not on record. The results below are the nearest "
+                "topics, not answers."
             )
         elif out.get("judged") == "partial":
             out["thin_recall"] = (
-                "The records found hold only part of the answer. Search again in other words "
-                "for the missing part before answering."
+                f"The records found hold only part of the answer (a model read "
+                f"{read.get('read')} of {read.get('gathered')} candidates). Search again in other "
+                "words for the missing part before answering."
             )
         elif miss is not None and offset == 0:
             # a miss is an eval case waiting to be written; brain daily and brain_status list them
@@ -346,8 +396,9 @@ class Agent:
         """Bring the record index in line with the files (a store does it when it is searched)."""
         for s in self.stores:
             if getattr(s, "index", None) is not None:
-                s.read("fact", "sync", 1)
-                s.read("knowledge", "sync", 1)  # a notes store answers only this kind
+                with contextlib.suppress(OSError):  # a vault that is away keeps its rows
+                    s.read("fact", "sync", 1)
+                    s.read("knowledge", "sync", 1)  # a notes store answers only this kind
 
     def brain_session(
         self,
