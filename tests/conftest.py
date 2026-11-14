@@ -35,6 +35,14 @@ def _no_pypi(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("brain_core.update.latest", lambda timeout=5.0: None)
 
 
+@pytest.fixture(autouse=True)
+def _no_real_backup(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No test reaches the real ``hindsight-admin``. `brain daily` runs it when it is on PATH:
+    that starts the developer's own Hindsight database and writes a dump over the backup file
+    of the test's date. A test of the backup sets its own stand-in for ``cron._admin``."""
+    monkeypatch.setattr("brain_core.cron._admin", lambda: None)
+
+
 @pytest.fixture
 def db(tmp_path: Path) -> Iterator[Database]:
     """A freshly-migrated Database in a tmp dir. Closes after each test."""
