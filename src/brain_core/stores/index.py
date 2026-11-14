@@ -235,6 +235,17 @@ class RecordIndex:
         )
         return str(row["rid"]) if row else ""
 
+    def get(self, rid: str) -> tuple[Record, str] | None:
+        """The record whose id starts with ``rid``, with its store."""
+        row = self.db.fetchone(
+            "SELECT record, store FROM records_fts WHERE rid LIKE ? LIMIT 1", (rid + "%",)
+        )
+        if not row:
+            return None
+        d = json.loads(row["record"])
+        d["date"] = date.fromisoformat(d["date"])
+        return Record(**d), row["store"]
+
     def holding(self, token: str, limit: int) -> list[tuple[Record, str]]:
         """Records whose text holds ``token`` exactly (lowercase), with their store. The index
         narrows by the token's words; the text itself decides."""

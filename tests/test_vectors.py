@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -260,3 +261,63 @@ def test_agent_reports_not_in_memory_when_the_judge_says_so(
         agent.config.recall.judge = "model"
         out = agent.brain_recall("database port office")
         assert "not_in_memory" in out and "weak_match" not in out
+
+
+# ── current beats old ────────────────────────────────────────────────────────
+
+
+def test_a_replaced_record_never_stands_above_its_replacement(tmp_path: Path) -> None:
+    with _agent(tmp_path, vectors=False) as agent:
+        res = brain_recall(agent.stores, "gateway port 15432 before the move", fmt="detailed")
+        old = res["results"][0]
+        assert "15432" in old["text"]
+        new = next(r for r in res["results"] if "port 5432 on" in r["text"])
+        vault = agent.stores[1]
+        vault.supersede(new["id"], old["id"])  # type: ignore[attr-defined]
+        after = brain_recall(agent.stores, "gateway port 15432 before the move", fmt="detailed")
+        texts = [r["text"] for r in after["results"]]
+        assert texts.index(new["text"]) + 1 == texts.index(old["text"])
+        assert after["results"][texts.index(old["text"])]["superseded"] is True
+        assert "replaces" in after["results"][texts.index(new["text"])]["found_by"]
+        # the replacement is brought in even when the search did not return it
+        short = brain_recall(agent.stores, "gateway 15432", fmt="detailed", limit=1)
+        assert short["results"][0]["text"] == new["text"]
+
+
+def test_one_record_can_replace_several_and_chains_resolve(tmp_path: Path) -> None:
+    with _agent(tmp_path, vectors=False) as agent:
+        vault = agent.stores[1]
+        vault.supersede("c" * 16, "a" * 16)  # type: ignore[attr-defined]
+        vault.supersede("c" * 16, "b" * 16)  # type: ignore[attr-defined]
+        vault.supersede("d" * 16, "c" * 16)  # type: ignore[attr-defined]
+        got = vault.replaced()  # type: ignore[attr-defined]
+        assert got == {"a" * 16: "c" * 16, "b" * 16: "c" * 16, "c" * 16: "d" * 16}
+
+
+def test_brain_links_writes_what_the_model_confirms_and_asks_once(tmp_path: Path) -> None:
+    from brain_core import links
+
+    with _agent(tmp_path) as agent:
+        _index(agent).fill()
+        asked: list[str] = []
+
+        def run(system: str, prompt: str) -> str:
+            asked.append(prompt)
+            n = [
+                i
+                for i, p in enumerate(prompt.split("Pair ")[1:], 1)
+                if "15432" in p.split("NEW")[0]
+            ]
+            return json.dumps({"replaced": n})
+
+        links.NEAR = 0.0  # the fake vectors are not close; every older neighbour is a candidate
+        try:
+            out = links.find(agent, run)
+            again = links.find(agent, run)
+        finally:
+            links.NEAR = 0.7
+        assert out["links"] >= 1 and out["failed"] == 0 and again["pairs"] == 0
+        vault = agent.stores[1]
+        old = next(r for r in vault.read("fact", None, 99) if "15432" in r.text)
+        assert old.id[:16] in vault.replaced()  # type: ignore[attr-defined]
+        assert "OLD (fact, 2026-04-01)" in asked[0]

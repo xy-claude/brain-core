@@ -192,10 +192,11 @@ def brain_recall(
         normalize(m.group(1)).lower() for r, _s, _sc in hits.values() for m in _WAS.finditer(r.text)
     }
     # a record another one names in `supersedes` (record_meta.md) is retired the same way
-    retired: set[str] = set()
-    for store in chosen:
-        if hasattr(store, "retired"):
-            retired |= store.retired()
+    replaced: dict[str, str] = {}
+    for store in stores:  # the links live in the vault whatever the scope
+        if hasattr(store, "replaced"):
+            replaced |= store.replaced()
+    retired = set(replaced)
 
     def stale(r: Record) -> bool:
         return normalize(r.text).lower() in superseded or r.id[:16] in retired
@@ -240,6 +241,7 @@ def brain_recall(
             near.sort(key=lambda h: h[2], reverse=True)
             ordered = _join(ordered[:candidates], near, found_by)
             ordered = _pin(ordered, query, index, found_by)
+    ordered = _current(ordered, replaced, index, found_by)
     verdict = ""
     if judge is not None and ordered and offset == 0:
         read = ordered[:judge_candidates]
@@ -255,6 +257,7 @@ def brain_recall(
             for i in picks:
                 found_by.setdefault(read[i][0].id, []).append("judge")
             ordered = [read[i] for i in picks] + [h for h in ordered if h[0].id not in chosen_ids]
+            ordered = _current(ordered, replaced, index, found_by)  # holds for the judge too
     total = len(ordered)
     results = [
         _item(r, s, sc, fmt, stale(r), found_by.get(r.id))
@@ -323,6 +326,41 @@ def _join(keyword: list[Hit], vector: list[Hit], found_by: dict[str, list[str]])
         key=lambda h: (h[2], h[0].date),
         reverse=True,
     )
+
+
+def _current(
+    ordered: list[Hit],
+    replaced: dict[str, str],
+    index: RecordIndex | None,
+    found_by: dict[str, list[str]],
+) -> list[Hit]:
+    """Current beats old, by rule and not by score: a record that another one replaced never
+    stands above its replacement. The replacement is moved up to just before it, and brought
+    in when the search did not find it."""
+    if not replaced or not any(h[0].id[:16] in replaced for h in ordered):
+        return ordered
+    place = {h[0].id[:16]: h for h in ordered}
+    out: list[Hit] = []
+    done: set[str] = set()
+    for hit in ordered:
+        rid = hit[0].id[:16]
+        if rid in done:
+            continue
+        new, hops = rid, 0
+        while new in replaced and hops < 10:  # follow a chain of replacements to its newest
+            new, hops = replaced[new], hops + 1
+        if new != rid and new not in done:
+            current = place.get(new)
+            if current is None and index is not None and (got := index.get(new)):
+                current = (got[0], got[1], hit[2])
+            if current is not None:
+                out.append(current)
+                done.add(new)
+                if "replaces" not in found_by.setdefault(current[0].id, []):
+                    found_by[current[0].id].append("replaces")
+        out.append(hit)
+        done.add(rid)
+    return out
 
 
 def identifiers(query: str) -> list[str]:

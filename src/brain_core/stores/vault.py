@@ -89,7 +89,8 @@ class VaultStore:
                 d = out.setdefault(m.group(1), {})
                 for part in m.group(2).split(" | "):
                     k, _, v = part.partition(": ")
-                    d[k] = f"{d[k]}; {v}" if k in ("keys", "learned") and k in d else v
+                    grows = k in ("keys", "learned", "supersedes") and k in d
+                    d[k] = f"{d[k]}; {v}" if grows else v
         return out
 
     def learn(self, rid: str, words: str, when: date | None = None) -> None:
@@ -97,9 +98,23 @@ class VaultStore:
         search keys of that record (``learned`` in record_meta.md, apart from written keys)."""
         self._note_meta(rid, when or date.today(), {"learned": words})
 
+    def replaced(self) -> dict[str, str]:
+        """Old record id -> the id of the record that replaced it (16 characters each), from
+        the ``supersedes`` fields. A record can replace several."""
+        out: dict[str, str] = {}
+        for new, d in self.meta().items():
+            for old in d.get("supersedes", "").replace(";", " ").split():
+                if old[:16] != new[:16]:
+                    out[old[:16]] = new[:16]
+        return out
+
     def retired(self) -> set[str]:
-        """Ids (16 characters) of records a newer one replaced: its ``supersedes`` field."""
-        return {d["supersedes"][:16] for d in self.meta().values() if d.get("supersedes")}
+        """Ids (16 characters) of records a newer one replaced."""
+        return set(self.replaced())
+
+    def supersede(self, new: str, old: str, when: date | None = None) -> None:
+        """Record that ``new`` replaces ``old``: recall then never shows the old one above it."""
+        self._note_meta(new, when or date.today(), {"supersedes": old[:16]})
 
     def _note_meta(self, rid: str, when: date, extra: dict[str, str]) -> None:
         fields = {
