@@ -24,7 +24,7 @@ from typing import Any, get_args
 from brain_core import judge as judging
 from brain_core.embed import EmbedUnavailable
 from brain_core.stores.base import Kind, Record, Store, full_text, holds, normalize
-from brain_core.stores.index import RecordIndex
+from brain_core.stores.index import RecordIndex, days_asked
 from brain_core.stores.vectors import VectorIndex
 
 KINDS: tuple[Kind, ...] = get_args(Kind)
@@ -239,7 +239,21 @@ def brain_recall(
         else:
             report["vectors"] = len(near)
             near.sort(key=lambda h: h[2], reverse=True)
-            ordered = _join(ordered[:candidates], near, found_by)
+            nets = {"keyword": ordered[:candidates], "vector": near}
+            if index is not None and (days := days_asked(query, today)):
+                # a day named in the question is a third net: it adds that day's records and
+                # removes nothing. They stand in the order the other two nets gave them
+                seen = {h[0].id: n for n, h in enumerate([*ordered[:candidates], *near])}
+                on_day = [
+                    (r, s, 0.0)
+                    for day in days
+                    for r, s in index.dated(day, candidates)
+                    if r.kind in kinds and scope in ("all", *KINDS, s)
+                ]
+                on_day.sort(key=lambda h: seen.get(h[0].id, len(seen)))
+                nets["date"] = on_day
+                report["date"] = len(on_day)
+            ordered = _join(nets, found_by)
             ordered = _pin(ordered, query, index, found_by)
     ordered = _current(ordered, replaced, index, found_by)
     verdict = ""
@@ -311,11 +325,11 @@ _full_text = full_text  # the name older callers import
 Hit = tuple[Record, str, float]
 
 
-def _join(keyword: list[Hit], vector: list[Hit], found_by: dict[str, list[str]]) -> list[Hit]:
-    """One list from two, by place and not by score (reciprocal rank fusion)."""
+def _join(nets: dict[str, list[Hit]], found_by: dict[str, list[str]]) -> list[Hit]:
+    """One list from several, by place and not by score (reciprocal rank fusion)."""
     worth: dict[str, float] = {}
     keep: dict[str, Hit] = {}
-    for net, hits in (("keyword", keyword), ("vector", vector)):
+    for net, hits in nets.items():
         for place, hit in enumerate(hits):
             rid = hit[0].id
             worth[rid] = worth.get(rid, 0.0) + 1.0 / (_RRF_C + place + 1)

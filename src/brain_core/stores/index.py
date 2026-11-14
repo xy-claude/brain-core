@@ -13,7 +13,7 @@ import math
 import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 from brain_core.storage.db import Database
@@ -109,6 +109,32 @@ def iso_dates(query: str, today: date | None = None) -> str:
         return d.isoformat()
 
     return _SPOKEN.sub(fix, query.lower())
+
+
+_WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+_RELATIVE = re.compile(
+    r"\b(today|yesterday|(\d{1,2}) days ago|(?:last|on|this past) "
+    r"(monday|tuesday|wednesday|thursday|friday|saturday|sunday))\b"
+)
+
+
+def days_asked(query: str, today: date | None = None) -> list[str]:
+    """The days a question names, as ISO dates: written out ("2026-11-01", "November 1st") or
+    relative to today ("yesterday", "3 days ago", "last Tuesday": the latest one before today)."""
+    today = today or date.today()
+    out = re.findall(r"\d{4}-\d{2}-\d{2}", iso_dates(query, today))
+    for m in _RELATIVE.finditer(query.lower()):
+        if m[1] == "today":
+            d = today
+        elif m[1] == "yesterday":
+            d = today - timedelta(days=1)
+        elif m[2]:
+            d = today - timedelta(days=int(m[2]))
+        else:
+            back = (today.weekday() - _WEEKDAYS.index(m[3])) % 7 or 7
+            d = today - timedelta(days=back)
+        out.append(d.isoformat())
+    return list(dict.fromkeys(out))
 
 
 def terms(query: str) -> list[str]:
@@ -245,6 +271,22 @@ class RecordIndex:
         d = json.loads(row["record"])
         d["date"] = date.fromisoformat(d["date"])
         return Record(**d), row["store"]
+
+    def dated(self, day: str, limit: int) -> list[tuple[Record, str]]:
+        """Records dated ``day`` (ISO), with their store, in file order."""
+        out: list[tuple[Record, str]] = []
+        seen: set[str] = set()
+        for row in self.db.fetchall(
+            "SELECT record, store, rid FROM records_fts "
+            "WHERE json_extract(record, '$.date') = ? LIMIT ?",
+            (day, limit * 2),
+        ):
+            if row["rid"] not in seen and len(out) < limit:
+                seen.add(row["rid"])
+                d = json.loads(row["record"])
+                d["date"] = date.fromisoformat(d["date"])
+                out.append((Record(**d), row["store"]))
+        return out
 
     def holding(self, token: str, limit: int) -> list[tuple[Record, str]]:
         """Records whose text holds ``token`` exactly (lowercase), with their store. The index

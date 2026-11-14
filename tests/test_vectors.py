@@ -321,3 +321,33 @@ def test_brain_links_writes_what_the_model_confirms_and_asks_once(tmp_path: Path
         old = next(r for r in vault.read("fact", None, 99) if "15432" in r.text)
         assert old.id[:16] in vault.replaced()  # type: ignore[attr-defined]
         assert "OLD (fact, 2026-04-01)" in asked[0]
+
+
+# ── dates ────────────────────────────────────────────────────────────────────
+
+
+def test_days_asked_reads_written_and_relative_dates() -> None:
+    from datetime import date
+
+    from brain_core.stores.index import days_asked
+
+    today = date(2026, 11, 14)  # a Saturday
+    assert days_asked("what did we do on November 1st?", today) == ["2026-11-01"]
+    assert days_asked("notes from 2026-05-02 and yesterday", today) == ["2026-05-02", "2026-11-13"]
+    assert days_asked("what did we decide last Tuesday", today) == ["2026-11-10"]
+    assert days_asked("what broke last saturday", today) == ["2026-11-07"]
+    assert days_asked("what did I say 3 days ago", today) == ["2026-11-11"]
+    assert days_asked("which port is the database on", today) == []
+
+
+def test_a_day_in_the_question_adds_that_days_records(tmp_path: Path) -> None:
+    with _agent(tmp_path) as agent:
+        v = _index(agent)
+        v.fill()
+        out = brain_recall(agent.stores, "what happened on 2026-05-03", fmt="detailed", vectors=v)
+        assert out["stores"]["date"] == 1
+        top = out["results"][0]
+        assert top["date"] == "2026-05-03" and "date" in top["found_by"]
+        # no day asked: no date net, and nothing is removed either way
+        plain = brain_recall(agent.stores, "coffee machine", fmt="detailed", vectors=v)
+        assert "date" not in plain["stores"] and len(plain["results"]) == 4
