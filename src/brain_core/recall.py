@@ -92,11 +92,15 @@ _PIN_MAX = 20  # an identifier more records than this hold names nothing in part
 # under a scope the vector net is asked for this many, then cut down to the scope: all of a
 # vault up to this size, and below the 32,766 values SQLite takes in one statement
 _SCOPED_NET = 20_000
-# An undated line's date is only its file's, so its age is unknown: it is ranked as if six
-# months old, neither as new as its file nor as the oldest line there is. Measured 2026-11-14,
-# keywords only, 380 questions with a gold record: 269 in the top ten at this value, 260 at 0
-# (the undated lines of that vault are its oldest curated facts), 273 at 1.
-_UNDATED_FRESH = 1 / 3
+# An undated line's date is only its file's, so it has no age to rank by: every undated line
+# gets one constant, and it is ranked as current. The undated lines of a hand-written vault
+# are mostly its standing facts (in some vaults every fact), and ranked as old they drop out
+# of the first ten. Measured 2026-11-14 on 446 questions: keywords only, the right record is
+# in the top ten 295 times at 1 against 291 at 1/3 (0.8.0, which gave them their file's date:
+# 292); with vectors 346 both ways, and first 186 times against 180. The cost: an old undated
+# value that no banner marks can stand above a newer dated line. Both are shown, the undated
+# one with no date, it never wins a tie (`_when`), and the judge is told it is undated.
+_UNDATED_FRESH = 1.0
 _WAS = re.compile(r"\(was: (.+?)\)(?:\s*\(\d{4}-\d{2}-\d{2}\))?\s*$")
 WAS_CHARS = 120  # how much of the old line a "Fact changed" banner quotes
 

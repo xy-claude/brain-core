@@ -619,7 +619,7 @@ def test_a_line_that_only_starts_like_the_replaced_one_stays_current(tmp_path: P
         assert stale["is backed up weekly"] is False
 
 
-def test_an_undated_line_ranks_as_neither_the_newest_nor_the_oldest(tmp_path: Path) -> None:
+def test_an_undated_line_ranks_as_current_and_shows_no_date(tmp_path: Path) -> None:
     (tmp_path / "vault").mkdir()
     (tmp_path / "vault" / "facts.md").write_text(
         "# Facts\n\n## Rooms\n- Standup is at nine in room amber (2025-01-01)\n"
@@ -627,10 +627,11 @@ def test_an_undated_line_ranks_as_neither_the_newest_nor_the_oldest(tmp_path: Pa
         "- Standup is at nine in room cedar (2026-11-10)\n"
     )
     with _agent(tmp_path) as agent:
-        # the three lines match alike (a date is three words of a line): their age decides
+        # the three lines match alike (a date is three words of a line): their age decides,
+        # and a line with no date is a standing fact, ranked as current
         out = brain_recall(agent.stores, "standup at nine in which room", today=DAY)
-        assert [r["text"].split()[-1] for r in out["results"]] == ["cedar", "birch", "amber"]
-        assert [r["date"] for r in out["results"]] == ["2026-11-10", "", "2025-01-01"]
+        assert [r["text"].split()[-1] for r in out["results"]] == ["birch", "cedar", "amber"]
+        assert [r["date"] for r in out["results"]] == ["", "2026-11-10", "2025-01-01"]
 
 
 # ── session and status ───────────────────────────────────────────────────────

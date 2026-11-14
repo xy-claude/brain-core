@@ -143,7 +143,7 @@ def test_sqlite_answers_in_place_of_a_vault_that_cannot_be_read(
 # ── 2. RECALL-2: a line with no date of its own ──────────────────────────────
 
 
-def test_an_undated_line_earns_no_recency_and_shows_no_date() -> None:
+def test_an_undated_line_shows_no_date_and_the_judge_is_told() -> None:
     # the old value has no date; its file was written today, so today is the date it carries
     old = _rec("Gateway port is 8887", TODAY, undated=True)
     new = _rec("Gateway port is 8888", date(2026, 6, 1))
@@ -154,13 +154,16 @@ def test_an_undated_line_earns_no_recency_and_shows_no_date() -> None:
         return NONE
 
     out = brain_recall([Shelf(old, new)], "gateway port", fmt="detailed", today=TODAY, judge=run)
-    first, second = out["results"]
-    assert "8888" in first["text"] and first["date"] == "2026-06-01" and "undated" not in first
-    assert "8887" in second["text"] and second["date"] == "" and second["undated"] is True
+    dated = next(r for r in out["results"] if "8888" in r["text"])
+    plain = next(r for r in out["results"] if "8887" in r["text"])
+    assert dated["date"] == "2026-06-01" and "undated" not in dated
+    assert plain["date"] == "" and plain["undated"] is True
+    # the judge is not shown the file's date as if it were the line's
     assert "(fact, undated)" in seen[0] and TODAY.isoformat() + ")" not in seen[0]
     assert "undated" in judging.SYSTEM
-    concise = brain_recall([Shelf(old, new)], "gateway port", today=TODAY)["results"][1]
-    assert concise["date"] == "" and "undated" not in concise
+    concise = brain_recall([Shelf(old, new)], "gateway port", today=TODAY)["results"]
+    plain = next(r for r in concise if "8887" in r["text"])
+    assert plain["date"] == "" and "undated" not in plain
 
 
 def test_an_undated_record_never_wins_a_tie_as_the_newest() -> None:
