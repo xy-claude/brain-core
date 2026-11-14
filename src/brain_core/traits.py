@@ -21,19 +21,11 @@ import yaml
 
 from brain_core.session import _sections
 from brain_core.status import _frontmatter, _is_table_chrome
-from brain_core.stores.vault import VaultStore, frontmatter, read_text
+from brain_core.stores.vault import VaultStore, frontmatter
+from brain_core.stores.vault import read_safe as _read
 
 if TYPE_CHECKING:
     from brain_core.agent import Agent
-
-
-def _read(path: Path) -> str:
-    """A vault file for counting. One that cannot be read (a sync service evicted it) counts
-    as empty: it must not stop the whole status."""
-    try:
-        return read_text(path)
-    except OSError:
-        return ""
 
 
 MIN_N = 20  # below this a ratio is a count, not a percentage (one-user scale)

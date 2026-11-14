@@ -92,6 +92,8 @@ def build_server(agent: Agent) -> FastMCP:
         the verdict of a model that read the closest candidates. `thin_recall` comes with
         partial and `not_in_memory` with that verdict: it covers what the model read, not
         all of memory, so search once more in other words before saying it is not on record.
+        `judge_read` says how many candidates the model read of how many were gathered;
+        `query_cut` means the question was over 1,000 characters and only its start was used.
         `degraded`: the search by meaning or the judge could not run, so the results come
         from less than the configured search. Tell the user memory search is degraded.
         On a result: `found_by` names what put it forward (keyword, vector, date, exact,

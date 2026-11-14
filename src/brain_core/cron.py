@@ -457,7 +457,8 @@ def _warmup(sdir: Path, n: int = 3, lines: int = 6) -> str:
     for f in files:
         body: list[str] = []
         hook = False
-        for ln in _read(f).split("---", 2)[-1].splitlines():
+        # masked before the lines are cut: half a credential is below what a pattern sees
+        for ln in redact(_read(f).split("---", 2)[-1]).splitlines():
             if ln.startswith("#"):
                 hook = "(hook)" in ln
             elif ln.strip() and not hook and len(body) < lines:

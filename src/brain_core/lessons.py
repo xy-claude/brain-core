@@ -69,7 +69,7 @@ def lessons(corrections: str, prompt: str) -> list[dict[str, Any]]:
         out.append(
             {
                 "date": when.isoformat(),
-                "title": title,
+                "title": redact(title),  # logged, printed and compared in this one form
                 "rule": rule[:RULE_CHARS],
                 "score": round(score, 3),
                 "shared": distinct,

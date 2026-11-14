@@ -121,7 +121,7 @@ def adopt_cmd(
                 for r in v.read(kind, limit=1_000_000):
                     # masked, as the index is: the copy in brain.db holds no key at rest
                     res = sq.write(
-                        kind, redact(r.text), domain=r.domain, path=r.path, line=str(r.line)
+                        kind, redact(r.text), domain=redact(r.domain), path=r.path, line=str(r.line)
                     )
                     if res.status == "written":
                         agent.db.execute(
@@ -349,7 +349,7 @@ def index_cmd(
             for r in vault.read(kind, limit=1_000_000):
                 # masked, as the index is: the copy in brain.db holds no key at rest
                 res = sqlite.write(
-                    kind, redact(r.text), domain=r.domain, path=r.path, line=str(r.line)
+                    kind, redact(r.text), domain=redact(r.domain), path=r.path, line=str(r.line)
                 )
                 if res.status != "written":
                     exists += 1

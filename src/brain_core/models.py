@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING, Any
 
 from brain_core import recall
 from brain_core.config import ModelItem
-from brain_core.stores.vault import _SECRET, VaultStore
+from brain_core.stores.vault import _SECRET, VaultStore, redact
 from brain_core.stores.vault import read_text as _read
 
 if TYPE_CHECKING:
@@ -343,6 +343,7 @@ def load(agent: Agent) -> dict[str, str]:
             continue
         text = _read(_file(vault, item.name))
         body = text.split("\n---\n", 1)[-1].split("\n\n", 2)[-1].strip()
+        body = redact(body)  # masked, as recall's text is
         cut = (
             f"\n…(cut at {BODY_CHARS} of {len(body)} characters; the rest is in "
             f"models/{item.name}.md)"

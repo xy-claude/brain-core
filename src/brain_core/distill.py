@@ -20,7 +20,7 @@ from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from brain_core.stores.vault import VaultStore
+from brain_core.stores.vault import VaultStore, has_secret, redact
 
 if TYPE_CHECKING:
     from brain_core.agent import Agent
@@ -82,6 +82,15 @@ def brain_distill(
     body = body.strip()
     if not body:
         return {"status": "failed", "source": source, "note": note or "capture returned no text"}
+    if any(has_secret(str(meta.get(k) or "")) for k in ("source", "title", "author")):
+        # these name the file and stand in its head: a password in the URL would be kept there
+        return {
+            "status": "refused",
+            "source": redact(source),
+            "note": "the source, title or author looks like it holds a credential; nothing saved",
+        }
+    # a page that shows an example key is kept, with the key-shaped run masked
+    body = redact(body)
     r = vault.write("raw", body, when=date.today(), **{k: v for k, v in meta.items() if v})
     out: dict[str, Any] = {
         "status": r.status,

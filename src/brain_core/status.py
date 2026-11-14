@@ -19,8 +19,8 @@ from brain_core import update
 from brain_core.judge import JUDGE_MODEL
 from brain_core.session import _marker, _minutes_ago, closed, exec_note
 from brain_core.stores.index import RecordIndex
-from brain_core.stores.vault import VaultStore
-from brain_core.stores.vault import read_text as _read
+from brain_core.stores.vault import VaultStore, redact
+from brain_core.stores.vault import read_safe as _read
 
 if TYPE_CHECKING:
     from brain_core.agent import Agent
@@ -41,8 +41,13 @@ def brain_status(agent: Agent) -> dict[str, Any]:
         out["stores"][s.name] = {"ok": ok, "detail": detail}
         out["ok"] = out["ok"] and ok
     vault = next((s for s in agent.stores if isinstance(s, VaultStore)), None)
+    unreadable = ""
     if vault is not None:
-        out["knowledge"] = lint(vault.root)
+        try:
+            out["knowledge"] = lint(vault.root)
+        except OSError as e:  # a folder that cannot be listed: said under attention below
+            out["knowledge"] = {"pages": 0, "raw": 0, "issues": [], "issue_count": 0}
+            unreadable = f"knowledge lint not run: {type(e).__name__}: {str(e)[:120]}"
         exec_text = _read(vault.root / agent.config.session.executive)
         if note := exec_note(exec_text, agent.config.session.executive):
             out["executive_state"] = note  # a count of 0 would read as "nothing is waiting"
@@ -55,9 +60,11 @@ def brain_status(agent: Agent) -> dict[str, Any]:
     if index is not None and (masked := index.redacted()):
         # the index and every reply hold them masked; the files still hold the real thing
         out["secrets_masked"] = masked
-    attention: list[str] = []
+    attention: list[str] = [unreadable] if unreadable else []
     if vault is not None and (
-        lost := sorted(f for f, why in vault.unread.items() if why != "not UTF-8")
+        lost := sorted(
+            f for f, why in vault.unread.items() if why != "not UTF-8" and (vault.root / f).exists()
+        )
     ):
         # the store is up, so this is not "down"; but the records of these files are missing
         attention.append(
@@ -116,7 +123,14 @@ def brain_status(agent: Agent) -> dict[str, Any]:
     if attention:
         out["attention"] = attention
         out["ok"] = False
-    out["traits"] = traits.compute(agent, out)
+    try:
+        out["traits"] = traits.compute(agent, out)
+    except OSError as e:  # one folder that cannot be listed must not stop the whole report
+        out["traits"] = {}
+        out.setdefault("attention", []).append(
+            f"traits not computed: {type(e).__name__}: {str(e)[:120]}"
+        )
+        out["ok"] = False
     return out
 
 
@@ -128,7 +142,8 @@ def recall_misses(agent: Agent, days: int = 30) -> dict[str, Any]:
     for e in agent.recent_events(event_type="recall_miss", limit=500):
         if (today - e.occurred_at.date()).days > days:
             continue
-        q = str(e.payload.get("query", ""))
+        # masked here too: a question logged before this release is in the table as asked
+        q = redact(str(e.payload.get("query", "")))
         d = per.setdefault(q, {"query": q, "count": 0, "best": e.payload.get("best", 0.0)})
         d["count"] += 1
     top = sorted(per.values(), key=lambda d: -d["count"])[:5]
@@ -208,9 +223,7 @@ def lint(root: Path) -> dict[str, Any]:
         if p.stem not in index:
             issues.append(f"{p.name} missing from _index.md")
         fm = _frontmatter(p)
-        if "sources" not in fm and "## Source" not in p.read_text(
-            encoding="utf-8", errors="replace"
-        ):
+        if "sources" not in fm and "## Source" not in _read(p):
             issues.append(f"{p.name} has no sources")
     for link in _LINK.findall(index):
         if not (kdir / f"{link.strip()}.md").exists():

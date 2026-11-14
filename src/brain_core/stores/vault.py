@@ -11,6 +11,7 @@ import os
 import re
 import sys
 import time
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
 
@@ -35,10 +36,11 @@ _LABEL = re.compile(r"\*\*[^*]{1,60}\*\*:?$|[A-Za-z][^.]{0,40}:$|#{4,6} .{0,60}$
 _STATE = ("title", "classification", "confidence", "theme", "promoted")
 # Any key format the list below does not know: a label, then one unbroken value of 16 or more
 # characters in which a letter and a digit touch. After "password" or "secret" one touch is
-# enough; after key, token, auth, licence or credential it takes two, because one touch is a
-# name there (oauth2-client-credentials, transcripts_fts_v2, id_ed25519_laptop). A slug that
-# ends in a year (risk-model-2026), a path, a URL, a date and a version are not such a value.
-# The label may end a longer name
+# enough; after key, token, auth, licence, credential, pass or pw it takes two, because one
+# touch is a name there (oauth2-client-credentials, transcripts_fts_v2, id_ed25519_laptop).
+# An env name may go on after the label in capitals (SECRET_KEY_BASE=, DEPLOY_TOKEN_V2=). A
+# slug that ends in a year (risk-model-2026), a path, a URL, a date and a version are not such
+# a value. The label may end a longer name
 # (API_KEY, authToken), may be followed by a short note in brackets ("key (staging): ...") and
 # may stand in the table cell before the value's. The rest of the value's run goes with it
 # (base64 has / in it, a JWT has dots) up to a space, a quote or one of , ; & so the next
@@ -48,7 +50,7 @@ _STATE = ("title", "classification", "confidence", "theme", "promoted")
 # every record at index time.
 _LABELLED = (
     r"(?P<label>(?:(?P<strong>(?i:secret|password|passwd|pwd))|(?i:key|token|licen[cs]e|auth"
-    r"|credential))s?"
+    r"|credential|pass(?:phrase|code)?|pw))s?(?:_[A-Z0-9]{1,8}){0,2}"
     r"(?:\s*\([^()\n]{1,24}\))?[\s\"'`*:=|]+(?:(?i:is)[\s\"'`*]+)?)(?=[A-Za-z0-9])"
     r"(?=[A-Za-z0-9_+=-]{0,64}?(?:[A-Za-z]\d|\d[A-Za-z]))"
     r"(?(strong)|(?=(?:[A-Za-z0-9_+=-]{0,64}?(?:[A-Za-z]\d|\d[A-Za-z])){2}))"
@@ -58,23 +60,35 @@ _LABELLED = (
 # with a / in its first 16 characters (one AWS secret key in four), and a random string with
 # neither a label nor a vendor's prefix.
 _SECRET = re.compile(
-    r"hsk_[A-Za-z0-9]{8,}|(?i:bearer)\s+(?=[A-Za-z0-9._-]*\d)[A-Za-z0-9._-]{16,}|\bsk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}"
+    r"hsk_[A-Za-z0-9]{8,}|(?i:bearer)\s+(?P<bearer>(?=[A-Za-z0-9._-]*\d)[A-Za-z0-9._-]{16,})"
+    r"|(?i:basic)\s+(?P<basic>(?=[A-Za-z0-9+/]*\d)[A-Za-z0-9+/]{16,}={0,2})"
+    r"|\bsk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}"
     r"|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}"
     # a JWT. Not looked for inside a longer run: tried from every "eyJ" of one, 128,000
     # characters took 3 s
     r"|(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"
-    # a key block with its body: the header alone left every line of the key readable
-    r"|-----BEGIN [A-Z ]*PRIVATE KEY-----[A-Za-z0-9+/=\s]{0,8000}"
-    r"(?:-----END [A-Z ]*PRIVATE KEY-----)?"
+    # a key block with all that stands between its two lines (a quote mark, a line break
+    # written as \n, Proc-Type or PGP armor lines). With no END line (a tool result is cut
+    # short) its base64 runs, so a sentence that only names the header keeps its words
+    r"|-----BEGIN [A-Z ]*PRIVATE KEY(?: BLOCK)?-----"
+    r"(?:(?:(?!-----BEGIN )[\s\S]){0,8000}?-----END [A-Z ]*PRIVATE KEY(?: BLOCK)?-----"
+    r"|(?:(?:\\+[nr]|[\s>])*(?:[A-Za-z0-9+/=]{16,}|(?:Proc-Type|DEK-Info): ?[^\s\\]+))*)"
     # Stripe, Google, Telegram, Hugging Face, npm, PyPI, GitLab, SendGrid, DigitalOcean, Slack
     r"|\b[sr]k_(?:live|test)_[A-Za-z0-9]{16,}|whsec_[A-Za-z0-9]{24,}|AIza[0-9A-Za-z_-]{35}"
     r"|GOCSPX-[A-Za-z0-9_-]{28}|\b\d{8,10}:AA[A-Za-z0-9_-]{33}|\bhf_[A-Za-z0-9]{30,}"
     r"|\bnpm_[A-Za-z0-9]{36}|pypi-AgEI[A-Za-z0-9_-]{50,}|glpat-[A-Za-z0-9_-]{20,}"
     r"|SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}|dop_v1_[a-f0-9]{64}"
     r"|https://hooks\.slack\.com/services/[A-Za-z0-9/]{20,}"
-    r"|(?<=://)[^\s/:@]{0,40}:[^\s/@]{3,}(?=@)"  # user:password@ in a URL
-    # a licence key wherever it stands: 4 to 6 dash-joined groups of capitals and digits
-    r"|(?<![A-Za-z0-9-])(?=[A-Z0-9-]{0,41}\d)(?=[A-Z0-9-]{0,41}[A-Z])"
+    # HashiCorp Vault, Google OAuth access and refresh tokens: a dot or slash stands early
+    r"|\bhvs\.[A-Za-z0-9_-]{24,}|\bya29\.[A-Za-z0-9_-]{20,}|\b1//[A-Za-z0-9_-]{30,}"
+    # user:password@ in a URL; a comma is not in one ("http://localhost:8080,admin@example.com")
+    r"|(?<=://)[^\s/:@,]{0,40}:(?P<urlpw>[^\s/@,]{3,})(?=@)"
+    # a licence key wherever it stands: 4 to 6 dash-joined groups of capitals and digits, at
+    # least two of them mixing both. A ticket, an order number or an asset tag has one such
+    # group at most (CASE-2026-1114-0001, LAPT-0042-2026-MBP1); an advisory id is named
+    r"|(?<![A-Za-z0-9-])(?!GHSA-)"
+    r"(?=(?:[A-Z0-9]{4,6}-){0,5}?(?=[A-Z0-9]{0,5}[A-Z])(?=[A-Z0-9]{0,5}\d)[A-Z0-9]{4,6}-"
+    r"(?:[A-Z0-9]{4,6}-){0,4}?(?=[A-Z0-9]{0,5}[A-Z])(?=[A-Z0-9]{0,5}\d)[A-Z0-9]{4,6}(?![A-Za-z0-9]))"
     r"[A-Z0-9]{4,6}(?:-[A-Z0-9]{4,6}){3,5}(?![A-Za-z0-9-])"
     r"|" + _LABELLED
 )
@@ -88,12 +102,15 @@ def has_secret(text: str) -> bool:
 def redact(text: str) -> str:
     """``text`` with every credential-shaped run replaced, for indexing and for replies.
     A label stays, so "the staging password" still finds the line that held one."""
-    values = {m.group("value") or m.group(0) for m in _SECRET.finditer(text)}
+    values = {
+        m.group("value") or m.group("bearer") or m.group("basic") or m.group("urlpw") or m.group(0)
+        for m in _SECRET.finditer(text)
+    }
     text = _SECRET.sub(lambda m: (m.group("label") or "") + "[redacted]", text)
-    for value in values:
-        if len(value) >= 8:  # the same value again, where no label or prefix marks it
-            text = text.replace(value, "[redacted]")
-    return text
+    # the same value again, where no label or prefix marks it. One pass: a replace per value
+    # took 1.4 s on a text of 16,000 different matches
+    again = sorted((v for v in values if len(v) >= 8), key=len, reverse=True)
+    return re.compile("|".join(map(re.escape, again))).sub("[redacted]", text) if again else text
 
 
 FILES: dict[Kind, str] = {
@@ -209,17 +226,28 @@ class VaultStore:
             # as deleted
             raise FileNotFoundError(f"vault root missing: {self.root}")
         meta = self.root / META
-        sig = meta.stat().st_mtime_ns if meta.exists() else 0
-        if sig != self._meta_sig:  # keys changed on disk: bring the index in line
-            self.index.set_keys(
-                {
-                    i: "; ".join(d[k] for k in ("keys", "learned") if k in d)
-                    for i, d in self.meta().items()
-                    if "keys" in d or "learned" in d
-                }
-            )
-            self._meta_sig = sig
+        try:
+            sig = meta.stat().st_mtime_ns if meta.exists() else 0
+            if sig != self._meta_sig:  # keys changed on disk: bring the index in line
+                self.index.set_keys(
+                    {
+                        i: "; ".join(d[k] for k in ("keys", "learned") if k in d)
+                        for i, d in self.meta().items()
+                        if "keys" in d or "learned" in d
+                    }
+                )
+                self._meta_sig = sig
+            self.unread.pop(META, None)
+        except OSError as e:
+            # the keys already loaded stay; the records are still searched
+            self.unread[META] = type(e).__name__
         files = {p: k for k in _INDEXED for p in self._paths(k) if p.exists()}
+        if not files and self.index.files(self.name):
+            # an empty folder where the vault stood (a mount point without its drive, a folder
+            # some writer made again) would drop every row and vector the same way
+            raise FileNotFoundError(
+                f"vault holds no file, though the index knows some: {self.root}"
+            )
         self.index.sync(self.name, files, lambda k, p: self._parse(k, p, full=True))
 
     def read(self, kind: Kind, query: str | None = None, limit: int = 50) -> list[Record]:
@@ -349,7 +377,13 @@ class VaultStore:
     ) -> WriteResult:
         r = self._write(kind, text, domain=domain, when=when, **extra)
         if r.status in ("written", "exists") and r.id:
-            self._note_meta(r.id, when or date.today(), extra)  # keys can be added to an old record
+            try:
+                # keys can be added to an old record
+                self._note_meta(r.id, when or date.today(), extra)
+            except OSError as e:
+                # the line is filed: a meta file that cannot be written must not report it lost
+                why = f"{META} not written ({type(e).__name__})"
+                return replace(r, detail=f"{r.detail}; {why}" if r.detail else why)
         return r
 
     def _write(
@@ -530,7 +564,6 @@ class VaultStore:
             "compiled_into": "[]",
         }
         head = "---\n" + "\n".join(f"{k}: {v}" for k, v in fm.items()) + "\n---\n"
-        path.parent.mkdir(parents=True, exist_ok=True)
         with self._locked(path):
             self._save(path, head + body, when, bump=False)
         return WriteResult(self.name, sha, "written", path.relative_to(self.root).as_posix())
@@ -566,6 +599,10 @@ class VaultStore:
                 time.sleep(0.2 * (attempt + 1))
 
     def _locked(self, path: Path) -> _Lock:
+        if not self.root.is_dir() and self.index and self.index.files(self.name):
+            # the vault is away (a drive not mounted). Making the folder again would leave an
+            # empty vault there: the write fails instead, and a first-run vault is still made
+            raise FileNotFoundError(f"vault root missing: {self.root}")
         path.parent.mkdir(parents=True, exist_ok=True)
         return _Lock(self.root / ".brain.lock")  # one lock per vault: nothing accumulates
 
@@ -650,6 +687,15 @@ def read_text(path: Path, errors: str = "replace") -> str:
     return path.read_text(encoding="utf-8", errors=errors) if path.exists() else ""
 
 
+def read_safe(path: Path) -> str:
+    """A vault file for a report. One that cannot be read (a sync service evicted it, a folder
+    stands in its place) reads as empty. Never for a caller that writes the text back."""
+    try:
+        return read_text(path)
+    except OSError:
+        return ""
+
+
 def _says(r: Record) -> set[str]:
     """What a decision or correction states: its fields, without the ones that only file it."""
     return {" ".join(v.split()) for k, v in r.extra.items() if k not in _STATE and v.strip()}
@@ -684,7 +730,13 @@ def knowledge_records(text: str, rel: str, when: date, cap: int | None = 600) ->
             if heading:
                 records.append(_knowledge_record(title, heading, body, rel, start, when, cap))
             heading, body, start = line[3:].strip(), [], n
-        elif heading and line.strip() and not line.startswith("---"):
+        # a rule line is dropped, a key block's two lines are not: without them its body was
+        # indexed with nothing left for the secret pattern to find it by
+        elif (
+            heading
+            and line.strip()
+            and (not line.startswith("---") or line.startswith(("-----BEGIN ", "-----END ")))
+        ):
             body.append(line.strip())
         elif not heading and n > skip and line.strip() and line[0] != "#":
             lead.append(line.strip())

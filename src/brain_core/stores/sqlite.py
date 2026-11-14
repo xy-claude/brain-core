@@ -59,10 +59,14 @@ class SqliteStore:
         fact = structured.remember(self.db, text, kind=_KINDS[kind], tags=tags, metadata=extra)
         after = self.db.fetchone("SELECT COUNT(*) AS n FROM facts")
         grew = bool(before and after and after["n"] > before["n"])
-        if not grew and fact.metadata.get("sole") and not extra.get("sole"):
-            # saved again, and this time a vault file holds the line: the row is a copy now
+        if not grew and bool(fact.metadata.get("sole")) != bool(extra.get("sole")):
+            # saved again: the row is a copy when a vault file holds the line this time, and
+            # the only copy when none does (the line was deleted and the vault write failed)
             self.db.execute(
-                "UPDATE facts SET metadata = json_remove(metadata, '$.sole') WHERE id = ?",
+                "UPDATE facts SET metadata = json_set(coalesce(metadata, '{}'), '$.sole', '1') "
+                "WHERE id = ?"
+                if extra.get("sole")
+                else "UPDATE facts SET metadata = json_remove(metadata, '$.sole') WHERE id = ?",
                 (fact.id,),
             )
         return WriteResult(self.name, rid, "written" if grew else "exists", f"facts/{fact.id}")

@@ -101,7 +101,7 @@ _SCOPED_NET = 20_000
 # value that no banner marks can stand above a newer dated line. Both are shown, the undated
 # one with no date, it never wins a tie (`_when`), and the judge is told it is undated.
 _UNDATED_FRESH = 1.0
-_WAS = re.compile(r"\(was: (.+?)\)(?:\s*\(\d{4}-\d{2}-\d{2}\))?\s*$")
+_WAS = re.compile(r"\(was: (.+?)\)(?:\s*\(\d{4}-\d{2}-\d{2}\))?\s*$", re.S)
 WAS_CHARS = 120  # how much of the old line a "Fact changed" banner quotes
 
 
@@ -203,12 +203,14 @@ def brain_recall(
             for kind in kinds[:1] if whole else kinds:
                 want = (offset + limit) * 2 if ranked else 10**6
                 if ranked and (vectors is not None or judge is not None or picked is not None):
-                    # the keyword net puts forward as many as the vector net; and what a judge
-                    # reads must not depend on the page, or its pages repeat and skip records
-                    want = max(want, candidates)
-                recs = store.read(kind, query if ranked else None, want)
-                # the vault answered: of the SQLite rows, only those no file ever held
+                    # the keyword net puts forward as many as the vector net, on every page:
+                    # a depth that grows with the page cuts each page from another list, and
+                    # the pages repeat and skip records
+                    want = candidates
+                # the vault answered: of the SQLite rows, only those no file ever held. They
+                # are picked out of every match: the copies of vault lines rank above them
                 sole = store in spare and "vault" not in report
+                recs = store.read(kind, query if ranked else None, 10**6 if sole else want)
                 found[store.name] += [
                     (r, (1.0 - i / (len(recs) + 1)) * 0.6 if ranked else 0.0)
                     for i, r in enumerate(recs)
@@ -348,7 +350,7 @@ def brain_recall(
                 report["date"] = len(on_day)
             ordered = _join(nets, found_by)
             ordered = _pin(ordered, query, index, found_by, in_scope)
-    ordered = _current(ordered, replaced, index, found_by)
+    ordered = _current(ordered, replaced, index, found_by, in_scope)
     # what the judge said: its status, the ids it picked, how many it read of those gathered
     judgement = dict(picked) if picked is not None else None
     if judgement is None and judge is not None and ordered and offset == 0:
@@ -376,7 +378,7 @@ def brain_recall(
         for r, _s, _sc in front:
             found_by.setdefault(r.id, []).append("judge")
         ordered = front + [h for h in ordered if h[0].id not in judgement["picks"]]
-        ordered = _current(ordered, replaced, index, found_by)  # holds for the judge too
+        ordered = _current(ordered, replaced, index, found_by, in_scope)  # for the judge too
     total = len(ordered)
     results = [
         _item(r, s, sc, fmt, stale(r), found_by.get(r.id))
@@ -461,6 +463,7 @@ def _current(
     replaced: dict[str, str],
     index: RecordIndex | None,
     found_by: dict[str, list[str]],
+    in_scope: Callable[[Record, str], bool] = lambda r, s: True,
 ) -> list[Hit]:
     """Current beats old, by rule and not by score: a record that another one replaced never
     stands above its replacement. The replacement is moved up to just before it, and brought
@@ -479,7 +482,13 @@ def _current(
             new, hops = replaced[new], hops + 1
         if new != rid and new not in done:
             current = place.get(new)
-            if current is None and index is not None and (got := index.get(new)):
+            # brought in when the search did not find it; a scope is not widened by it
+            if (
+                current is None
+                and index is not None
+                and (got := index.get(new))
+                and in_scope(got[0], got[1])
+            ):
                 current = (got[0], got[1], hit[2])
             if current is not None:
                 out.append(current)

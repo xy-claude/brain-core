@@ -137,7 +137,9 @@ def _texts(content: Any) -> list[str]:
             if isinstance(body, list):
                 body = " ".join(str(b.get("text") or "") for b in body if isinstance(b, dict))
             if body:
-                out.append("→ " + str(body)[:_RESULT_CHARS])
+                # masked before the cut: half a credential is below what a pattern sees
+                # (over a window: masking whole tool results made indexing ten times slower)
+                out.append("→ " + redact(str(body)[: _RESULT_CHARS + 8_192])[:_RESULT_CHARS])
     return out
 
 

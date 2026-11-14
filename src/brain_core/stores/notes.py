@@ -33,6 +33,12 @@ class NotesStore:
             return []
         files = [p for d in self.dirs if d.is_dir() for p in sorted(d.glob("*.md"))]
         if query and self.index:
+            for d in self.dirs:
+                # a folder that held records and is away (a drive not mounted) is not an empty
+                # one: the sync would drop its rows and then their vectors. One that was never
+                # there has none to lose and is skipped
+                if not d.is_dir() and self.index.under(self.name, d):
+                    raise FileNotFoundError(f"{self.name} folder missing: {d}")
             self.index.sync(
                 self.name, dict.fromkeys(files, kind), lambda _k, p: self._records(p, None)
             )

@@ -55,7 +55,7 @@ from brain_core.stores import (
 )
 from brain_core.stores.base import Kind
 from brain_core.stores.index import RecordIndex, terms
-from brain_core.stores.vault import _SECRET
+from brain_core.stores.vault import _SECRET, redact
 from brain_core.stores.vectors import VectorIndex
 
 # what the reply says about each part of recall that could not run
@@ -244,7 +244,9 @@ class Agent:
         miss = out.pop("miss", None)
         if miss is not None and miss.get("judged"):
             if offset == 0:
-                self.log_event("recall_miss", {"query": query[:200], "scope": scope, **miss})
+                self.log_event(
+                    "recall_miss", {"query": redact(query)[:200], "scope": scope, **miss}
+                )
             # the judge is right about what it read; the miss is usually the search's, so the
             # verdict is reported as what was read and never as an order to deny
             out["not_in_memory"] = (
@@ -264,7 +266,7 @@ class Agent:
             )
         elif miss is not None and offset == 0:
             # a miss is an eval case waiting to be written; brain daily and brain_status list them
-            self.log_event("recall_miss", {"query": query[:200], "scope": scope, **miss})
+            self.log_event("recall_miss", {"query": redact(query)[:200], "scope": scope, **miss})
             out["weak_match"] = (
                 "No record holds most of what was asked. The memory may use other words: "
                 "search again with synonyms or the name it would be filed under. When a retry "

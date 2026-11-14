@@ -8,6 +8,7 @@ is reported, never swallowed.
 
 from __future__ import annotations
 
+import contextlib
 import re
 from collections.abc import Sequence
 from datetime import date
@@ -48,7 +49,7 @@ def brain_remember(
         text = relation_text(extra["subject"], extra["predicate"], extra["object"])
     if not text:
         raise ValueError("text must not be empty")
-    if any(_SECRET.search(str(v)) for v in (text, domain, source, *extra.values())):
+    if any(_SECRET.search(str(v)) for v in (text, domain, source, mission or "", *extra.values())):
         raise ValueError("text looks like it contains a secret; nothing was written to any store")
     when = when or date.today()
     ordered = sorted(stores, key=lambda s: ORDER.index(s.name) if s.name in ORDER else len(ORDER))
@@ -113,10 +114,17 @@ def _closest(stores: Sequence[Store], kind: Kind, text: str) -> tuple[Record, fl
     new = tokens(text)
     if not new:
         return None
-    if any(s.name == "vault" for s in stores):
-        # the files are the truth: SQLite's copy of a line the owner deleted or changed by hand
-        # must not answer "duplicate" or pose as the old value
-        stores = [s for s in stores if s.name != "sqlite"]
+    # the files are the truth: SQLite's copy of a line the owner deleted or changed by hand
+    # must not answer "duplicate" or pose as the old value. A row no file ever held is not a
+    # copy, and is compared with like any other record
+    copies = any(s.name == "vault" for s in stores)
+    # a line a newer one replaced is not what a save is compared with: a value changed back
+    # to an earlier one is a change of the current line, not a duplicate of the retired one
+    retired: set[str] = set()
+    for store in stores:
+        if hasattr(store, "retired"):
+            with contextlib.suppress(OSError):
+                retired |= store.retired()
     best: tuple[Record, float] | None = None
     for store in stores:
         if getattr(store, "whole", False):
@@ -126,6 +134,15 @@ def _closest(stores: Sequence[Store], kind: Kind, text: str) -> tuple[Record, fl
         except Exception:
             continue
         for r in recs:
+            # the same text again is let through: the vault gets the line, the row its copy
+            if (
+                copies
+                and store.name == "sqlite"
+                and (not r.extra.get("sole") or r.id == record_id(text))
+            ):
+                continue
+            if r.id[:16] in retired:
+                continue
             old = tokens(core(r.text, kind))
             j = len(new & old) / len(new | old) if old else 0.0
             if best is None or j > best[1]:

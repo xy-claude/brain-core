@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, replace
@@ -172,7 +173,9 @@ def _masked(r: Record) -> Record:
         r,
         text=redact(r.text),
         domain=redact(r.domain),
-        extra={k: redact(v) for k, v in r.extra.items()},
+        # a field's name is its label: "**Password:** value" reaches here as name and value,
+        # and the value alone is not a labelled one
+        extra={k: redact(f"{k}: {v}").partition(": ")[2] for k, v in r.extra.items()},
     )
 
 
@@ -188,13 +191,26 @@ class RecordIndex:
         self.db = db
         self.keys: dict[str, str] = {}  # record id -> its search keys, see set_keys
 
+    def files(self, store: str) -> set[str]:
+        """The files of ``store`` the index has read. An empty folder where they stood is a
+        drive that is not mounted, not a store whose every file was deleted."""
+        rows = self.db.fetchall("SELECT path FROM index_files WHERE store = ?", (store,))
+        return {r["path"] for r in rows}
+
+    def under(self, store: str, folder: Path) -> bool:
+        """Whether ``store`` has indexed a file under ``folder``."""
+        stem = f"{folder}{os.sep}"
+        return any(f.startswith(stem) for f in self.files(store))
+
     def set_keys(self, keys: dict[str, str]) -> None:
         """Search keys by record id (any prefix length the caller uses consistently). They are
         indexed beside the text and never returned. Only rows whose keys differ are rewritten."""
+        from brain_core.stores.vault import redact  # vault imports this module
+
         self.keys = keys
         n = len(next(iter(keys), ""))
         for row in self.db.fetchall("SELECT rowid, rid, keys FROM records_fts"):
-            new = keys.get(row["rid"][:n], "") if n else ""
+            new = redact(keys.get(row["rid"][:n], "")) if n else ""
             if new != row["keys"]:
                 self.db.execute("UPDATE records_fts SET keys = ? WHERE rowid = ?", (new, row[0]))
 
@@ -254,6 +270,12 @@ class RecordIndex:
                     (store, key, sig),
                 )
         for key in known.keys() - seen:
+            try:
+                os.stat(key)
+            except PermissionError:
+                continue  # under a folder that cannot be opened: not listed is not deleted
+            except OSError:
+                pass
             with self.db.transaction():
                 self.db.execute(
                     "DELETE FROM records_fts WHERE store = ? AND path = ?", (store, key)

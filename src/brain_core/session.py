@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Any
 
 from brain_core import recall
 from brain_core.stores.hindsight import HindsightStore, document_id
-from brain_core.stores.vault import _SECRET, VaultStore, _Lock, redact
+from brain_core.stores.vault import _SECRET, VaultStore, _Lock, read_safe, redact
 from brain_core.stores.vault import read_text as _read
 
 if TYPE_CHECKING:
@@ -55,7 +55,7 @@ def session_start(agent: Agent, session_id: str | None = None) -> dict[str, Any]
     if vault is None:
         out["note"] = "no vault configured (stores.vault); only recovery state available"
         return out
-    brief = _read(vault.root / cfg.brief)
+    brief = read_safe(vault.root / cfg.brief)  # start reads for a report: it never raises
     m = _BRIEF_DATE.search(brief)
     injected = agent.recent_events(event_type="brief_injected", limit=1)
     if injected and _minutes_ago(injected[0].occurred_at) <= INJECT_WINDOW_MIN:
@@ -67,11 +67,11 @@ def session_start(agent: Agent, session_id: str | None = None) -> dict[str, Any]
     else:
         out["brief"] = redact(brief) or f"missing: {cfg.brief}"  # masked, as recall's text is
     out["brief_stale"] = m is not None and (today - date.fromisoformat(m.group(1))).days > 1
-    exec_text = _read(vault.root / cfg.executive)
+    exec_text = read_safe(vault.root / cfg.executive)
     out["executive_state"] = redact(_sections(exec_text, EXEC_SECTIONS)) or exec_note(
         exec_text, cfg.executive
     )
-    inbox = _read(vault.root / cfg.inbox)
+    inbox = read_safe(vault.root / cfg.inbox)
     out["inbox"] = (
         0
         if "**Empty**" in inbox
@@ -82,7 +82,8 @@ def session_start(agent: Agent, session_id: str | None = None) -> dict[str, Any]
     missions = _mission_lines(exec_text)
     # the plain search: a mission line is not a question, so no judge, no vectors, no miss log
     out["missions"] = {
-        q: recall.brain_recall(agent.stores, q, limit=3)["results"] for q in missions[:2]
+        q: recall.brain_recall(agent.stores, q.replace("[redacted]", " "), limit=3)["results"]
+        for q in missions[:2]
     }
     _cap(out, START_TOKENS)
     return out
@@ -117,9 +118,10 @@ def session_end(
             when=today,
         )
         out["hsam"] = hs.status
-        # the file being replaced is kept, unless it is itself without the headings and a
-        # copy with them is already kept: the retry the warning below asks for would
-        # otherwise put the malformed text over the last good state
+        # the file being replaced is kept. When it is itself without the headings and a copy
+        # with them is already kept, it goes to .replaced.md instead: the retry the warning
+        # below asks for would otherwise put the malformed text over the last good state,
+        # and a state the owner wrote by hand in another shape is still in a file
         was = vault.root / cfg.executive
         out["executive_state"] = _put(
             vault,
@@ -127,10 +129,10 @@ def session_end(
             executive_state,
             today,
             "unchanged (pass executive_state=...)",
-            keep=not (
-                exec_note(_read(was), cfg.executive)
-                and _sections(_read(was.with_suffix(".prev.md")), EXEC_SECTIONS)
-            ),
+            keep=None
+            if exec_note(_read(was), cfg.executive)
+            and _sections(_read(was.with_suffix(".prev.md")), EXEC_SECTIONS)
+            else True,
         )
         if out["executive_state"] == "rewritten" and (
             note := exec_note(executive_state or "", cfg.executive)
@@ -265,7 +267,9 @@ def _sections(text: str, wanted: tuple[str, ...]) -> str:
 
 
 def _mission_lines(exec_text: str) -> list[str]:
-    block = _sections(exec_text, ("Top Missions",))
+    # masked before the markdown is stripped: after it a key reads "ghp <body>", which no
+    # pattern knows
+    block = redact(_sections(exec_text, ("Top Missions",)))
     out = []
     for ln in block.splitlines()[1:]:
         ln = re.sub(r"[*_`|#]+", " ", ln).strip(" -")
@@ -390,9 +394,10 @@ def _put(
     today: date,
     unchanged: str,
     stub: bool = False,
-    keep: bool = False,
+    keep: bool | None = False,
 ) -> str:
-    """Replace a session file with ``body``. ``keep``: the file it replaces stays as .prev.md."""
+    """Replace a session file with ``body``. ``keep``: the file it replaces stays as .prev.md
+    (``None``: as .replaced.md, when .prev.md must not be written over)."""
     if body is None or not body.strip():  # an empty body would blank the file
         return unchanged
     if _SECRET.search(body):
@@ -402,9 +407,11 @@ def _put(
         f"updated: {today.isoformat()}\n---\n"
     )
     path = vault.root / rel
-    if keep and path.exists():  # one generation back, as mental models keep
-        # surrogateescape: a stray byte in the file is in the copy as it was
-        vault._save(path.with_suffix(".prev.md"), _read(path, "surrogateescape"), today, bump=False)
+    if path.exists() and (keep or keep is None):  # one generation back, as mental models keep
+        # surrogateescape: a stray byte in the file is in the copy as it was. `None`: the
+        # usual copy holds the last good state and is left alone, so the text goes beside it
+        copy = path.with_suffix(".prev.md" if keep else ".replaced.md")
+        vault._save(copy, _read(path, "surrogateescape"), today, bump=False)
     vault._save(path, fm + body.strip() + "\n", today)
     return "stub" if stub else "rewritten"
 
