@@ -33,8 +33,10 @@ from typing import Any, Self, cast, get_args
 from brain_core.config import BrainConfig
 from brain_core.distill import brain_distill
 from brain_core.embed import EmbedUnavailable, WorkerEmbedder
+from brain_core.judge import Runner
 from brain_core.memory import episodic
 from brain_core.memory.episodic import Event
+from brain_core.models import run_api, run_claude
 from brain_core.recall import brain_recall
 from brain_core.remember import brain_remember
 from brain_core.session import session_end, session_start
@@ -148,6 +150,15 @@ class Agent:
         return self._stores
 
     @property
+    def judge(self) -> Runner | None:
+        """The model that picks the answering records, when ``recall.judge: model``."""
+        cfg = self._config.recall
+        if cfg.judge != "model":
+            return None
+        fn = run_api if cfg.runner == "api" else run_claude
+        return lambda system, prompt: fn(system, prompt, cfg.model)
+
+    @property
     def vectors(self) -> VectorIndex | None:
         """The vector search beside the keyword index, when ``stores.vectors`` is set."""
         v = self._config.stores.vectors
@@ -181,9 +192,17 @@ class Agent:
             offset=offset,
             vectors=vectors,
             candidates=self._config.recall.candidates,
+            judge=self.judge,
+            judge_candidates=self._config.recall.judge_candidates,
         )
         miss = out.pop("miss", None)
-        if miss is not None and offset == 0:
+        if miss is not None and miss.get("judged"):
+            self.log_event("recall_miss", {"query": query[:200], "scope": scope, **miss})
+            out["not_in_memory"] = (
+                "A model read the closest records and none answers the question. Say it is "
+                "not on record; the results below are only the nearest topics."
+            )
+        elif miss is not None and offset == 0:
             # a miss is an eval case waiting to be written; brain daily and brain_status list them
             self.log_event("recall_miss", {"query": query[:200], "scope": scope, **miss})
             out["weak_match"] = (

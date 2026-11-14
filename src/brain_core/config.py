@@ -70,6 +70,13 @@ class RecallConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     candidates: int = 150  # how many records each search (keyword, vector) puts forward
+    # agent: the calling agent reads the list and decides (free). model: brain-core asks a
+    # model to pick the records that answer, or to say none does, before replying
+    judge: Literal["agent", "model"] = "agent"
+    judge_candidates: int = 50  # how many of the best candidates the model reads
+    # as for `models`: api needs a key; claude is your own Claude Code login on your machine
+    runner: Literal["api", "claude"] = "api"
+    model: str | None = None
 
 
 class SessionConfig(BaseModel):

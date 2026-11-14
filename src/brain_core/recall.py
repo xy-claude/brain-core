@@ -21,6 +21,7 @@ from collections.abc import Sequence
 from datetime import date
 from typing import Any, get_args
 
+from brain_core import judge as judging
 from brain_core.embed import EmbedUnavailable
 from brain_core.stores.base import Kind, Record, Store, full_text, holds, normalize
 from brain_core.stores.index import RecordIndex
@@ -104,6 +105,8 @@ def brain_recall(
     offset: int = 0,
     vectors: VectorIndex | None = None,
     candidates: int = 150,
+    judge: judging.Runner | None = None,
+    judge_candidates: int = 50,
 ) -> dict[str, Any]:
     today = today or date.today()
     names = [s.name for s in stores]
@@ -237,6 +240,21 @@ def brain_recall(
             near.sort(key=lambda h: h[2], reverse=True)
             ordered = _join(ordered[:candidates], near, found_by)
             ordered = _pin(ordered, query, index, found_by)
+    verdict = ""
+    if judge is not None and ordered and offset == 0:
+        read = ordered[:judge_candidates]
+        try:
+            picks, verdict = judging.judge(
+                judge, query, [(r, stale(r)) for r, _s, _sc in read], today
+            )
+        except judging.JudgeError as e:
+            report["judge"] = f"unavailable: {str(e)[:120]}"
+        else:
+            report["judge"] = verdict
+            chosen_ids = {read[i][0].id for i in picks}
+            for i in picks:
+                found_by.setdefault(read[i][0].id, []).append("judge")
+            ordered = [read[i] for i in picks] + [h for h in ordered if h[0].id not in chosen_ids]
     total = len(ordered)
     results = [
         _item(r, s, sc, fmt, stale(r), found_by.get(r.id))
@@ -253,7 +271,12 @@ def brain_recall(
         "total": total,
         "results": results,
     }
-    if total == 0 or (q_tok and best < _MISS_BELOW):
+    if verdict == "not_in_memory":
+        # a model read the candidates and none answers: stronger than a low keyword cover
+        out["miss"] = {"best": round(best, 2), "hits": total, "judged": True}
+    elif verdict:
+        pass  # the judge found an answer; a low keyword cover no longer means a miss
+    elif total == 0 or (q_tok and best < _MISS_BELOW):
         out["miss"] = {
             "best": round(best, 2),
             "hits": total,
@@ -355,8 +378,8 @@ def _item(
     }
     if stale:
         item["superseded"] = True  # a newer record replaced this value; kept for its history
+    if found_by:
+        item["found_by"] = found_by  # keyword, vector, exact, judge: what put it forward
     if fmt == "detailed":
         item.update(id=r.id, store=store, score=round(score, 3), domain=r.domain, extra=r.extra)
-        if found_by:
-            item["found_by"] = found_by  # keyword, vector, exact: which search put it forward
     return item

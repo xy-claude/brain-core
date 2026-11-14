@@ -84,7 +84,13 @@ def deep_rank(q: dict[str, Any], res: list[dict[str, Any]]) -> int | None:
     return min((p for p in places if p), default=None)
 
 
-def run(config: str, questions: str, split: str = "all", depth: int = 0) -> list[dict[str, Any]]:
+def run(
+    config: str,
+    questions: str,
+    split: str = "all",
+    depth: int = 0,
+    runner: Any = None,  # a judge runner (system, prompt) -> reply; None: the agent's own
+) -> list[dict[str, Any]]:
     spec = yaml.safe_load(Path(questions).read_text())
     k = int(spec.get("k", 10))
     # tune on dev, quote the held-out number. A question says its split; without one, every
@@ -103,6 +109,8 @@ def run(config: str, questions: str, split: str = "all", depth: int = 0) -> list
             nets: dict[str, Any] = {
                 "vectors": agent.vectors,
                 "candidates": agent.config.recall.candidates,
+                "judge": runner or agent.judge,
+                "judge_candidates": agent.config.recall.judge_candidates,
             }
             out = brain_recall(agent.stores, q["q"], fmt="detailed", limit=k, **nets)
             ms = (time.perf_counter() - t0) * 1000

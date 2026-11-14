@@ -164,3 +164,99 @@ def test_scopes_without_vectors_skip_the_net(tmp_path: Path, scope: str) -> None
         except ValueError:
             return  # that store is not configured here
         assert "vectors" not in out["stores"]
+
+
+# ── the judge ────────────────────────────────────────────────────────────────
+
+
+def test_judge_picks_go_first_and_an_unknown_number_is_dropped(tmp_path: Path) -> None:
+    with _agent(tmp_path, vectors=False) as agent:
+        seen: list[str] = []
+
+        def run(system: str, prompt: str) -> str:
+            seen.append(prompt)
+            n = next(ln for ln in prompt.splitlines() if "coffee machine" in ln).split("]")[0][1:]
+            return f'Here you go: {{"picks": [{n}, 99], "status": "answered"}}'
+
+        out = brain_recall(agent.stores, "office server port", fmt="detailed", judge=run)
+        assert "coffee machine" in out["results"][0]["text"]
+        assert out["results"][0]["found_by"] == ["judge"] and out["stores"]["judge"] == "answered"
+        assert (
+            "miss" not in out
+            and "Today is" in seen[0]
+            and "Question: office server port" in seen[0]
+        )
+
+
+def test_judge_says_not_in_memory(tmp_path: Path) -> None:
+    with _agent(tmp_path, vectors=False) as agent:
+        plain = brain_recall(agent.stores, "database port office", fmt="detailed")
+        assert "miss" not in plain
+        out = brain_recall(
+            agent.stores,
+            "database port office",
+            fmt="detailed",
+            judge=lambda s, p: '{"picks": [], "status": "not_in_memory"}',
+        )
+        assert out["miss"]["judged"] is True
+        assert [r["id"] for r in out["results"]] == [r["id"] for r in plain["results"]]
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        "I think record 2",
+        '{"picks": [1], "status": "maybe"}',
+        '{"picks": [], "status": "answered"}',
+    ],
+)
+def test_a_bad_judge_reply_leaves_recall_as_it_was(tmp_path: Path, reply: str) -> None:
+    with _agent(tmp_path, vectors=False) as agent:
+        plain = brain_recall(agent.stores, "database port office", fmt="detailed")
+        out = brain_recall(
+            agent.stores, "database port office", fmt="detailed", judge=lambda s, p: reply
+        )
+        assert out["stores"]["judge"].startswith("unavailable")
+        assert out["results"] == plain["results"] and ("miss" in out) == ("miss" in plain)
+
+
+def test_a_judge_that_raises_leaves_recall_as_it_was(tmp_path: Path) -> None:
+    def boom(system: str, prompt: str) -> str:
+        raise RuntimeError("no network")
+
+    with _agent(tmp_path, vectors=False) as agent:
+        plain = brain_recall(agent.stores, "database port office", fmt="detailed")
+        out = brain_recall(agent.stores, "database port office", fmt="detailed", judge=boom)
+        assert "no network" in out["stores"]["judge"] and out["results"] == plain["results"]
+
+
+def test_a_secret_looking_record_is_not_sent_to_the_judge(tmp_path: Path) -> None:
+    from datetime import date
+
+    from brain_core import judge as judging
+    from brain_core.stores.base import Record
+
+    sent: list[str] = []
+
+    def run(system: str, prompt: str) -> str:
+        sent.append(prompt)
+        return '{"picks": [2], "status": "answered"}'
+
+    recs = [
+        (Record("a", "fact", "api_key = sk-ant-REDACTEDREDACTEDREDACTED", date(2026, 1, 1)), False),
+        (Record("b", "fact", "the port is 5432", date(2026, 1, 2)), True),
+    ]
+    picks, status = judging.judge(run, "which port", recs, date(2026, 2, 1))
+    assert picks == [1] and status == "answered"
+    assert "sk-ant" not in sent[0] and "(withheld)" in sent[0] and "replaced" in sent[0]
+
+
+def test_agent_reports_not_in_memory_when_the_judge_says_so(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    reply = '{"picks": [], "status": "not_in_memory"}'
+    monkeypatch.setattr("brain_core.agent.run_api", lambda system, prompt, model=None: reply)
+    with _agent(tmp_path, vectors=False) as agent:
+        agent.config.recall.judge = "model"
+        out = agent.brain_recall("database port office")
+        assert "not_in_memory" in out and "weak_match" not in out
