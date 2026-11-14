@@ -55,6 +55,11 @@ def full_text(r: Record) -> str:
     return f"{r.text} — {body}" if body else r.text
 
 
+def holds(token: str, text: str) -> bool:
+    """``token`` stands in ``text`` as a whole word: 8888 is not found inside 18888."""
+    return re.search(rf"(?<![a-z0-9]){re.escape(token)}(?![a-z0-9])", text.lower()) is not None
+
+
 @dataclass(frozen=True)
 class WriteResult:
     store: str

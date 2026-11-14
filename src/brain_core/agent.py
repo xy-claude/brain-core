@@ -24,6 +24,7 @@ Or as a context manager::
 
 from __future__ import annotations
 
+import contextlib
 from datetime import date as Date
 from pathlib import Path
 from types import TracebackType
@@ -31,6 +32,7 @@ from typing import Any, Self, cast, get_args
 
 from brain_core.config import BrainConfig
 from brain_core.distill import brain_distill
+from brain_core.embed import EmbedUnavailable, WorkerEmbedder
 from brain_core.memory import episodic
 from brain_core.memory.episodic import Event
 from brain_core.recall import brain_recall
@@ -52,6 +54,7 @@ from brain_core.stores import (
 from brain_core.stores.base import Kind
 from brain_core.stores.index import RecordIndex, terms
 from brain_core.stores.vault import _SECRET
+from brain_core.stores.vectors import VectorIndex
 
 
 class Agent:
@@ -66,6 +69,7 @@ class Agent:
         self.config_path = config_path
         self._current_session: str | None = None
         self._stores: list[Store] | None = None
+        self._vectors: VectorIndex | None = None
 
     # ── construction ─────────────────────────────────────────────────────────
 
@@ -143,6 +147,16 @@ class Agent:
                 self._stores.append(ArchiveStore([self.resolve(p) for p in s.archive], index))
         return self._stores
 
+    @property
+    def vectors(self) -> VectorIndex | None:
+        """The vector search beside the keyword index, when ``stores.vectors`` is set."""
+        v = self._config.stores.vectors
+        if v is None:
+            return None
+        if self._vectors is None:
+            self._vectors = VectorIndex(self._db, WorkerEmbedder(v.model, v.idle_minutes))
+        return self._vectors
+
     def brain_recall(
         self,
         query: str,
@@ -152,7 +166,22 @@ class Agent:
         offset: int = 0,
     ) -> dict[str, Any]:
         """One query across every store, deduplicated and ranked. See :mod:`brain_core.recall`."""
-        out = brain_recall(self.stores, query, scope=scope, fmt=fmt, limit=limit, offset=offset)
+        vectors = self.vectors
+        if vectors is not None:
+            # the worker is about to be asked anyway: give recent saves their vectors first.
+            # If it cannot be reached, recall reports that and answers from keywords
+            with contextlib.suppress(EmbedUnavailable):
+                vectors.fill(limit=16)
+        out = brain_recall(
+            self.stores,
+            query,
+            scope=scope,
+            fmt=fmt,
+            limit=limit,
+            offset=offset,
+            vectors=vectors,
+            candidates=self._config.recall.candidates,
+        )
         miss = out.pop("miss", None)
         if miss is not None and offset == 0:
             # a miss is an eval case waiting to be written; brain daily and brain_status list them
@@ -253,6 +282,8 @@ class Agent:
             force=force,
             **cast(dict[str, Any], extra),
         )
+        if self.vectors is not None and out["status"] in ("written", "partial"):
+            out["layers"]["vectors"] = self._vector_layer()
         # the session journal: brain_session('end') reports and summarises these
         episodic.log_event(
             self._db,
@@ -267,6 +298,27 @@ class Agent:
             session_id=self._current_session,
         )
         return out
+
+    def _vector_layer(self) -> dict[str, str]:
+        """A save never waits for the model: its vector is made now only if the embed worker
+        is already up, else on the next recall or ``brain index``."""
+        assert self.vectors is not None
+        try:
+            self.brain_sync()
+            done = self.vectors.fill(limit=16, start=False)
+        except EmbedUnavailable as e:
+            return {"status": "pending", "detail": str(e)[:120]}
+        left = len(self.vectors.pending())
+        if done and not left:
+            return {"status": "written", "detail": self.vectors.model}
+        return {"status": "pending", "detail": f"{left} records wait for the embed worker"}
+
+    def brain_sync(self) -> None:
+        """Bring the record index in line with the files (a store does it when it is searched)."""
+        for s in self.stores:
+            if getattr(s, "index", None) is not None:
+                s.read("fact", "sync", 1)
+                s.read("knowledge", "sync", 1)  # a notes store answers only this kind
 
     def brain_session(
         self,

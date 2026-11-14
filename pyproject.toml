@@ -29,6 +29,8 @@ dependencies = [
 
 [project.optional-dependencies]
 api = ["anthropic>=1.0"]  # `models.runner: api`; the default runner is the Claude Code login
+# `stores.vectors`: a local embedding model beside the keyword index. Large (torch); opt-in.
+vectors = ["sentence-transformers>=3.0", "numpy>=1.26"]
 
 [project.scripts]
 brain = "brain_core.cli.main:app"
@@ -46,6 +48,7 @@ dev = [
     "ruff>=0.8",
     "types-pyyaml>=6.0",
     "pytest-asyncio>=1.3.0",
+    "numpy>=1.26",  # the vector index is tested with a fake embedder, no model
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -81,6 +84,10 @@ warn_unused_ignores = true
 mypy_path = "src"
 packages = ["brain_core", "tests"]
 explicit_package_bases = true
+
+[[tool.mypy.overrides]]
+module = ["torch", "sentence_transformers"]  # only the embed worker imports them, when installed
+ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "tests.*"

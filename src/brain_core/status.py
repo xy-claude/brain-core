@@ -46,6 +46,8 @@ def brain_status(agent: Agent) -> dict[str, Any]:
             for ln in pending.splitlines()[1:]
             if ln.startswith("- ") or (ln.startswith("|") and not _is_table_chrome(ln))
         )
+    if agent.vectors is not None:
+        out["vectors"] = agent.vectors.stats()  # model, rows, rows waiting, worker up or down
     out["context"] = _context(agent)
     if agent.config.models is not None:
         from brain_core import models

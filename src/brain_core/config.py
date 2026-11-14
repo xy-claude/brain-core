@@ -40,6 +40,16 @@ class GraphConfig(BaseModel):
     python: str = "python3"
 
 
+class VectorsConfig(BaseModel):
+    """The optional vector search beside the keyword index: ``brain-core-mcp[vectors]``.
+    One embed worker per machine holds the model for every agent and exits when idle."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    model: str = "Qwen/Qwen3-Embedding-0.6B"
+    idle_minutes: float = 5  # how long the worker stays up after a call; 0 = exit after each
+
+
 class StoresConfig(BaseModel):
     """Where the agent's memory already lives (v0.2). SQLite is always on; the rest are optional."""
 
@@ -53,6 +63,13 @@ class StoresConfig(BaseModel):
     notes: list[Path] = Field(default_factory=list)  # read-only markdown folders recall searches
     # read-only folders of older memory (an export from another tool): searched, ranked below
     archive: list[Path] = Field(default_factory=list)
+    vectors: VectorsConfig | None = None  # absent: keyword search only
+
+
+class RecallConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    candidates: int = 150  # how many records each search (keyword, vector) puts forward
 
 
 class SessionConfig(BaseModel):
@@ -171,6 +188,7 @@ class BrainConfig(BaseModel):
     name: str
     workspace: WorkspaceConfig = Field(default_factory=WorkspaceConfig)
     stores: StoresConfig = Field(default_factory=StoresConfig)
+    recall: RecallConfig = Field(default_factory=RecallConfig)
     session: SessionConfig = Field(default_factory=SessionConfig)
     status: StatusConfig = Field(default_factory=StatusConfig)
     cron: CronConfig = Field(default_factory=CronConfig)

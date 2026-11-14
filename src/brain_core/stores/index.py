@@ -17,7 +17,7 @@ from datetime import date
 from pathlib import Path
 
 from brain_core.storage.db import Database
-from brain_core.stores.base import Kind, Record, full_text
+from brain_core.stores.base import Kind, Record, full_text, holds
 
 _TERM = re.compile(r"\d{4}-\d{2}-\d{2}|[^\W_]+")
 # question and filler words match most records and say nothing about which one is wanted
@@ -234,6 +234,28 @@ class RecordIndex:
             (path, int(line)),
         )
         return str(row["rid"]) if row else ""
+
+    def holding(self, token: str, limit: int) -> list[tuple[Record, str]]:
+        """Records whose text holds ``token`` exactly (lowercase), with their store. The index
+        narrows by the token's words; the text itself decides."""
+        q = " ".join(_TERM.findall(token))
+        if not q:
+            return []
+        out: list[tuple[Record, str]] = []
+        seen: set[str] = set()
+        for row in self.db.fetchall(
+            "SELECT record, store, rid FROM records_fts WHERE records_fts MATCH ? LIMIT ?",
+            (f'body : "{q}"', limit * 5),
+        ):
+            d = json.loads(row["record"])
+            d["date"] = date.fromisoformat(d["date"])
+            r = Record(**d)
+            if row["rid"] not in seen and holds(token, full_text(r)):
+                seen.add(row["rid"])
+                out.append((r, row["store"]))
+                if len(out) >= limit:
+                    break
+        return out
 
     def search(self, store: str, kinds: Sequence[Kind], query: str, limit: int) -> list[Record]:
         """The best ``limit`` records of ``store`` for ``query``, bm25 order, score on each."""

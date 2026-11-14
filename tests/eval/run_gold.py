@@ -100,13 +100,17 @@ def run(config: str, questions: str, split: str = "all", depth: int = 0) -> list
     with Agent.from_config(config) as agent:
         for q in qs:
             t0 = time.perf_counter()
-            out = brain_recall(agent.stores, q["q"], fmt="detailed", limit=k)
+            nets: dict[str, Any] = {
+                "vectors": agent.vectors,
+                "candidates": agent.config.recall.candidates,
+            }
+            out = brain_recall(agent.stores, q["q"], fmt="detailed", limit=k, **nets)
             ms = (time.perf_counter() - t0) * 1000
             hit, ans, rank = judge(q, out)
             deep = None
             if depth and q.get("gold"):
                 long = brain_recall(
-                    agent.stores, q["q"], fmt="detailed", limit=depth, max_tokens=10**9
+                    agent.stores, q["q"], fmt="detailed", limit=depth, max_tokens=10**9, **nets
                 )
                 deep = deep_rank(q, long["results"])
             rows.append(

@@ -4,6 +4,12 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+### Added
+- `stores.vectors` (opt-in, experimental; `pip install "brain-core-mcp[vectors]"`): a second search beside the keyword index. Every indexed record gets a vector from a local embedding model (default `Qwen/Qwen3-Embedding-0.6B`), kept in `brain.db` (`record_vectors`, derived data, rebuilt by `brain index`). Recall then gathers the top `recall.candidates` (150) of each search and joins the two lists by rank, never by score. A record holding an exact identifier from the question (a port, a version, a file name, an error string) is put first, and with `format='detailed'` each result says which search found it (`found_by`: keyword, vector, exact). Whether a question is answered is still read off the keyword list alone. Without `stores.vectors` nothing changes.
+- One embed worker per machine holds the model for every agent (`python -m brain_core.embed_worker`, started by the first call, a lock file allows one). It listens on a socket only the user can open, keeps no text, and exits after `stores.vectors.idle_minutes` (5). An agent's server holds no model. If the worker or the model cannot be reached, recall answers from keywords and says so in `stores`. A save never waits for the model: `layers.vectors` reports `written` when the worker is already up, else `pending`, and the next recall or `brain index` fills it in. Unix sockets only for now, so on Windows the vector search stays off.
+- `brain_status` and `brain doctor` report `vectors`: model, rows, rows waiting, worker up or down.
+- Eval: `run_gold.py --depth N` reports how often the gold record is anywhere in the top N, and counts false answers and false refusals apart; a question can carry its own `split`; `compare.py` pairs two runs by question and prints fixed, broken and the exact McNemar p-value.
+
 ## [0.7.0] - 2026-11-13
 
 ### Added

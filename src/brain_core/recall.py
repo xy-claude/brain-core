@@ -5,6 +5,12 @@ the query. A record from the index carries its bm25 score, and all of them share
 they are ranked by it. A store that only filters (the graph, a vault with no index) is read
 whole and scored here by token overlap. A store that raises is reported in ``stores`` and never
 aborts the call.
+
+With ``vectors`` (``stores.vectors`` in brain.yaml) a second search runs beside the keywords: the
+records nearest in meaning. The two lists are joined by rank, never by score, so neither net's
+numbers can drown the other's; a record that holds an exact identifier from the question (a
+port, a version, a file name) is put first; and each result says which net found it. If no
+vector can be made the keyword result is returned as it is, with the reason in ``stores``.
 """
 
 from __future__ import annotations
@@ -15,8 +21,10 @@ from collections.abc import Sequence
 from datetime import date
 from typing import Any, get_args
 
-from brain_core.stores.base import Kind, Record, Store, full_text, normalize
+from brain_core.embed import EmbedUnavailable
+from brain_core.stores.base import Kind, Record, Store, full_text, holds, normalize
 from brain_core.stores.index import RecordIndex
+from brain_core.stores.vectors import VectorIndex
 
 KINDS: tuple[Kind, ...] = get_args(Kind)
 DEFAULT_TOKENS = 6_000
@@ -57,6 +65,17 @@ _STOP = frozenset(
 )
 # separators only inside a token: "commit." -> commit, "co-authored-by" and "127.0.0.1" stay whole
 _WORD = re.compile(r"[a-z0-9]+(?:[-_.][a-z0-9]+)*")
+# Joining two ranked lists: a record is worth 1/(c + its place) in each list it is on. Measured
+# 2026-11-14 on 255 dev questions with a gold record: 188 answered in the top ten at c=10, 181 at
+# c=60, 157 for keywords alone. A small c lets the head of either list lead, which is what keeps
+# an exact keyword hit on top.
+_RRF_C = 10
+_NETS = ("vault", "notes", "archive")  # the stores whose records carry vectors
+# a word that names one thing exactly: has a digit, or an inner _ . / (0.4.26, invalid_grant,
+# session_recovery.py). A date or a bare year is not one.
+_IDENT = re.compile(r"[a-z0-9#][a-z0-9_./:#-]*[a-z0-9]")
+_DATEISH = re.compile(r"(?:19|20)\d\d(?:-\d\d){0,2}|\d{1,2}(?:st|nd|rd|th)")
+_PIN_MAX = 20  # an identifier more records than this hold names nothing in particular
 _WAS = re.compile(r"\(was: (.+?)\)(?:\s*\(\d{4}-\d{2}-\d{2}\))?\s*$")
 
 
@@ -83,6 +102,8 @@ def brain_recall(
     max_tokens: int = DEFAULT_TOKENS,
     today: date | None = None,
     offset: int = 0,
+    vectors: VectorIndex | None = None,
+    candidates: int = 150,
 ) -> dict[str, Any]:
     today = today or date.today()
     names = [s.name for s in stores]
@@ -118,6 +139,8 @@ def brain_recall(
             whole = bool(getattr(store, "whole", False))
             for kind in kinds[:1] if whole else kinds:
                 want = (offset + limit) * 2 if ranked else 10**6
+                if vectors is not None and ranked:
+                    want = max(want, candidates)  # the keyword net puts forward as many
                 recs = store.read(kind, query if ranked else None, want)
                 found[store.name] += [
                     (r, (1.0 - i / (len(recs) + 1)) * 0.6 if ranked else 0.0)
@@ -188,12 +211,37 @@ def brain_recall(
         key=lambda h: (h[2], h[0].date),
         reverse=True,
     )
-    total = len(ordered)
-    results = [_item(r, s, sc, fmt, stale(r)) for r, s, sc in ordered[offset : offset + limit]]
     index = next(
         (i for s in chosen if isinstance(i := getattr(s, "index", None), RecordIndex)), None
     )
+    # whether the question is answered is read off the keyword list alone: a vector search
+    # returns its nearest records for any question, so it cannot say "not in memory"
     lead = [r.id for r, _s, _sc in ordered[:3] if r.score > 0]
+    found_by: dict[str, list[str]] = {}
+    # a transcript line or a graph relation has no vector, so those scopes skip the net
+    if (
+        vectors is not None
+        and scope not in ("transcript", "relation")
+        and (scope in ("all", *KINDS) or scope in _NETS)
+    ):
+        try:
+            near = [
+                (r, s, sim * (0.5 if stale(r) else 1.0) * (0.7 if s == "archive" else 1.0))
+                for r, s, sim in vectors.search(query, candidates)
+                if r.kind in kinds and scope in ("all", *KINDS, s)
+            ]
+        except EmbedUnavailable as e:
+            report["vectors"] = f"unavailable: {str(e)[:120]}"
+        else:
+            report["vectors"] = len(near)
+            near.sort(key=lambda h: h[2], reverse=True)
+            ordered = _join(ordered[:candidates], near, found_by)
+            ordered = _pin(ordered, query, index, found_by)
+    total = len(ordered)
+    results = [
+        _item(r, s, sc, fmt, stale(r), found_by.get(r.id))
+        for r, s, sc in ordered[offset : offset + limit]
+    ]
     if index and q_tok and lead:
         # written memory leads the list: it alone says whether the question is answered. Raw
         # overlap would let a record with only the question's common words count as an answer
@@ -234,8 +282,64 @@ def brain_recall(
 
 _full_text = full_text  # the name older callers import
 
+Hit = tuple[Record, str, float]
 
-def _item(r: Record, store: str, score: float, fmt: str, stale: bool = False) -> dict[str, Any]:
+
+def _join(keyword: list[Hit], vector: list[Hit], found_by: dict[str, list[str]]) -> list[Hit]:
+    """One list from two, by place and not by score (reciprocal rank fusion)."""
+    worth: dict[str, float] = {}
+    keep: dict[str, Hit] = {}
+    for net, hits in (("keyword", keyword), ("vector", vector)):
+        for place, hit in enumerate(hits):
+            rid = hit[0].id
+            worth[rid] = worth.get(rid, 0.0) + 1.0 / (_RRF_C + place + 1)
+            keep.setdefault(rid, hit)
+            found_by.setdefault(rid, []).append(net)
+    return sorted(
+        ((r, s, worth[r.id]) for r, s, _sc in keep.values()),
+        key=lambda h: (h[2], h[0].date),
+        reverse=True,
+    )
+
+
+def identifiers(query: str) -> list[str]:
+    """The exact tokens of a question: a port, a version, a file name, an error string."""
+    out = []
+    for w in _IDENT.findall(query.lower()):
+        w = w.strip(".:/-")
+        coded = any(c.isdigit() for c in w) or any(c in w for c in "_./#")
+        if coded and len(w) > 2 and not _DATEISH.fullmatch(w):
+            out.append(w)
+    return list(dict.fromkeys(out))
+
+
+def _pin(
+    ordered: list[Hit], query: str, index: RecordIndex | None, found_by: dict[str, list[str]]
+) -> list[Hit]:
+    """Records holding an exact identifier from the question go first, in the order they had.
+    Every record is scanned for it, not only the candidates."""
+    front: dict[str, Hit] = {}
+    for token in identifiers(query):
+        holders = {r.id: (r, s, sc) for r, s, sc in ordered if holds(token, full_text(r))}
+        if index is not None:
+            for r, s in index.holding(token, _PIN_MAX + 1):
+                holders.setdefault(r.id, (r, s, 0.0))
+        if 0 < len(holders) <= _PIN_MAX:
+            for rid, hit in holders.items():
+                front.setdefault(rid, hit)
+                if "exact" not in found_by.setdefault(rid, []):
+                    found_by[rid].append("exact")
+    return [*front.values(), *(h for h in ordered if h[0].id not in front)]
+
+
+def _item(
+    r: Record,
+    store: str,
+    score: float,
+    fmt: str,
+    stale: bool = False,
+    found_by: list[str] | None = None,
+) -> dict[str, Any]:
     r = Record(r.id, r.kind, full_text(r), r.date, r.domain, r.path, r.line, r.extra)
     text = (
         r.text
@@ -253,4 +357,6 @@ def _item(r: Record, store: str, score: float, fmt: str, stale: bool = False) ->
         item["superseded"] = True  # a newer record replaced this value; kept for its history
     if fmt == "detailed":
         item.update(id=r.id, store=store, score=round(score, 3), domain=r.domain, extra=r.extra)
+        if found_by:
+            item["found_by"] = found_by  # keyword, vector, exact: which search put it forward
     return item

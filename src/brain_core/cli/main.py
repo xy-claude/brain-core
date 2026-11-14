@@ -12,6 +12,7 @@ import typer
 from brain_core import __version__
 from brain_core.agent import Agent
 from brain_core.cli.init import init_agent
+from brain_core.embed import EmbedUnavailable
 from brain_core.stores.vault import VaultStore
 
 if (
@@ -331,7 +332,8 @@ def index_cmd(
         typer.Argument(help="Path to agent directory (contains brain.yaml)."),
     ] = Path(),
 ) -> None:
-    """Load the vault's facts.md and patterns.md into the SQLite FTS index. Idempotent."""
+    """Load the vault's facts.md and patterns.md into the SQLite FTS index, and with
+    `stores.vectors` set, give every record its vector. Idempotent."""
     with _open(path) as agent:
         vault = next((s for s in agent.stores if isinstance(s, VaultStore)), None)
         if vault is None:
@@ -351,7 +353,20 @@ def index_cmd(
                     (f"{r.date} 00:00:00", f"{r.date} 00:00:00", res.detail.split("/")[1]),
                 )
                 written += 1
-    typer.echo(f"indexed {written} new, {exists} already there")
+        typer.echo(f"indexed {written} new, {exists} already there")
+        if agent.vectors is not None:
+            # every record gets its vector here; recall and saves only top up a few at a time
+            agent.brain_sync()
+            total = len(agent.vectors.pending())
+            done = 0
+            try:
+                while n := agent.vectors.fill(limit=200):
+                    done += n
+                    typer.echo(f"vectors: {done} of {total}")
+            except EmbedUnavailable as e:
+                typer.echo(f"vectors: stopped at {done} of {total}: {e}", err=True)
+                raise typer.Exit(code=1) from e
+            typer.echo(f"vectors: {agent.vectors.stats()['rows']} records, none waiting")
 
 
 @app.command("brief")
