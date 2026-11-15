@@ -166,6 +166,19 @@ def test_over_escalation_reads_the_whole_label() -> None:
     assert (sig["value"], sig["n"]) == (2, 4)
 
 
+def test_recurrence_counts_from_the_promotion_date_the_entry_states(tmp_path: Path) -> None:
+    (tmp_path / "corrections.md").write_text(
+        "# Corrections\n\n## Corrections\n\n"
+        "### [2026-04-10] Called it close enough\n- **Theme:** execution\n"
+        "- **Promoted:** Yes (2026-04-12)\n\n"
+        "### [2026-04-11] Close enough again, before the rule existed\n- **Theme:** execution\n"
+        "- **Promoted:** No\n\n"
+        "### [2026-05-10] And once after it\n- **Theme:** execution\n- **Promoted:** No\n"
+    )
+    sig = traits._learning(tmp_path, TODAY)["correction_recurrence"]
+    assert (sig["value"], sig["n"]) == (1, 1), "the correction of 04-11 came before the rule"
+
+
 def test_ratios_become_percentages_only_past_min_n() -> None:
     assert "pct" not in traits._ratio(3, 10, "x")
     assert traits._ratio(15, 20, "x")["pct"] == 75

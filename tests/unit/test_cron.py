@@ -373,6 +373,24 @@ def test_growth_section_names_rules_missions_and_old_pending(
     assert json.loads(seen.read_text()) == {"buy the domain": "2026-10-01"}, "gone ones are dropped"
 
 
+def test_growth_counts_recurrence_from_the_stated_promotion_date(tmp_path: Path) -> None:
+    agent = make(tmp_path)
+    vault = tmp_path / "atlas" / "vault"
+    corr = vault / "corrections.md"
+    corr.write_text(
+        corr.read_text().replace(
+            "### [2026-10-25] Trusted a green test\n- **Error:** e\n- **Correction:** c\n"
+            "- **Implied rule:** r\n- **Theme:** verification\n- **Promoted:** No",
+            "### [2026-10-25] Trusted a green test\n- **Error:** e\n- **Correction:** c\n"
+            "- **Implied rule:** r\n- **Theme:** verification\n- **Promoted:** Yes (2026-10-29)",
+        )
+    )
+    with agent:
+        growth = cron._growth(agent, vault, TODAY)
+    # the correction of 10-28 came before the rule; only the one of 11-01 is a repeat
+    assert "theme `verification` recurred 1× since its rule was promoted on 2026-10-29" in growth
+
+
 def test_reinforce_lists_decisions_at_the_spaced_intervals(tmp_path: Path) -> None:
     agent = make(tmp_path)
     (tmp_path / "atlas" / "vault" / "decisions_log.md").write_text(

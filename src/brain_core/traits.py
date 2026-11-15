@@ -21,7 +21,7 @@ import yaml
 
 from brain_core.session import _sections
 from brain_core.status import _frontmatter, _is_table_chrome
-from brain_core.stores.vault import VaultStore, frontmatter
+from brain_core.stores.vault import VaultStore, _parse_date, frontmatter
 from brain_core.stores.vault import read_safe as _read
 
 if TYPE_CHECKING:
@@ -40,6 +40,7 @@ _BANNER = re.compile(
 _CORRECTION = re.compile(r"^### \[(\d{4}-\d{2}-\d{2})\] (.+?)\s*$")
 _FIELD = re.compile(r"^- \*\*(\w[\w ]*):\*\*\s*(.*)$")
 _SOCIAL_THEMES = ("communication", "tone", "format", "delivery", "style")
+_PROMOTED = re.compile(r"(?i)yes\s*\((\d{4}-\d{2}-\d{2})\)")
 
 
 def load(agent_dir: Path | None) -> list[dict[str, str]]:
@@ -212,8 +213,8 @@ def _learning(root: Path, today: date) -> dict[str, dict[str, Any]]:
     promoted_at: dict[str, date] = {}
     for d, _title, fields in corrections:
         if fields.get("promoted", "").lower().startswith("yes"):
-            th = fields.get("theme", "").lower()
-            promoted_at[th] = min(promoted_at.get(th, d), d)
+            th, at = fields.get("theme", "").lower(), promoted_on(fields, d)
+            promoted_at[th] = min(promoted_at.get(th, at), at)
     recurrences = sum(
         1
         for d, _t, f in corrections
@@ -244,6 +245,13 @@ def _learning(root: Path, today: date) -> dict[str, dict[str, Any]]:
         ),
         "corrections_30d": _cost(recent, f"corrections in the last {STALE_DAYS} days"),
     }
+
+
+def promoted_on(fields: dict[str, str], written: date) -> date:
+    """The day a correction's rule was promoted: the date in ``Promoted: Yes (YYYY-MM-DD)``,
+    else the day of the correction itself. The mistake that caused a rule came before it."""
+    m = _PROMOTED.match(fields.get("promoted", ""))
+    return (_parse_date(m.group(1)) if m else None) or written
 
 
 def _cascades(by_session: dict[str, list[Any]]) -> dict[str, Any]:

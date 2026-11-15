@@ -233,7 +233,8 @@ def _growth(agent: Agent, root: Path, today: date) -> str:
     for d, _t, f in traits._corrections(_read(root / "corrections.md")):
         th = f.get("theme", "").lower()
         if f.get("promoted", "").lower().startswith("yes"):
-            promoted[th] = (min(promoted.get(th, (d, 0))[0], d), promoted.get(th, (d, 0))[1])
+            at = traits.promoted_on(f, d)  # the date written beside "Yes", when there is one
+            promoted[th] = (min(promoted.get(th, (at, 0))[0], at), promoted.get(th, (at, 0))[1])
     for d, _t, f in traits._corrections(_read(root / "corrections.md")):
         th = f.get("theme", "").lower()
         if th in promoted and d > promoted[th][0]:
