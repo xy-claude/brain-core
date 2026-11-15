@@ -685,8 +685,9 @@ def models_cmd(
         out = models.status(agent) if check else models.refresh(agent, name, force=force)
     for n, line in out.items():
         typer.echo(f"  {n:20} {line}")
-    if any(line.startswith("failed") for line in out.values()):
-        # a scheduler reads the exit code: a run that wrote no model must not read as a good one
+    if any(line.startswith(("failed", "rejected")) for line in out.values()):
+        # a scheduler reads the exit code: a run that kept an old model because the new one
+        # failed or was rejected must not read as a good one
         raise typer.Exit(code=1)
 
 

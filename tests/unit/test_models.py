@@ -157,6 +157,19 @@ def test_brain_models_exits_non_zero_when_a_model_failed(
     assert "fresh, left as it is" in fresh.stdout and fresh.exit_code == 0
 
 
+def test_brain_models_exits_non_zero_when_a_model_was_rejected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from typer.testing import CliRunner
+
+    from brain_core.cli.main import app
+
+    make(tmp_path).close()
+    monkeypatch.setattr(models, "runner_for", lambda agent: answer("- All invented\n- Also"))
+    out = CliRunner().invoke(app, ["models", str(tmp_path / "atlas")])
+    assert "rejected, old file kept" in out.stdout and out.exit_code == 1
+
+
 def test_models_are_off_without_the_block_and_the_question_change_is_seen(tmp_path: Path) -> None:
     init_agent("Bare", tmp_path / "bare", False, user="Ada", lite=True)
     with Agent.from_config(tmp_path / "bare" / "brain.yaml") as bare:
