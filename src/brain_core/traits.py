@@ -409,8 +409,11 @@ def _user_model(root: Path, today: date) -> dict[str, dict[str, Any]]:
 
 
 def _authority(pending: list[list[str]]) -> dict[str, dict[str, Any]]:
+    # the whole label, whatever its case, spacing or sign: "irreversible" holds "reversible"
     low = sum(
-        1 for r in pending if len(r) >= 3 and "reversible" in r[2].lower() and "low" in r[2].lower()
+        1
+        for r in pending
+        if len(r) >= 3 and "".join(r[2].lower().replace("×", "x").split()) == "reversiblexlow-risk"
     )
     return {
         "over_escalation": _ratio(

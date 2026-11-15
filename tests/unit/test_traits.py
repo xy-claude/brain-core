@@ -155,6 +155,17 @@ def test_confidence_spread_compares_the_level_not_the_whole_string(tmp_path: Pat
     assert (spread["value"], spread["n"]) == (1, 4), "three say high, one says medium"
 
 
+def test_over_escalation_reads_the_whole_label() -> None:
+    rows = [
+        ["rename a file", "taste", "reversible × low-risk"],
+        ["swap a colour", "taste", "Reversible x  Low-Risk"],
+        ["buy the domain", "money", "irreversible × low-risk"],  # holds the word "reversible"
+        ["delete the prod db", "money", "irreversible × high-risk"],
+    ]
+    sig = traits._authority(rows)["over_escalation"]
+    assert (sig["value"], sig["n"]) == (2, 4)
+
+
 def test_ratios_become_percentages_only_past_min_n() -> None:
     assert "pct" not in traits._ratio(3, 10, "x")
     assert traits._ratio(15, 20, "x")["pct"] == 75
