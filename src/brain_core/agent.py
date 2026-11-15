@@ -378,11 +378,16 @@ class Agent:
             },
             session_id=self._current_session,
         )
-        # the rule the sessions_opened trait reads: the journal's last start has no close after it
-        # and is younger than OPEN_HOURS (older, that session crashed)
+        # this server's own session first: one it started and has not ended is open, whatever
+        # another window on this agent closed since. With none, the rule the sessions_opened
+        # trait reads: the journal's last start has no close after it and is younger than
+        # OPEN_HOURS (older, that session crashed)
+        own = self._current_session is not None and self.recent_events(
+            session_id=self._current_session, event_type="session_start", limit=1
+        )
         start = self.recent_events(event_type="session_start", limit=1)
         end = self.recent_events(event_type="session_end", limit=1)
-        if (
+        if not own and (
             not start
             or (end and end[0].id > start[0].id)
             or _minutes_ago(start[0].occurred_at) >= OPEN_HOURS * 60

@@ -154,6 +154,19 @@ def test_a_write_with_no_started_session_open_carries_a_hint(tmp_path: Path) -> 
         assert after["status"] == "written" and "brain_session('start')" in after["hint"]
 
 
+def test_a_window_whose_own_session_is_open_gets_no_hint_when_another_closes(
+    tmp_path: Path,
+) -> None:
+    a, _vault, _fake = make(tmp_path, queue=False)
+    assert a.config_path is not None
+    with a, Agent.from_config(a.config_path) as b:  # two windows on one agent
+        a.brain_session("start", "win-a")
+        b.brain_session("start", "win-b")
+        b.brain_session("end")
+        assert "hint" not in a.brain_remember("window A is still open", "note")
+        assert "brain_session('start')" in b.brain_remember("window B closed", "note")["hint"]
+
+
 def test_end_refuses_secrets_in_files_and_drops_them_from_the_queue(tmp_path: Path) -> None:
     agent, vault, fake = make(tmp_path)
     q = tmp_path / "queue.jsonl"
