@@ -255,7 +255,7 @@ def promoted_on(fields: dict[str, str], written: date) -> date:
 
 
 def _cascades(by_session: dict[str, list[Any]]) -> dict[str, Any]:
-    cascades = 0
+    cascades = n = 0
     for ev in by_session.values():
         run, last = 0, None
         for e in ev:
@@ -266,9 +266,10 @@ def _cascades(by_session: dict[str, list[Any]]) -> dict[str, Any]:
             last = text
             if run == 3:
                 cascades += 1
+        n += last is not None  # an id with no write (a hook's) cannot hold a repeat
     return _ratio(
         cascades,
-        len(by_session),
+        n,
         "sessions with the same write repeated three times in a row (lower is better)",
     )
 

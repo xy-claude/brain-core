@@ -179,6 +179,17 @@ def test_recurrence_counts_from_the_promotion_date_the_entry_states(tmp_path: Pa
     assert (sig["value"], sig["n"]) == (1, 1), "the correction of 04-11 came before the rule"
 
 
+def test_repeat_cascades_counts_only_sessions_that_hold_a_write(tmp_path: Path) -> None:
+    agent, _ = make(tmp_path)
+    with agent:
+        agent.brain_session("start", "s1")
+        agent.brain_remember("one note", "note")
+        agent.log_event("lessons_injected", {"titles": []}, session_id="a-hook-session")
+        tr = traits.compute(agent, agent.brain_status(), TODAY)
+    sig = tr["reasoning_planning"]["signals"]["repeat_cascades"]
+    assert (sig["value"], sig["n"]) == (0, 1), "the hook's id holds no write"
+
+
 def test_ratios_become_percentages_only_past_min_n() -> None:
     assert "pct" not in traits._ratio(3, 10, "x")
     assert traits._ratio(15, 20, "x")["pct"] == 75
