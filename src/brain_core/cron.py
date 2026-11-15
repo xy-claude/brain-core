@@ -480,6 +480,10 @@ def _warmup(sdir: Path, n: int = 3, lines: int = 6) -> str:
 
 def backup(agent: Agent, today: date | None = None) -> str:
     cfg = agent.config.cron.backup
+    if not any(isinstance(s, HindsightStore) for s in agent.stores):
+        # hindsight-admin starts the database it backs up, and the prune below deletes old
+        # dumps: neither may happen for an agent that does not use Hindsight
+        return "skipped: no hindsight store configured"
     admin = _admin()
     if admin is None:
         return "skipped: hindsight-admin not found"

@@ -162,6 +162,21 @@ def test_daily_survives_a_typo_date_in_corrections(
     assert "[2026-11-01] Claimed done without output" in Path(out["brief"]).read_text()
 
 
+def test_daily_runs_no_backup_for_an_agent_without_a_hindsight_store(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    asked: list[int] = []
+    monkeypatch.setattr(cron, "_admin", lambda: asked.append(1))  # looked for, then "not found"
+    agent = make(tmp_path)
+    with agent:
+        assert agent.config.cron.backup.enabled, "the default"
+        assert cron.daily(agent, TODAY)["backup"] == "skipped: hindsight-admin not found"
+        assert asked == [1], "an agent with a Hindsight store behaves as before"
+        agent.stores[:] = [s for s in agent.stores if not isinstance(s, HindsightStore)]
+        assert cron.daily(agent, TODAY)["backup"] == "skipped: no hindsight store configured"
+    assert asked == [1], "hindsight-admin is not even looked for"
+
+
 @pytest.mark.skipif(sys.platform == "win32", reason="runs a #!/bin/sh stand-in for hindsight-admin")
 def test_backup_keeps_only_the_newest_n(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     admin = tmp_path / "hindsight-admin"
