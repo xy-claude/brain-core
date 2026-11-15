@@ -287,8 +287,11 @@ def _metacognition(
     vault: VaultStore, critique: Path, root: Path, today: date
 ) -> dict[str, dict[str, Any]]:
     decisions = vault.read("decision", limit=10_000)
+    # the level is the first word: "high" followed by a sentence of proof is still "high"
     levels = Counter(
-        r.extra.get("confidence", "").lower() for r in decisions if r.extra.get("confidence")
+        w[0]
+        for r in decisions
+        if (w := re.findall(r"[a-z]+", r.extra.get("confidence", "").lower()))
     )
     rated = sum(levels.values())
     off_majority = rated - max(levels.values(), default=0)  # 0 when every decision says the same

@@ -142,6 +142,19 @@ def test_a_server_restart_inside_an_open_session_is_not_an_unopened_session(
     assert (opened["value"], opened["n"]) == (2, 3)
 
 
+def test_confidence_spread_compares_the_level_not_the_whole_string(tmp_path: Path) -> None:
+    agent, _ = make(tmp_path)
+    with agent:  # the scaffold's own first decision says "high"
+        agent.brain_remember("Ship on Friday", "decision", title="A", confidence="high")
+        agent.brain_remember(
+            "Keep the port", "decision", title="B", confidence="High: measured twice, same result"
+        )
+        agent.brain_remember("Wait a week", "decision", title="C", confidence="medium")
+        tr = traits.compute(agent, agent.brain_status(), TODAY)
+    spread = tr["metacognition"]["signals"]["confidence_spread"]
+    assert (spread["value"], spread["n"]) == (1, 4), "three say high, one says medium"
+
+
 def test_ratios_become_percentages_only_past_min_n() -> None:
     assert "pct" not in traits._ratio(3, 10, "x")
     assert traits._ratio(15, 20, "x")["pct"] == 75
