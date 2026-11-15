@@ -418,7 +418,7 @@ def _track_pending(data_dir: Path, pending: list[list[str]], today: date) -> dic
         seen = json.loads(_read(path)) if path.exists() else {}
     except ValueError:
         seen = {}
-    keys = {r[0] for r in pending if r}
+    keys = {k for r in pending if (k := traits.pending_key(r))}
     seen = {k: v for k, v in seen.items() if k in keys}
     for k in keys:
         seen.setdefault(k, today.isoformat())

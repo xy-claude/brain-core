@@ -259,6 +259,28 @@ def test_missions_and_pending_ages_helpers(tmp_path: Path) -> None:
     assert traits.pending_ages(tmp_path, [["x"], ["y"]], TODAY) == {"x": 13}
 
 
+def test_a_pending_decision_keeps_its_age_when_its_row_number_changes(tmp_path: Path) -> None:
+    from brain_core import cron
+
+    def rows(*decisions: str) -> list[list[str]]:
+        table = "".join(
+            f"| {n} | {d} | reversible × low-risk |\n" for n, d in enumerate(decisions, 1)
+        )
+        return traits._pending_rows(
+            "## Pending Decisions\n| # | Decision | Classification |\n|---|---|---|\n" + table
+        )
+
+    first = rows("buy the domain", "rename a file")
+    assert cron._track_pending(tmp_path, first, date(2026, 10, 20)) == {
+        "buy the domain": 0,
+        "rename a file": 0,
+    }
+    # the first one is settled: the second moves up to row 1 and a new one takes row 2
+    later = rows("rename a file", "pick a colour")
+    cron._track_pending(tmp_path, later, date(2026, 10, 30))
+    assert traits.pending_ages(tmp_path, later, TODAY) == {"rename a file": 13, "pick a colour": 3}
+
+
 def test_mission_files_with_frontmatter_win_over_the_table(tmp_path: Path) -> None:
     goals = tmp_path / "goals"
     (goals / "missions").mkdir(parents=True)

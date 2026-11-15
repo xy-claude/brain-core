@@ -463,6 +463,12 @@ def _eval_slice(data_dir: Path, *types: str) -> dict[str, Any] | None:
     return _ratio(hits, n, note)
 
 
+def pending_key(row: list[str]) -> str:
+    """What a pending decision's first-seen date is filed under: its text, the first cell that
+    is not a row number. A number moves to the next decision when the one above is settled."""
+    return next((c for c in row if c and not re.fullmatch(r"#?\d+[.)]?", c)), "")
+
+
 def pending_ages(data_dir: Path, pending: list[list[str]], today: date) -> dict[str, int]:
     """Days each pending decision has waited, from ``data/pending_seen.json`` (read only)."""
     path = data_dir / "pending_seen.json"
@@ -474,7 +480,7 @@ def pending_ages(data_dir: Path, pending: list[list[str]], today: date) -> dict[
         return {}
     out = {}
     for r in pending:
-        key = r[0]
+        key = pending_key(r)
         d = _days_since(seen.get(key), today)
         if d is not None:
             out[key] = d
