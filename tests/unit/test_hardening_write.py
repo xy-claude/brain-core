@@ -555,6 +555,54 @@ def test_the_lists_are_long_enough_to_mean_something() -> None:
     assert len(LABELLED) >= 20 and len(HARMLESS) >= 20
 
 
+# a password said in prose, of any length, and the second half of a user and pass pair
+T = "`"
+SAID = [  # (the text, the value that must not survive)
+    ("the admin password is " + T + "Tr0ub4dor" + T + " since Monday", "Tr0ub4dor"),
+    ("the admin password is now " + T + "hunt3r" + T, "hunt3r"),
+    ('Password: "s3cret!" for the box', "s3cret!"),
+    ("pwd = 'ab12'", "ab12"),
+    ("passwd: " + T + "m0nkey" + T, "m0nkey"),
+    ("passphrase is " + T + "correct-horse-9" + T, "correct-horse-9"),
+    ("pass: " + T + "9f!x" + T, "9f!x"),
+    ("**Password:** " + T + "Abc12345" + T + " (rotate)", "Abc12345"),
+    ("user admin / pass hunt3r", "hunt3r"),
+    ("user: ada@example.com / pass: Wheel-2026!", "Wheel-2026!"),
+    ("User " + T + "demo" + T + " / Pass " + T + "demo1234" + T, "demo1234"),
+    ("sign in with user=+15550100 pass=246810", "246810"),
+]
+UNSAID = [
+    "the password is in the keychain",
+    "the password is now in 1Password",
+    "password is not set on the staging box",
+    "the pass rate is 92% on the held-out split",
+    "pass: true",
+    'pass: "skipped"',
+    "the Keychain item for the password: " + T + "koopi-admin" + T,
+    "bypass = 'ab12'",
+    "the user must pass validation first",
+    "(user guide / password reset)",
+    "user: bob, pass: abcd",
+    'password = "$DB_PASSWORD"',
+    'password: "<your-password-1>"',
+    "password is " + T + "two words 1 here" + T,
+]
+
+
+@pytest.mark.parametrize(("text", "value"), SAID)
+def test_a_password_said_in_prose_is_masked_and_its_label_stays(text: str, value: str) -> None:
+    assert has_secret(text), text
+    masked = redact(text)
+    assert masked == text.replace(value, "[redacted]"), masked
+    assert not has_secret(masked) and redact(masked) == masked, "masked once, never again"
+
+
+@pytest.mark.parametrize("text", UNSAID)
+def test_a_sentence_with_no_quoted_password_is_left_alone(text: str) -> None:
+    assert not has_secret(text), text
+    assert redact(text) == text
+
+
 def test_masking_keeps_the_label_and_guards_every_write(tmp_path: Path) -> None:
     assert redact("deploy with API_KEY=" + A + " today") == "deploy with API_KEY=[redacted] today"
     assert redact("the admin password is " + P) == "the admin password is [redacted]"
@@ -633,8 +681,18 @@ def test_a_fact_that_keeps_changing_does_not_grow_by_its_history(db: Database) -
 
 @pytest.mark.parametrize(
     "text",
-    ["token" + "=" * 20_000, "key=" * 5_000, "auth: " + "ab=" * 7_000],
-    ids=["a rule of equals signs", "a label over and over", "a long value with no digit"],
+    [
+        "token" + "=" * 20_000,
+        "key=" * 5_000,
+        "auth: " + "ab=" * 7_000,
+        ("user" + "=" * 1_000 + " ") * 100,
+    ],
+    ids=[
+        "a rule of equals signs",
+        "a label over and over",
+        "a long value with no digit",
+        "a user label before a rule, over and over",
+    ],
 )
 def test_a_long_run_after_a_label_costs_no_time(text: str) -> None:
     import time

@@ -56,9 +56,30 @@ _LABELLED = (
     r"(?(strong)|(?=(?:[A-Za-z0-9_+=-]{0,64}?(?:[A-Za-z]\d|\d[A-Za-z])){2}))"
     r"(?P<value>[A-Za-z0-9_+=-]{16,})[^\s\"'`,;&]*"
 )
-# What a pattern cannot see: a short password, a passphrase of words, digits alone, a value
-# with a / in its first 16 characters (one AWS secret key in four), and a random string with
-# neither a label nor a vendor's prefix.
+# A password said in prose, of any length. Said: after password, passwd, pwd, passphrase or
+# pass, joined by "is", "is now", ":" or "=", when the value stands in backticks or quotes and
+# holds a digit or a symbol other than . _ - ("the admin password is now `Tr0ub4dor`"). With no
+# quoted value a sentence is left alone ("the password is in the keychain"), and so is a quoted
+# name (`pass: "skipped"`, a keychain item `koopi-admin`). Paired: the second half of
+# "user X / pass Y" or "user=X pass=Y"; with no quotes round it, it must hold a digit ("user
+# guide / password reset" is a page). A value that starts like a variable or a placeholder
+# ($DB_PASS, <password>, {{pw}}, %s) is not one, and what was masked before is not matched again.
+_PROSE = (
+    r"(?P<prose>(?<![A-Za-z])(?:"
+    r"(?i:pass(?:word|wd|phrase)?|pwd)"
+    r"(?:\s{1,4}(?i:is)(?:\s{1,4}(?i:now))?\s{1,4}|\*{0,2}\s{0,4}[:=]\*{0,2}\s{0,4})(?=[`'\"])"
+    r"|(?i:user(?:name)?)(?:"
+    r"\*{0,2}[\s:=]{1,4}\*{0,2}[`'\"]?[^\s`'\"/]{1,64}[`'\"]?\s{0,4}/\s{0,4}"
+    r"(?i:pass(?:word)?|pwd)\*{0,2}[\s:=]{1,4}\*{0,2}"
+    r"|\s{0,4}[:=]\s{0,4}[`'\"]?[^\s`'\"/,;]{1,64}[`'\"]?[,;]?\s{1,4}"
+    r"(?i:pass(?:word)?|pwd)\s{0,4}[:=]\s{0,4})"
+    r")(?P<q>[`'\"])?)(?![$<{%]|\[redacted\])"
+    r"(?(q)(?=[^\s`'\"]{0,64}?[^A-Za-z._\-\s`'\"])|(?=[^\s`'\"]{0,64}?\d))"
+    r"(?P<word>[^\s`'\"]{4,})(?(q)(?=(?P=q)))"
+)
+# What a pattern cannot see: a short password with no quotes round it, a passphrase of words,
+# digits alone, a value with a / in its first 16 characters (one AWS secret key in four), and
+# a random string with neither a label nor a vendor's prefix.
 _SECRET = re.compile(
     r"hsk_[A-Za-z0-9]{8,}|(?i:bearer)\s+(?P<bearer>(?=[A-Za-z0-9._-]*\d)[A-Za-z0-9._-]{16,})"
     r"|(?i:basic)\s+(?P<basic>(?=[A-Za-z0-9+/]*\d)[A-Za-z0-9+/]{16,}={0,2})"
@@ -90,7 +111,7 @@ _SECRET = re.compile(
     r"(?=(?:[A-Z0-9]{4,6}-){0,5}?(?=[A-Z0-9]{0,5}[A-Z])(?=[A-Z0-9]{0,5}\d)[A-Z0-9]{4,6}-"
     r"(?:[A-Z0-9]{4,6}-){0,4}?(?=[A-Z0-9]{0,5}[A-Z])(?=[A-Z0-9]{0,5}\d)[A-Z0-9]{4,6}(?![A-Za-z0-9]))"
     r"[A-Z0-9]{4,6}(?:-[A-Z0-9]{4,6}){3,5}(?![A-Za-z0-9-])"
-    r"|" + _LABELLED
+    r"|" + _LABELLED + r"|" + _PROSE
 )
 
 
@@ -103,10 +124,15 @@ def redact(text: str) -> str:
     """``text`` with every credential-shaped run replaced, for indexing and for replies.
     A label stays, so "the staging password" still finds the line that held one."""
     values = {
-        m.group("value") or m.group("bearer") or m.group("basic") or m.group("urlpw") or m.group(0)
+        m.group("value")
+        or m.group("bearer")
+        or m.group("basic")
+        or m.group("urlpw")
+        or m.group("word")
+        or m.group(0)
         for m in _SECRET.finditer(text)
     }
-    text = _SECRET.sub(lambda m: (m.group("label") or "") + "[redacted]", text)
+    text = _SECRET.sub(lambda m: (m.group("label") or m.group("prose") or "") + "[redacted]", text)
     # the same value again, where no label or prefix marks it. One pass: a replace per value
     # took 1.4 s on a text of 16,000 different matches
     again = sorted((v for v in values if len(v) >= 8), key=len, reverse=True)
