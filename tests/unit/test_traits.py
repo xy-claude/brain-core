@@ -190,6 +190,20 @@ def test_repeat_cascades_counts_only_sessions_that_hold_a_write(tmp_path: Path) 
     assert (sig["value"], sig["n"]) == (0, 1), "the hook's id holds no write"
 
 
+def test_write_failures_names_the_partial_writes(tmp_path: Path) -> None:
+    from datetime import datetime
+
+    from brain_core.memory.episodic import Event
+
+    events = [
+        Event(i, "brain_remember", {"status": status}, None, datetime(2026, 11, 2))
+        for i, status in enumerate(("written", "partial", "partial", "failed"))
+    ]
+    sig = traits._execution(events, tmp_path, "daily_brief.md", TODAY)["write_failures"]
+    assert (sig["value"], sig["n"], sig["better"]) == (1, 4, "lower")
+    assert "2 more were partial" in sig["note"]
+
+
 def test_ratios_become_percentages_only_past_min_n() -> None:
     assert "pct" not in traits._ratio(3, 10, "x")
     assert traits._ratio(15, 20, "x")["pct"] == 75

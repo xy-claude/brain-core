@@ -322,6 +322,7 @@ def _metacognition(
 def _execution(events: list[Any], root: Path, brief: str, today: date) -> dict[str, dict[str, Any]]:
     writes = [e for e in events if e.event_type == "brain_remember"]
     failed = sum(1 for e in writes if e.payload.get("status") in ("failed", "refused"))
+    partial = sum(1 for e in writes if e.payload.get("status") == "partial")
     brief_age = _days_since(
         _frontmatter(root / brief).get("updated", "") or _mtime(root / brief), today
     )
@@ -329,7 +330,8 @@ def _execution(events: list[Any], root: Path, brief: str, today: date) -> dict[s
         "write_failures": _ratio(
             failed,
             len(writes),
-            "brain_remember calls that failed or were refused (lower is better)",
+            "brain_remember calls that failed or were refused (lower is better); "
+            f"{partial} more were partial (a layer failed or is pending)",
         ),
         "brief_age_days": _cost(brief_age, "days since brain daily last wrote the brief"),
     }
