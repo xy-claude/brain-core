@@ -19,7 +19,7 @@ from brain_core import update
 from brain_core.judge import JUDGE_MODEL
 from brain_core.session import _marker, _minutes_ago, closed, exec_note
 from brain_core.stores.index import RecordIndex
-from brain_core.stores.vault import VaultStore, redact
+from brain_core.stores.vault import VaultStore, has_secret, redact
 from brain_core.stores.vault import read_safe as _read
 
 if TYPE_CHECKING:
@@ -148,6 +148,38 @@ def recall_misses(agent: Agent, days: int = 30) -> dict[str, Any]:
         d["count"] += 1
     top = sorted(per.values(), key=lambda d: -d["count"])[:5]
     return {"window_days": days, "count": sum(d["count"] for d in per.values()), "top": top}
+
+
+def unmasked(agent: Agent, remask: bool = False) -> dict[str, int]:
+    """What ``brain.db`` stored before the mask knew a format: transcript index rows and logged
+    recall-miss questions whose text ``redact`` would change today. ``remask`` rewrites them
+    masked, in the database only: no transcript file is touched, and a second run finds
+    nothing. Every transcript row is read, so `brain doctor` calls this and ``brain_status``
+    does not."""
+    db = agent.db
+    rows = [
+        (*r, new)
+        for r in db.execute("SELECT id, session, ts, role, text FROM transcripts")
+        if has_secret(r["text"]) and (new := redact(r["text"])) != r["text"]
+    ]
+    events = []
+    for r in db.execute("SELECT id, payload FROM events WHERE event_type = 'recall_miss'"):
+        payload = json.loads(r["payload"] or "{}")
+        asked = str(payload.get("query", ""))
+        if (masked := redact(asked)) != asked:
+            events.append((json.dumps({**payload, "query": masked}), r["id"]))
+    if remask:
+        with db.transaction():
+            for rid, session, ts, role, _old, new in rows:
+                # deleted and inserted, so the table's own triggers rewrite the search mirror
+                db.execute("DELETE FROM transcripts WHERE id = ?", (rid,))
+                db.execute(
+                    "INSERT INTO transcripts (id, session, ts, role, text) VALUES (?, ?, ?, ?, ?)",
+                    (rid, session, ts, role, new),
+                )
+            for payload, eid in events:
+                db.execute("UPDATE events SET payload = ? WHERE id = ?", (payload, eid))
+    return {"transcripts": len(rows), "recall_misses": len(events)}
 
 
 def recall_degraded(agent: Agent, days: int = 7) -> dict[str, Any]:

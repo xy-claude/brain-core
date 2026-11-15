@@ -97,6 +97,88 @@ def test_doctor_reports_hsam_when_enabled(tmp_path: Path) -> None:
     assert "Brain:" in result.stdout
 
 
+def test_doctor_counts_and_remasks_what_the_index_stored_before_the_mask_knew_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import json
+
+    from brain_core import Agent
+    from brain_core.stores import transcripts
+
+    out = tmp_path / "agent"
+    runner.invoke(app, ["init", "Atlas", "--path", str(out), "--lite"])
+    yaml = out / "brain.yaml"
+    yaml.write_text(
+        yaml.read_text().replace("transcripts: ~/.claude/projects", f"transcripts: {tmp_path}/p")
+    )
+    folder = transcripts.project_dir(tmp_path / "p", out)
+    folder.mkdir(parents=True)
+    key = "ghp_" + "a1B2" * 9
+    said = (f"the deploy key is {key}, keep it", "list the plain folder please")
+    source = folder / "old.jsonl"
+    source.write_text(
+        "".join(
+            json.dumps(
+                {
+                    "type": "user",
+                    "uuid": f"u{n}",
+                    "sessionId": "old",
+                    "timestamp": "2026-10-03T10:00:00Z",
+                    "message": {"content": text},
+                }
+            )
+            + "\n"
+            for n, text in enumerate(said)
+        )
+    )
+    file_was = source.read_bytes()
+    with Agent.from_config(yaml) as agent:
+        with monkeypatch.context() as m:
+            # indexed as a release whose pattern did not know the shape left it: in clear
+            m.setattr(transcripts, "redact", lambda text: text)
+            assert transcripts.index(agent.db, tmp_path / "p", out)["added"] == 2
+        agent.log_event("recall_miss", {"query": f"what is {key} for", "scope": "all", "best": 0.1})
+        agent.log_event("recall_miss", {"query": "an ordinary question", "scope": "all"})
+
+    def state() -> tuple[list[str], list[dict[str, object]], int, int]:
+        with Agent.from_config(yaml) as agent:
+            mirror = "SELECT rowid FROM transcripts_fts WHERE transcripts_fts MATCH ?"
+            return (
+                [r["text"] for r in agent.db.fetchall("SELECT text FROM transcripts ORDER BY id")],
+                [e.payload for e in reversed(agent.recent_events(event_type="recall_miss"))],
+                len(agent.db.fetchall(mirror, ('"' + "a1B2" * 9 + '"',))),
+                len(agent.db.fetchall(mirror, ("deploy",))),
+            )
+
+    before = state()
+    assert before[0] == list(said) and before[2:] == (1, 1)
+    report = runner.invoke(app, ["doctor", str(out)]).stdout
+    assert "  unmasked   1 transcript index row(s), 1 logged recall question(s) hold text" in report
+    assert "`brain doctor --remask` rewrites them in brain.db" in report
+    assert state() == before, "a plain doctor run changes nothing"
+
+    fixed = runner.invoke(app, ["doctor", str(out), "--remask"])
+    assert fixed.exit_code == 0, fixed.stdout
+    assert "  remasked   1 transcript index row(s), 1 logged recall question(s)" in fixed.stdout
+    texts, misses, by_key, by_word = state()
+    assert texts == ["the deploy key is [redacted], keep it", "list the plain folder please"]
+    assert misses == [
+        {"query": "what is [redacted] for", "scope": "all", "best": 0.1},
+        {"query": "an ordinary question", "scope": "all"},
+    ]
+    assert (by_key, by_word) == (0, 1), "the search mirror holds the masked line, not the key"
+    assert source.read_bytes() == file_was, "the transcript file is not touched"
+
+    again = runner.invoke(app, ["doctor", str(out), "--remask"]).stdout
+    assert "  remasked   0 transcript index row(s), 0 logged recall question(s)" in again
+    after = runner.invoke(app, ["doctor", str(out)]).stdout
+    assert "  unmasked   0 transcript index row(s), 0 logged recall question(s) hold text" in after
+    assert "--remask" not in after
+    with Agent.from_config(yaml) as agent:  # a later index run does not bring the key back
+        assert transcripts.index(agent.db, tmp_path / "p", out)["added"] == 0
+    assert state()[0] == texts
+
+
 def test_init_writes_the_whole_pack_with_user_and_profile(tmp_path: Path) -> None:
     prof = tmp_path / "profile" / ".claude" / "rules"
     prof.mkdir(parents=True)

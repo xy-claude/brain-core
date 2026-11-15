@@ -14,6 +14,7 @@ from brain_core import __version__, recall
 from brain_core.agent import Agent
 from brain_core.cli.init import init_agent
 from brain_core.embed import EmbedUnavailable
+from brain_core.status import unmasked
 from brain_core.stores.vault import VaultStore, redact
 
 if (
@@ -576,11 +577,20 @@ def doctor_cmd(
         Path,
         typer.Argument(help="Path to agent directory (contains brain.yaml)."),
     ] = Path(),
+    remask: Annotated[
+        bool,
+        typer.Option(
+            "--remask",
+            help="Rewrite, masked, the transcript index rows and logged recall questions stored "
+            "before the mask knew their format. Changes brain.db only, never a transcript file.",
+        ),
+    ] = False,
 ) -> None:
     """Health check: brain_status in one call (stores, lint, context, session)."""
     with _open(path) as agent:
         typer.echo(f"Agent: {agent.name}  config: {agent.config_path}")
         st = agent.brain_status()
+        old = unmasked(agent, remask=remask)
     for name, s in st["stores"].items():
         typer.echo(f"  store {name:9} {'OK  ' if s['ok'] else 'DOWN'} {s['detail'][:70]}")
     k = st.get("knowledge", {})
@@ -615,6 +625,15 @@ def doctor_cmd(
             f"  secrets    {n} indexed record(s) hold what looks like a credential: masked in "
             "the index and in replies, still readable in the files"
         )
+    found = (
+        f"{old['transcripts']} transcript index row(s), {old['recall_misses']} logged recall "
+        "question(s)"
+    )
+    if remask:
+        typer.echo(f"  remasked   {found} rewritten masked in brain.db; no file was touched")
+    else:
+        fix = ": `brain doctor --remask` rewrites them in brain.db" if any(old.values()) else ""
+        typer.echo(f"  unmasked   {found} hold text the mask would hide today{fix}")
     if st.get("models"):
         typer.echo("  models     " + " · ".join(f"{n} {s}" for n, s in st["models"].items()))
     if st.get("update"):
