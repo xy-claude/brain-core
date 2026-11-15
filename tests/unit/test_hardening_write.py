@@ -561,15 +561,15 @@ SAID = [  # (the text, the value that must not survive)
     ("the admin password is " + T + "Tr0ub4dor" + T + " since Monday", "Tr0ub4dor"),
     ("the admin password is now " + T + "hunt3r" + T, "hunt3r"),
     ('Password: "s3cret!" for the box', "s3cret!"),
-    ("pwd = 'ab12'", "ab12"),
     ("passwd: " + T + "m0nkey" + T, "m0nkey"),
     ("passphrase is " + T + "correct-horse-9" + T, "correct-horse-9"),
-    ("pass: " + T + "9f!x" + T, "9f!x"),
+    ("DB_PASSWORD='Zz9!abc'", "Zz9!abc"),
     ("**Password:** " + T + "Abc12345" + T + " (rotate)", "Abc12345"),
     ("user admin / pass hunt3r", "hunt3r"),
     ("user: ada@example.com / pass: Wheel-2026!", "Wheel-2026!"),
     ("User " + T + "demo" + T + " / Pass " + T + "demo1234" + T, "demo1234"),
     ("sign in with user=+15550100 pass=246810", "246810"),
+    ("login: bob / password: s3cr3t", "s3cr3t"),
 ]
 UNSAID = [
     "the password is in the keychain",
@@ -586,6 +586,22 @@ UNSAID = [
     'password = "$DB_PASSWORD"',
     'password: "<your-password-1>"',
     "password is " + T + "two words 1 here" + T,
+    # "pass" and "pwd" alone are not password labels, and a path, a version or a count is
+    # not a password after any label (the review of 2026-11-16)
+    "ran pwd: " + T + "/Users/alice/Projects/app" + T,
+    "eval pass: '41/44'",
+    "tests pass: " + T + "3.12" + T,
+    "PWD='/app/src'",
+    "pass = '100%'",
+    "the boarding pass is 'AB1234'",
+    "all checks pass: " + T + "tests/unit" + T,
+    "pass: '10/12'",
+    "pass: " + T + "test_cli.py::test_doctor[1]" + T,
+    "user: alice / password: " + T + "see 1Password" + T,
+    "the password is " + T + "~/.config/app/secret" + T,
+    "the password is " + T + "./secrets.env" + T,
+    "the password is " + T + "v1.2.3" + T,
+    "the password is " + T + "https://example.com/reset" + T,
 ]
 
 
@@ -601,6 +617,14 @@ def test_a_password_said_in_prose_is_masked_and_its_label_stays(text: str, value
 def test_a_sentence_with_no_quoted_password_is_left_alone(text: str) -> None:
     assert not has_secret(text), text
     assert redact(text) == text
+
+
+def test_a_path_after_pwd_is_saved_and_not_masked_where_it_comes_again(tmp_path: Path) -> None:
+    said = "ran pwd: " + T + "/Users/alice/Projects/app" + T + " then cd /Users/alice/Projects/app"
+    assert redact(said) == said, "the path is not masked, here or where it comes again"
+    v = VaultStore(tmp_path)
+    for note in (said, "eval pass: '41/44' on the held-out split"):
+        assert brain_remember([v], note, "note")["status"] == "written", note
 
 
 def test_masking_keeps_the_label_and_guards_every_write(tmp_path: Path) -> None:

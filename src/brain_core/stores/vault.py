@@ -56,25 +56,30 @@ _LABELLED = (
     r"(?(strong)|(?=(?:[A-Za-z0-9_+=-]{0,64}?(?:[A-Za-z]\d|\d[A-Za-z])){2}))"
     r"(?P<value>[A-Za-z0-9_+=-]{16,})[^\s\"'`,;&]*"
 )
-# A password said in prose, of any length. Said: after password, passwd, pwd, passphrase or
-# pass, joined by "is", "is now", ":" or "=", when the value stands in backticks or quotes and
-# holds a digit or a symbol other than . _ - ("the admin password is now `Tr0ub4dor`"). With no
-# quoted value a sentence is left alone ("the password is in the keychain"), and so is a quoted
-# name (`pass: "skipped"`, a keychain item `koopi-admin`). Paired: the second half of
-# "user X / pass Y" or "user=X pass=Y"; with no quotes round it, it must hold a digit ("user
-# guide / password reset" is a page). A value that starts like a variable or a placeholder
-# ($DB_PASS, <password>, {{pw}}, %s) is not one, and what was masked before is not matched again.
+# A password said in prose, of any length. Said: after password, passwd or passphrase, joined
+# by "is", "is now", ":" or "=", when the value stands in backticks or quotes, has no space, and
+# holds a letter and a digit or a symbol other than . _ - ("the admin password is now
+# `Tr0ub4dor`"). "pass" and "pwd" alone are not labels here: "tests pass: `3.12`", "ran pwd:
+# `/app`". With no quoted value a sentence is left alone ("the password is in the keychain"),
+# and so is a quoted name (a keychain item `koopi-admin`). Paired: the second half of
+# "user X / pass Y", "login X / password Y" or "user=X pass=Y", where the user label makes the
+# pass label mean a password; with no quotes round it, it must hold a digit ("user guide /
+# password reset" is a page). Never one: a value that starts like a variable or a placeholder
+# ($DB_PASS, <password>, {{pw}}, %s), a path (/, ~, ., C:\), a version (3.12, v1.2), a URL, or
+# what was masked before.
 _PROSE = (
     r"(?P<prose>(?<![A-Za-z])(?:"
-    r"(?i:pass(?:word|wd|phrase)?|pwd)"
-    r"(?:\s{1,4}(?i:is)(?:\s{1,4}(?i:now))?\s{1,4}|\*{0,2}\s{0,4}[:=]\*{0,2}\s{0,4})(?=[`'\"])"
-    r"|(?i:user(?:name)?)(?:"
+    r"(?P<said>(?i:pass(?:word|wd|phrase))"
+    r"(?:\s{1,4}(?i:is)(?:\s{1,4}(?i:now))?\s{1,4}|\*{0,2}\s{0,4}[:=]\*{0,2}\s{0,4}))(?=[`'\"])"
+    r"|(?i:user(?:name)?|login)(?:"
     r"\*{0,2}[\s:=]{1,4}\*{0,2}[`'\"]?[^\s`'\"/]{1,64}[`'\"]?\s{0,4}/\s{0,4}"
-    r"(?i:pass(?:word)?|pwd)\*{0,2}[\s:=]{1,4}\*{0,2}"
+    r"(?i:pass(?:word|wd)?|pwd)\*{0,2}[\s:=]{1,4}\*{0,2}"
     r"|\s{0,4}[:=]\s{0,4}[`'\"]?[^\s`'\"/,;]{1,64}[`'\"]?[,;]?\s{1,4}"
-    r"(?i:pass(?:word)?|pwd)\s{0,4}[:=]\s{0,4})"
-    r")(?P<q>[`'\"])?)(?![$<{%]|\[redacted\])"
-    r"(?(q)(?=[^\s`'\"]{0,64}?[^A-Za-z._\-\s`'\"])|(?=[^\s`'\"]{0,64}?\d))"
+    r"(?i:pass(?:word|wd)?|pwd)\s{0,4}[:=]\s{0,4})"
+    r")(?P<q>[`'\"])?)"
+    r"(?![$<{%/~.]|v?\d+\.\d|[A-Za-z]:[\\/]|[A-Za-z][A-Za-z0-9+.-]{1,9}://|\[redacted\])"
+    r"(?(said)(?=[^\s`'\"]{0,64}?[A-Za-z])(?=[^\s`'\"]{0,64}?[^A-Za-z._\-\s`'\"])"
+    r"|(?(q)(?=[^\s`'\"]{0,64}?[^A-Za-z._\-\s`'\"])|(?=[^\s`'\"]{0,64}?\d)))"
     r"(?P<word>[^\s`'\"]{4,})(?(q)(?=(?P=q)))"
 )
 # What a pattern cannot see: a short password with no quotes round it, a passphrase of words,
