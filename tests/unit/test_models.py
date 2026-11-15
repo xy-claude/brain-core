@@ -135,6 +135,28 @@ def test_a_failed_or_empty_run_keeps_the_file_it_had(tmp_path: Path) -> None:
         assert "Proof first" in path.with_suffix(".prev.md").read_text()
 
 
+def test_brain_models_exits_non_zero_when_a_model_failed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from typer.testing import CliRunner
+
+    from brain_core.cli.main import app
+
+    make(tmp_path).close()
+
+    def boom(system: str, prompt: str) -> str:
+        raise models.RunnerError("no login")
+
+    monkeypatch.setattr(models, "runner_for", lambda agent: boom)
+    failed = CliRunner().invoke(app, ["models", str(tmp_path / "atlas")])
+    assert "failed, old file kept: no login" in failed.stdout and failed.exit_code == 1
+    monkeypatch.setattr(models, "runner_for", lambda agent: answer("- Proof first {proof}"))
+    written = CliRunner().invoke(app, ["models", str(tmp_path / "atlas")])
+    assert "written: " in written.stdout and written.exit_code == 0
+    fresh = CliRunner().invoke(app, ["models", str(tmp_path / "atlas")])
+    assert "fresh, left as it is" in fresh.stdout and fresh.exit_code == 0
+
+
 def test_models_are_off_without_the_block_and_the_question_change_is_seen(tmp_path: Path) -> None:
     init_agent("Bare", tmp_path / "bare", False, user="Ada", lite=True)
     with Agent.from_config(tmp_path / "bare" / "brain.yaml") as bare:
