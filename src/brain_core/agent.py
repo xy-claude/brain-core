@@ -378,6 +378,13 @@ class Agent:
             },
             session_id=self._current_session,
         )
+        # the rule the sessions_opened trait reads: the journal's last start has no close after it
+        start = self.recent_events(event_type="session_start", limit=1)
+        end = self.recent_events(event_type="session_end", limit=1)
+        if not start or (end and end[0].id > start[0].id):
+            out["hint"] = (
+                "No started session is open: call brain_session('start') before the next write."
+            )
         return out
 
     def _vector_layer(self) -> dict[str, str]:

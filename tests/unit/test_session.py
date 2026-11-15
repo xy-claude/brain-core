@@ -139,6 +139,21 @@ def test_end_after_a_server_restart_closes_the_session_that_was_started(tmp_path
         agent.close()
 
 
+def test_a_write_with_no_started_session_open_carries_a_hint(tmp_path: Path) -> None:
+    agent, _vault, _fake = make(tmp_path, queue=False)
+    with agent:
+        before = agent.brain_remember("written before any start", "note")
+        assert before["status"] == "written", "the write still succeeds"
+        assert "brain_session('start')" in before["hint"]
+        agent.brain_session("start", "s1")
+        assert "hint" not in agent.brain_remember("inside s1", "note")
+        agent.start_session("mcp-after-restart")  # a restart while s1 is open: still no hint
+        assert "hint" not in agent.brain_remember("s1 after a restart", "note")
+        agent.brain_session("end")
+        after = agent.brain_remember("after the close", "note")
+        assert after["status"] == "written" and "brain_session('start')" in after["hint"]
+
+
 def test_end_refuses_secrets_in_files_and_drops_them_from_the_queue(tmp_path: Path) -> None:
     agent, vault, fake = make(tmp_path)
     q = tmp_path / "queue.jsonl"
