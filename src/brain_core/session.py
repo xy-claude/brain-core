@@ -31,6 +31,9 @@ from brain_core.config import SessionConfig
 
 START_TOKENS = 6_000
 INJECT_WINDOW_MIN = 15  # a brief injected by the SessionStart hook this recently is not repeated
+# a started session with no end is taken as still open for this long: a server that restarts in
+# it belongs to it. Older, it crashed, and a new server is a new conversation
+OPEN_HOURS = 12
 # the `## ` headings of the executive state that start, status and the traits read
 EXEC_SECTIONS = ("Primary Objective", "Top Missions", "Pending Decisions")
 _BRIEF_DATE = re.compile(r"Daily Brief — (\d{4}-\d{2}-\d{2})")

@@ -13,13 +13,13 @@ from __future__ import annotations
 import json
 import re
 from collections import Counter, defaultdict
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import yaml
 
-from brain_core.session import _sections
+from brain_core.session import OPEN_HOURS, _sections
 from brain_core.status import _frontmatter, _is_table_chrome
 from brain_core.stores.vault import VaultStore, _parse_date, frontmatter
 from brain_core.stores.vault import read_safe as _read
@@ -148,11 +148,15 @@ def _opened(by_session: dict[str, list[Any]], events: list[Any]) -> dict[str, An
         opened = any(e.event_type == "session_start" for e in ev)
         if not opened and s.startswith("mcp-"):
             # the id a server mints at launch: a restart inside a conversation. When the last
-            # start or close before its first write is a start, that session was still open
-            # and these are its writes, not a session of their own. After a close they belong
-            # to no started session
+            # start or close before its first write is a start of the last OPEN_HOURS, that
+            # session was still open and these are its writes, not a session of their own.
+            # After a close, or a start that old (a crash), they belong to no started session
             last = next((m for m in marks if m.id < first.id), None)
-            if last is not None and last.event_type == "session_start":
+            if (
+                last is not None
+                and last.event_type == "session_start"
+                and first.occurred_at - last.occurred_at < timedelta(hours=OPEN_HOURS)
+            ):
                 s, opened = last.session_id or s, True
         sessions[s] = sessions.get(s, False) or opened
     return _ratio(

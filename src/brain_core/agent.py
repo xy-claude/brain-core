@@ -39,7 +39,7 @@ from brain_core.memory.episodic import Event
 from brain_core.models import run_api, run_claude
 from brain_core.recall import brain_recall
 from brain_core.remember import brain_remember
-from brain_core.session import session_end, session_start
+from brain_core.session import OPEN_HOURS, _minutes_ago, session_end, session_start
 from brain_core.status import brain_status
 from brain_core.storage.db import Database
 from brain_core.storage.migrator import migrate
@@ -379,9 +379,14 @@ class Agent:
             session_id=self._current_session,
         )
         # the rule the sessions_opened trait reads: the journal's last start has no close after it
+        # and is younger than OPEN_HOURS (older, that session crashed)
         start = self.recent_events(event_type="session_start", limit=1)
         end = self.recent_events(event_type="session_end", limit=1)
-        if not start or (end and end[0].id > start[0].id):
+        if (
+            not start
+            or (end and end[0].id > start[0].id)
+            or _minutes_ago(start[0].occurred_at) >= OPEN_HOURS * 60
+        ):
             out["hint"] = (
                 "No started session is open: call brain_session('start') before the next write."
             )

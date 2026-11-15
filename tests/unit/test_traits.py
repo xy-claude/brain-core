@@ -142,6 +142,26 @@ def test_a_server_restart_inside_an_open_session_is_not_an_unopened_session(
     assert (opened["value"], opened["n"]) == (2, 3)
 
 
+def test_a_new_conversation_after_a_crash_is_not_folded_into_the_crashed_session(
+    tmp_path: Path,
+) -> None:
+    agent, _ = make(tmp_path)
+    with agent:
+        agent.brain_session("start", "s1")
+        agent.brain_remember("s1 note", "note")
+        # s1 crashed 13 hours ago: no end. A new conversation launches a server, never starts
+        agent.db.execute(
+            "UPDATE events SET occurred_at = datetime(occurred_at, '-13 hours') "
+            "WHERE session_id = 's1'"
+        )
+        agent.start_session("mcp-cccccccccccc")
+        late = agent.brain_remember("new conversation, no start", "note")
+        tr = traits.compute(agent, agent.brain_status(), TODAY)
+    opened = tr["working_memory"]["signals"]["sessions_opened"]
+    assert (opened["value"], opened["n"]) == (1, 2), "the second conversation never started"
+    assert "brain_session('start')" in late["hint"]
+
+
 def test_confidence_spread_compares_the_level_not_the_whole_string(tmp_path: Path) -> None:
     agent, _ = make(tmp_path)
     with agent:  # the scaffold's own first decision says "high"
