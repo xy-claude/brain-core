@@ -67,7 +67,7 @@ _LABELLED = (
 # the user label makes the pass label mean a password; with no quotes round it, it must hold a
 # digit ("user guide / password reset" is a page). Never one: a value that starts like a
 # variable or a placeholder ($DB_PASS, <password>, {{pw}}, %s), a path (/, ~, ., C:\), a version
-# (3.12, v1.2), a URL, or what was masked before.
+# (3.12, v1.2), a URL, or a value that holds what was masked before.
 _OPEN = "`'\"\u201c\u2018"  # a quote mark that opens a value, straight or curly
 _CLOSE = "`'\"\u201d\u2019"
 _QUOTES = _OPEN + _CLOSE[3:]
@@ -82,10 +82,14 @@ _PROSE = (
     r"|\s{0,4}[:=]\s{0,4}[`'\"]?[^\s`'\"/,;]{1,64}[`'\"]?[,;]?\s{1,4}"
     r"(?i:pass(?:word|wd)?|pwd)\s{0,4}[:=]\s{0,4})"
     rf")(?P<q>[{_OPEN}])?)"
-    r"(?![$<{%/~.]|v?\d+\.\d|[A-Za-z]:[\\/]|[A-Za-z][A-Za-z0-9+.-]{1,9}://|\[redacted\])"
+    r"(?![$<{%/~.]|v?\d+\.\d|[A-Za-z]:[\\/]|[A-Za-z][A-Za-z0-9+.-]{1,9}://)"
+    # masked before, anywhere in the value: a second pass must change nothing (--remask). Both
+    # this look and the value stop at 128 characters: unbounded, "user:a/pass:1" said 10,000
+    # times before a mask took 9.5 s
+    rf"(?![^\s{_QUOTES}]{{0,128}}\[redacted\])"
     rf"(?(said)(?=[^\s{_QUOTES}]{{0,64}}?[A-Za-z])(?=[^\s{_QUOTES}]{{0,64}}?[^A-Za-z._\-\s{_QUOTES}])"
     rf"|(?(q)(?=[^\s{_QUOTES}]{{0,64}}?[^A-Za-z._\-\s{_QUOTES}])|(?=[^\s{_QUOTES}]{{0,64}}?\d)))"
-    rf"(?P<word>[^\s{_QUOTES}]{{4,}})(?(q)(?=[{_CLOSE}]))"
+    rf"(?P<word>[^\s{_QUOTES}]{{4,128}})(?(q)(?=[{_CLOSE}]))"
 )
 # What a pattern cannot see: a password of under four characters, one with no quotes round it
 # outside a user and pass pair ("password: s3cr3t"), a passphrase of words, digits alone, a value

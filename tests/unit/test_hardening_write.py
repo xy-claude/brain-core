@@ -634,6 +634,36 @@ def test_a_sentence_with_no_quoted_password_is_left_alone(text: str) -> None:
     assert redact(text) == text
 
 
+def masked_twice_inputs(n: int = 400) -> list[str]:
+    """Labels, quote marks and values, some behind a sign another pattern does not take: what
+    once masked again on a second pass (the review of 2026-11-16). Seeded, so the same each run."""
+    import random
+
+    rnd = random.Random(11)
+    labels = ["password: ", "password is ", "pass=", "pwd: ", "token=", "api_key: ", "secret: "]
+    labels += ["user=bob pass=", "user: bob / pass: "]
+    jwt = "eyJ" + "hbGciOiJIUzI1NiJ9" + ".eyJ" + "zdWIiOiIxIn0" + ".abc123def456"
+    values = ["Tr0ub4dor!", "x1!", "sk-" + "a1B2" * 6, "ghp_" + "a1B2" * 9, "abc123def456ghi789"]
+    values += ["AKIA" + "ABCD1234EFGH5678", "p@ss:" + "a1b2c3d4e5f6g7h8", jwt, "hunter2/x1"]
+    out = ["the password: ':abc123def456ghi789!' for the box"]
+    for _ in range(n):
+        q, v = rnd.choice(["", T, "'", '"']), rnd.choice(values)
+        if rnd.random() < 0.5:
+            v = (
+                rnd.choice(["", "=", ":", "/", "-", "#"])
+                + v
+                + rnd.choice(["", "!", "/x", ":y1", "."])
+            )
+        tail = rnd.choice(["", " ok", ", then", " and " + rnd.choice(labels) + v])
+        out.append(rnd.choice(["", "the ", "note: "]) + rnd.choice(labels) + q + v + q + tail)
+    return out
+
+
+def test_masked_text_masked_again_is_the_same() -> None:
+    again = [t for t in masked_twice_inputs() if redact(redact(t)) != redact(t)]
+    assert again == [], again[:3]
+
+
 def test_a_path_after_pwd_is_saved_and_not_masked_where_it_comes_again(tmp_path: Path) -> None:
     said = "ran pwd: " + T + "/Users/alice/Projects/app" + T + " then cd /Users/alice/Projects/app"
     assert redact(said) == said, "the path is not masked, here or where it comes again"
@@ -725,12 +755,14 @@ def test_a_fact_that_keeps_changing_does_not_grow_by_its_history(db: Database) -
         "key=" * 5_000,
         "auth: " + "ab=" * 7_000,
         ("user" + "=" * 1_000 + " ") * 100,
+        "user:a/pass:" * 5_000 + "[redacted]",
     ],
     ids=[
         "a rule of equals signs",
         "a label over and over",
         "a long value with no digit",
         "a user label before a rule, over and over",
+        "a user and pass pair with no space, over and over, then a mask",
     ],
 )
 def test_a_long_run_after_a_label_costs_no_time(text: str) -> None:

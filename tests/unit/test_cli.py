@@ -179,6 +179,28 @@ def test_doctor_counts_and_remasks_what_the_index_stored_before_the_mask_knew_it
     assert state()[0] == texts
 
 
+def test_a_second_remask_finds_nothing_to_change(tmp_path: Path) -> None:
+    from brain_core import Agent
+    from tests.unit.test_hardening_write import masked_twice_inputs
+
+    runner.invoke(app, ["init", "Atlas", "--path", str(tmp_path), "--lite"])
+    said = ["ran pwd: `/Users/alice/Projects/app` in the repo", *masked_twice_inputs()]
+    with Agent.from_config(tmp_path / "brain.yaml") as agent:
+        for n, text in enumerate(said):
+            agent.db.execute(
+                "INSERT INTO transcripts (id, session, ts, role, text) VALUES (?, ?, ?, ?, ?)",
+                (f"u{n}:0", "s", "2026-10-01T00:00:00Z", "user", text),
+            )
+    first = runner.invoke(app, ["doctor", str(tmp_path), "--remask"]).stdout
+    assert "  remasked   0 transcript" not in first, "the fuzz holds credentials to mask"
+    for _ in range(2):
+        again = runner.invoke(app, ["doctor", str(tmp_path), "--remask"])
+        assert again.exit_code == 0 and "  remasked   0 transcript index row(s)" in again.stdout
+    with Agent.from_config(tmp_path / "brain.yaml") as agent:
+        kept = agent.db.fetchone("SELECT text FROM transcripts WHERE id = 'u0:0'")
+        assert kept is not None and kept["text"] == said[0], "a path is not a password"
+
+
 def test_init_writes_the_whole_pack_with_user_and_profile(tmp_path: Path) -> None:
     prof = tmp_path / "profile" / ".claude" / "rules"
     prof.mkdir(parents=True)
