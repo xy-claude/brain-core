@@ -1,7 +1,7 @@
 """Recall eval against labelled record ids. No judge model, and nothing is logged.
 
     .venv/bin/python tests/eval/run_gold.py --config brain.yaml --questions questions.yaml \
-        [--split dev|heldout] [--depth 500] [--out result.json] [--misses]
+        [--split dev|heldout] [--depth 500] [--out result.json] [--misses] [--today 2026-11-14]
 
 ``run_recall.py`` judges by substring, which a query written in the note's own words always
 passes. Here every question names the records that answer it (``gold``: id prefixes), so a
@@ -25,6 +25,10 @@ question whose record did not come back, with nothing in the reply to say so).
 
 It calls ``recall.brain_recall`` on the stores, never ``Agent.brain_recall``, so no
 ``recall_miss`` event is written to the database under test.
+
+Recall weighs a record by its age on the day of the run, so the same vault ranks a little
+differently a day later. ``--today YYYY-MM-DD`` pins that day (the recency weight, "yesterday"
+in a question, the date the judge is told): give two runs the same one to compare them.
 """
 
 from __future__ import annotations
@@ -91,6 +95,7 @@ def run(
     split: str = "all",
     depth: int = 0,
     runner: Any = None,  # a judge runner (system, prompt) -> reply; None: the agent's own
+    today: date | None = None,  # the day recall treats as today; None: the day of the run
 ) -> list[dict[str, Any]]:
     spec = yaml.safe_load(Path(questions).read_text())
     k = int(spec.get("k", 10))
@@ -112,6 +117,7 @@ def run(
                 "candidates": agent.config.recall.candidates,
                 "judge": runner or agent.judge,
                 "judge_candidates": agent.config.recall.judge_candidates,
+                "today": today,
             }
             out = brain_recall(agent.stores, q["q"], fmt="detailed", limit=k, **nets)
             ms = (time.perf_counter() - t0) * 1000
@@ -198,8 +204,13 @@ def main() -> int:
     ap.add_argument("--depth", type=int, default=0, help="also report the ceiling in the top N")
     ap.add_argument("--out")
     ap.add_argument("--misses", action="store_true", help="print every question that failed")
+    ap.add_argument(
+        "--today",
+        type=date.fromisoformat,
+        help="the day recall treats as today (YYYY-MM-DD), so runs on different days compare",
+    )
     a = ap.parse_args()
-    rows = run(a.config, a.questions, a.split, a.depth)
+    rows = run(a.config, a.questions, a.split, a.depth, today=a.today)
     if a.misses:
         for r in rows:
             if not r["hit"]:
@@ -251,6 +262,7 @@ def main() -> int:
                 "questions_sha256": hashlib.sha256(Path(a.questions).read_bytes()).hexdigest(),
                 "split": a.split,
                 "depth": a.depth,
+                "today": a.today.isoformat() if a.today else None,
             },
             "rows": rows,
         }
