@@ -555,7 +555,7 @@ def test_the_lists_are_long_enough_to_mean_something() -> None:
     assert len(LABELLED) >= 20 and len(HARMLESS) >= 20
 
 
-# a password said in prose, of any length, and the second half of a user and pass pair
+# a password said in prose, of four characters or more, and the second half of a user and pass pair
 T = "`"
 SAID = [  # (the text, the value that must not survive)
     ("the admin password is " + T + "Tr0ub4dor" + T + " since Monday", "Tr0ub4dor"),
@@ -570,6 +570,14 @@ SAID = [  # (the text, the value that must not survive)
     ("User " + T + "demo" + T + " / Pass " + T + "demo1234" + T, "demo1234"),
     ("sign in with user=+15550100 pass=246810", "246810"),
     ("login: bob / password: s3cr3t", "s3cr3t"),
+    # curly quotes, "is:", a JSON key, a value in bold
+    ("the admin password is \u201cTr0ub4dor!\u201d", "Tr0ub4dor!"),
+    ("the admin password is \u2018Tr0ub4dor!\u2019", "Tr0ub4dor!"),
+    ("the admin password is: " + T + "Tr0ub4dor" + T, "Tr0ub4dor"),
+    ('"password": "Tr0ub4dor!"', "Tr0ub4dor!"),
+    ('{"user": "ada", "password": "Tr0ub4dor!"}', "Tr0ub4dor!"),
+    ('{"user":"bob","pass":"x1y2z3"}', "x1y2z3"),
+    ("Password: **" + T + "Hunt3r!" + T + "**", "Hunt3r!"),
 ]
 UNSAID = [
     "the password is in the keychain",
@@ -602,6 +610,13 @@ UNSAID = [
     "the password is " + T + "./secrets.env" + T,
     "the password is " + T + "v1.2.3" + T,
     "the password is " + T + "https://example.com/reset" + T,
+    # "pass" as a key outside a JSON object, and JSON values that are not passwords
+    'the "pass": "x1y2z3" column',
+    '{"tests": 12, "pass": "10/12"}',
+    '{"pass": "true"}',
+    '"password_hash": "x1y2z3"',
+    "it\u2019s the password\u2019s fault",
+    "the password is \u201cin the keychain\u201d",
 ]
 
 
