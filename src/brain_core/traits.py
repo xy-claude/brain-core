@@ -498,6 +498,10 @@ def calibration(
     A decision is resolved bad when a later correction names it (title words in the correction
     title or error), resolved good when it is STALE_DAYS old with no such correction; younger
     unresolved decisions are censored, never counted as held.
+
+    "Names it" is a heuristic until outcomes are logged: the correction shares two of the
+    title's telling words (five letters or more, not a common word). Shorter and common words
+    gave false failures ("brain" + "core", "after" + "brain", "replaced" + "with").
     """
     rows: list[tuple[float, int]] = []
     for r in decisions:
@@ -527,14 +531,58 @@ def calibration(
     }
 
 
+# words of five letters or more that any two sentences share, and the product's own noun: on
+# one vault "brain" was half of every false failure the shorter words did not explain
+_COMMON = frozenset(
+    [
+        "about",
+        "above",
+        "after",
+        "again",
+        "against",
+        "always",
+        "because",
+        "before",
+        "being",
+        "below",
+        "between",
+        "brain",
+        "could",
+        "doing",
+        "during",
+        "every",
+        "further",
+        "having",
+        "instead",
+        "never",
+        "other",
+        "should",
+        "since",
+        "still",
+        "their",
+        "there",
+        "these",
+        "those",
+        "through",
+        "under",
+        "until",
+        "where",
+        "which",
+        "while",
+        "without",
+        "would",
+    ]
+)
+
+
 def _words(text: str) -> set[str]:
-    return set(re.findall(r"[a-z0-9]{4,}", text.lower()))
+    return set(re.findall(r"[a-z0-9]{5,}", text.lower())) - _COMMON
 
 
 def _names(words: set[str], other: set[str]) -> bool:
-    """Does a correction name a decision: two shared word stems, or every word of a short title."""
+    """Does a correction name a decision: two of the title's words, by stem, are in it."""
     shared = sum(1 for w in words if any(o.startswith(w) or w.startswith(o) for o in other))
-    return shared >= min(2, len(words))
+    return shared >= 2
 
 
 # ── parsers ───────────────────────────────────────────────────────────────────

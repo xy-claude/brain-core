@@ -229,14 +229,14 @@ def test_calibration_scores_resolved_decisions_only() -> None:
 
     decisions = [
         dec("Deploy the fare engine on Friday", "high", date(2026, 9, 1)),  # old, no correction
-        dec("Skip the staging run", "high", date(2026, 10, 1)),  # named by a later correction
+        dec("Skip the staging rehearsal", "high", date(2026, 10, 1)),  # named by a correction
         dec("Rename the module", "medium", date(2026, 10, 30)),  # too young: censored
     ]
     corrections = [
         (
             date(2026, 10, 5),
-            "Skipped the staging run and broke prod",
-            {"error": "staging run skipped"},
+            "Skipped the staging rehearsal and broke prod",
+            {"error": "staging rehearsal skipped"},
         )
     ]
     out = traits.calibration(decisions, corrections, TODAY)
@@ -244,6 +244,29 @@ def test_calibration_scores_resolved_decisions_only() -> None:
     # (0.9-1)^2 = 0.01 for the good one, (0.9-0)^2 = 0.81 for the bad one -> 0.41
     assert out["value"] == 0.41
     assert traits.calibration(decisions[2:], corrections, TODAY) is None
+
+
+def test_calibration_does_not_fail_a_decision_on_short_or_common_shared_words() -> None:
+    from brain_core.stores.base import Record
+
+    def dec(text: str, d: date) -> Record:
+        return Record("id-" + text, "decision", text, d, "", "", 0, {"confidence": "high"})
+
+    decisions = [
+        dec("Run brain core from the tool install", date(2026, 9, 1)),
+        dec("Archive sessions after brain weekly", date(2026, 9, 2)),
+        dec("Hindsight replaced with the archive store", date(2026, 9, 3)),
+        dec("Replace the brain index in one pass", date(2026, 9, 4)),
+    ]
+    # none is about a decision above: each shares one telling word at most
+    corrections: list[tuple[date, str, dict[str, str]]] = [
+        (date(2026, 10, 5), "Called the brain core release done too early", {}),
+        (date(2026, 10, 6), "Asked again after the brain answered", {}),
+        (date(2026, 10, 7), "Replaced a figure with a guess", {}),
+        (date(2026, 10, 8), "Replaced the wrong brain file", {}),  # "brain" is in most titles
+    ]
+    out = traits.calibration(decisions, corrections, TODAY)
+    assert out is not None and (out["value"], out["n"]) == (0.01, 4), "all four held"
 
 
 def test_missions_and_pending_ages_helpers(tmp_path: Path) -> None:
