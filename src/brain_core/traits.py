@@ -69,7 +69,7 @@ def compute(agent: Agent, status: dict[str, Any], today: date | None = None) -> 
 
     signals: dict[str, dict[str, dict[str, Any]]] = {
         "working_memory": {
-            "sessions_opened": _opened(by_session),
+            "sessions_opened": _opened(by_session, events),
             "context_tokens": _cost(ctx.get("tokens", 0), "always-loaded tokens"),
         },
         "episodic_memory": _episodic(root / "sessions", today, agent.data_dir),
@@ -136,15 +136,28 @@ def _pending_signal(note: str) -> dict[str, Any]:
     return {"value": None, "n": 0, "verdict": "pending", "note": note}
 
 
-def _opened(by_session: dict[str, list[Any]]) -> dict[str, Any]:
-    with_writes = [
-        s for s, ev in by_session.items() if any(e.event_type == "brain_remember" for e in ev)
-    ]
-    opened = sum(
-        1 for s in with_writes if any(e.event_type == "session_start" for e in by_session[s])
-    )
+def _opened(by_session: dict[str, list[Any]], events: list[Any]) -> dict[str, Any]:
+    # every start and close in the journal, newest first, whatever id it was logged under
+    marks = [e for e in events if e.event_type in ("session_start", "session_end")]
+    sessions: dict[str, bool] = {}  # a session that holds writes -> it called start
+    for s, ev in by_session.items():
+        first = next((e for e in ev if e.event_type == "brain_remember"), None)
+        if first is None:
+            continue
+        opened = any(e.event_type == "session_start" for e in ev)
+        if not opened and s.startswith("mcp-"):
+            # the id a server mints at launch: a restart inside a conversation. When the last
+            # start or close before its first write is a start, that session was still open
+            # and these are its writes, not a session of their own. After a close they belong
+            # to no started session
+            last = next((m for m in marks if m.id < first.id), None)
+            if last is not None and last.event_type == "session_start":
+                s, opened = last.session_id or s, True
+        sessions[s] = sessions.get(s, False) or opened
     return _ratio(
-        opened, len(with_writes), "sessions with writes that called brain_session('start') first"
+        sum(sessions.values()),
+        len(sessions),
+        "sessions with writes that called brain_session('start') first",
     )
 
 

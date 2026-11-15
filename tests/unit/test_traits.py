@@ -122,6 +122,26 @@ def test_signals_move_with_the_evidence(tmp_path: Path) -> None:
     assert tr["learning"]["grown"] and not tr["episodic_memory"]["grown"]
 
 
+def test_a_server_restart_inside_an_open_session_is_not_an_unopened_session(
+    tmp_path: Path,
+) -> None:
+    agent, _ = make(tmp_path)
+    with agent:
+        agent.brain_session("start", "s1")
+        agent.brain_remember("first note", "note")
+        agent.start_session("mcp-aaaaaaaaaaaa")  # what `brain serve` does at every launch
+        agent.brain_remember("after a restart, s1 still open", "note")
+        agent.brain_session("end")
+        agent.start_session("mcp-bbbbbbbbbbbb")
+        agent.brain_remember("after the close, no new start", "note")
+        agent.brain_session("start", "s2")
+        agent.brain_remember("in the next session", "note")
+        tr = traits.compute(agent, agent.brain_status(), TODAY)
+    opened = tr["working_memory"]["signals"]["sessions_opened"]
+    # the restart is part of s1, not a session of its own; the write after the close is a miss
+    assert (opened["value"], opened["n"]) == (2, 3)
+
+
 def test_ratios_become_percentages_only_past_min_n() -> None:
     assert "pct" not in traits._ratio(3, 10, "x")
     assert traits._ratio(15, 20, "x")["pct"] == 75
