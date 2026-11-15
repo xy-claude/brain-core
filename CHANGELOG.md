@@ -4,6 +4,28 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+### Security
+- The secret pattern masks a password said in prose, of any length: a value in backticks or quotes after `password`, `passwd`, `pwd`, `passphrase` or `pass`, joined by "is", "is now", `:` or `=` ("the admin password is now `...`"), and the second half of a `user X / pass Y` or `user=X pass=Y` pair. The value must hold a digit or a symbol other than `.` `_` `-` (an unquoted pair value: a digit), so a sentence with no quoted value ("the password is in the keychain"), a quoted name (`pass: "skipped"`) and a variable or placeholder (`"$DB_PASSWORD"`, `<password>`) stay as they are. Such text is now refused on a write as well. A record indexed before this release keeps its stored text until its file changes; every reply masks it.
+- `brain doctor` counts what `brain.db` stored before the mask knew a format: transcript index rows and logged recall-miss questions that would be masked today (`unmasked` line). `brain doctor --remask` rewrites those rows, their search mirror and those questions masked. It runs only when asked, changes `brain.db` only (no transcript file is touched), and a second run finds nothing.
+
+### Changed
+- `brain_remember` adds a `hint` to its reply when no started session is open (the last `brain_session('start')` has an end after it, or there was none): call `brain_session('start')` before the next write. The write itself is not affected.
+- `brain daily` runs the Hindsight backup only for an agent that has a Hindsight store. Without one it reports `backup: skipped: no hindsight store configured` and neither starts `hindsight-admin` nor prunes old dumps. With one, nothing changes.
+- `brain models` exits 1 when a model failed (`failed, old file kept`), so a scheduler no longer reads a run that wrote nothing as a good one. It exits 0 when every model was written or left fresh.
+
+### Fixed
+- Traits, `sessions_opened`: a server restart inside a conversation whose started session is still open is no longer counted as a session that never started. Writes under the id the server mints at launch (`mcp-...`) are counted with the session that was open, when the last start or close before them is a start. Writes that follow a close stay a session that never started.
+- Traits, `confidence_spread`: the level is the first word of the confidence field, so "high" followed by a sentence counts as "high".
+- Traits, `over_escalation`: the label `reversible x low-risk` is matched whole (any case, spacing, `×` or `x`). "irreversible" used to count because it holds "reversible".
+- Traits, `correction_recurrence` and the Growth line of the daily brief: a correction that says `Promoted: Yes (YYYY-MM-DD)` gives that date as the day its rule was promoted. Without a date the correction's own date is used, as before.
+- Traits, `repeat_cascades`: `n` counts only sessions that hold a write.
+- Traits, `write_failures`: the note names how many writes were partial.
+- Traits, `pending_oldest_days` and the pending line of the daily brief: a pending decision's first-seen date is filed under its text, not under the row number in the first column of a numbered table. Ages recorded under row numbers start again at the next `brain daily`.
+- Traits, `calibration_brier`: a later correction fails a decision only when it shares two of the title's telling words (five letters or more, not a common word). Short and common words gave false failures. It stays a heuristic until outcomes are logged.
+
+### Eval
+- `run_gold.py --today YYYY-MM-DD` pins the day recall treats as today (the recency weight, "yesterday" in a question, the date the judge is told), so two runs on different days can be compared. The result file records it under `run.today`. Without the option nothing changes.
+
 ## [0.9.0] - 2026-11-14
 
 A hardening release. 0.8.0 was reviewed end to end (storage, write path, recall, sessions, operations, the eval) and this fixes what the review confirmed. Nothing is removed from a vault, and every record id of an existing vault stays the same.
