@@ -182,8 +182,46 @@ def test_over_escalation_reads_the_whole_label() -> None:
         ["buy the domain", "money", "irreversible × low-risk"],  # holds the word "reversible"
         ["delete the prod db", "money", "irreversible × high-risk"],
     ]
-    sig = traits._authority(rows)["over_escalation"]
+    sig = traits._authority(rows, 2)["over_escalation"]
     assert (sig["value"], sig["n"]) == (2, 4)
+
+
+def test_over_escalation_reads_every_way_the_label_is_written() -> None:
+    low = [
+        "**reversible × low-risk**",
+        "`reversible x low-risk`",
+        "Reversible, low risk",
+        "reversible × low-risk (settle it by Friday)",
+        "REVERSIBLE X LOW-RISK",
+        "reversible × low risk",
+        "reversible,low-risk",
+    ]
+    other = [
+        "irreversible × low-risk",
+        "**irreversible**, low risk",
+        "reversible × high-risk",
+        "reversible",
+        "low-risk",
+        "reversible × low-risk, but needs money",
+    ]
+    rows = [["a decision", label] for label in low + other]
+    sig = traits._authority(rows, 1)["over_escalation"]
+    assert (sig["value"], sig["n"]) == (len(low), len(rows))
+
+
+def test_over_escalation_finds_the_classification_column_by_its_header(tmp_path: Path) -> None:
+    agent, vault = make(tmp_path)
+    (vault / "executive_state.md").write_text(
+        "---\ntype: log\n---\n# Executive State\n\n## Primary Objective\nx\n\n"
+        "## Pending Decisions (Ada)\n| Decision | **Classification** | Why it needs Ada |\n"
+        "|---|---|---|\n"
+        "| rename a file | reversible × low-risk | taste |\n"
+        "| delete the prod db | irreversible × high-risk | reversible × low-risk, she says |\n"
+    )
+    with agent:
+        tr = traits.compute(agent, agent.brain_status(), TODAY)
+    sig = tr["authority"]["signals"]["over_escalation"]
+    assert (sig["value"], sig["n"]) == (1, 2), "the second column, not the third"
 
 
 def test_recurrence_counts_from_the_promotion_date_the_entry_states(tmp_path: Path) -> None:

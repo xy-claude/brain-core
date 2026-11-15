@@ -14,6 +14,7 @@ import json
 import re
 from collections import Counter, defaultdict
 from datetime import date, timedelta
+from itertools import pairwise
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -66,7 +67,8 @@ def compute(agent: Agent, status: dict[str, Any], today: date | None = None) -> 
             by_session[e.session_id].append(e)
     ctx = status.get("context", {})
     knowledge = status.get("knowledge", {})
-    pending = _pending_rows(_read(root / agent.config.session.executive))
+    exec_text = _read(root / agent.config.session.executive)
+    pending = _pending_rows(exec_text)
 
     signals: dict[str, dict[str, dict[str, Any]]] = {
         "working_memory": {
@@ -83,7 +85,7 @@ def compute(agent: Agent, status: dict[str, Any], today: date | None = None) -> 
         "execution": _execution(events, root, agent.config.session.brief, today),
         "goal_management": _goals(root / "goals" / "mission_queue.md", today),
         "user_model": _user_model(root, today),
-        "authority": _authority(pending),
+        "authority": _authority(pending, _column(exec_text, "classification")),
     }
     for t in load(agent_dir):
         sig = signals.get(t["id"], {})
@@ -418,13 +420,20 @@ def _user_model(root: Path, today: date) -> dict[str, dict[str, Any]]:
     }
 
 
-def _authority(pending: list[list[str]]) -> dict[str, dict[str, Any]]:
-    # the whole label, whatever its case, spacing or sign: "irreversible" holds "reversible"
-    low = sum(
-        1
-        for r in pending
-        if len(r) >= 3 and "".join(r[2].lower().replace("×", "x").split()) == "reversiblexlow-risk"
-    )
+_LOW_RISK = re.compile(r"reversible\s*[,x×]\s*low[\s-]*risk", re.I)
+
+
+def _reversible_low(cell: str) -> bool:
+    """The label "reversible x low-risk" however it is written: in bold or backticks, "low risk"
+    or "low-risk", ",", "x" or "×" between the halves, any case, a note in brackets after it.
+    The whole label: "irreversible" holds "reversible"."""
+    label = re.sub(r"\s*\([^()]*\)\s*$", "", cell.replace("**", "").replace("`", "")).strip()
+    return bool(_LOW_RISK.fullmatch(label))
+
+
+def _authority(pending: list[list[str]], col: int | None) -> dict[str, dict[str, Any]]:
+    """``col``: the table's Classification column, found by its header (None: it has none)."""
+    low = sum(1 for r in pending if col is not None and len(r) > col and _reversible_low(r[col]))
     return {
         "over_escalation": _ratio(
             low,
@@ -614,6 +623,22 @@ def _corrections(text: str) -> list[tuple[date, str, dict[str, str]]]:
 
 
 _ITEM = re.compile(r"(?:- |\d+[.)] )(.*)")  # a bullet or a numbered item
+
+
+def _column(exec_text: str, name: str) -> int | None:
+    """Which cell of a Pending Decisions row holds ``name``: the header cell that says it, in the
+    row above the table's |---| line. None when the table has no such header."""
+    lines = _sections(exec_text, ("Pending Decisions",)).splitlines()
+    for head, rule in pairwise(lines):
+        cells = [c.strip() for c in rule.strip().strip("|").split("|")]
+        if (
+            head.startswith("|")
+            and rule.startswith("|")
+            and all(re.fullmatch(r":?-+:?", c) for c in cells)
+        ):
+            heads = [c.strip().lower() for c in head.strip("|").split("|")]
+            return next((i for i, c in enumerate(heads) if name in c), None)
+    return None
 
 
 def _pending_rows(exec_text: str) -> list[list[str]]:
