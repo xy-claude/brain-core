@@ -139,6 +139,11 @@ def test_doctor_counts_and_remasks_what_the_index_stored_before_the_mask_knew_it
             assert transcripts.index(agent.db, tmp_path / "p", out)["added"] == 2
         agent.log_event("recall_miss", {"query": f"what is {key} for", "scope": "all", "best": 0.1})
         agent.log_event("recall_miss", {"query": "an ordinary question", "scope": "all"})
+        # the journal's copy of a save and of a miss repair, as a release before the pattern
+        agent.log_event("brain_remember", {"kind": "note", "status": "written", "text": f"k {key}"})
+        agent.log_event(
+            "recall_repair", {"query": f"where is {key} kept", "id": "x", "source": "y"}
+        )
 
     def state() -> tuple[list[str], list[dict[str, object]], int, int]:
         with Agent.from_config(yaml) as agent:
@@ -153,26 +158,30 @@ def test_doctor_counts_and_remasks_what_the_index_stored_before_the_mask_knew_it
     before = state()
     assert before[0] == list(said) and before[2:] == (1, 1)
     report = runner.invoke(app, ["doctor", str(out)]).stdout
-    assert "  unmasked   1 transcript index row(s), 1 logged recall question(s) hold text" in report
+    assert "  unmasked   1 transcript index row(s), 3 journal event(s) hold text" in report
     assert "`brain doctor --remask` rewrites them in brain.db" in report
     assert state() == before, "a plain doctor run changes nothing"
 
     fixed = runner.invoke(app, ["doctor", str(out), "--remask"])
     assert fixed.exit_code == 0, fixed.stdout
-    assert "  remasked   1 transcript index row(s), 1 logged recall question(s)" in fixed.stdout
+    assert "  remasked   1 transcript index row(s), 3 journal event(s)" in fixed.stdout
     texts, misses, by_key, by_word = state()
     assert texts == ["the deploy key is [redacted], keep it", "list the plain folder please"]
     assert misses == [
         {"query": "what is [redacted] for", "scope": "all", "best": 0.1},
         {"query": "an ordinary question", "scope": "all"},
     ]
+    with Agent.from_config(yaml) as agent:
+        saved = agent.recent_events(event_type="brain_remember", limit=1)[0].payload
+        repaired = agent.recent_events(event_type="recall_repair", limit=1)[0].payload
+    assert saved["text"] == "k [redacted]" and repaired["query"] == "where is [redacted] kept"
     assert (by_key, by_word) == (0, 1), "the search mirror holds the masked line, not the key"
     assert source.read_bytes() == file_was, "the transcript file is not touched"
 
     again = runner.invoke(app, ["doctor", str(out), "--remask"]).stdout
-    assert "  remasked   0 transcript index row(s), 0 logged recall question(s)" in again
+    assert "  remasked   0 transcript index row(s), 0 journal event(s)" in again
     after = runner.invoke(app, ["doctor", str(out)]).stdout
-    assert "  unmasked   0 transcript index row(s), 0 logged recall question(s) hold text" in after
+    assert "  unmasked   0 transcript index row(s), 0 journal event(s) hold text" in after
     assert "--remask" not in after
     with Agent.from_config(yaml) as agent:  # a later index run does not bring the key back
         assert transcripts.index(agent.db, tmp_path / "p", out)["added"] == 0

@@ -150,9 +150,15 @@ def recall_misses(agent: Agent, days: int = 30) -> dict[str, Any]:
     return {"window_days": days, "count": sum(d["count"] for d in per.values()), "top": top}
 
 
+# the journal events that keep what was asked or saved, and the field that holds it
+_LOGGED = {"recall_miss": "query", "recall_repair": "query", "brain_remember": "text"}
+
+
 def unmasked(agent: Agent, remask: bool = False) -> dict[str, int]:
-    """What ``brain.db`` stored before the mask knew a format: transcript index rows and logged
-    recall-miss questions whose text ``redact`` would change today. ``remask`` rewrites them
+    """What ``brain.db`` stored before the mask knew a format: transcript index rows, and the
+    journal's copies of what was asked or saved (the question of a recall miss or a miss
+    repair, the text of a ``brain_remember``) that ``redact`` would change today. ``remask``
+    rewrites them
     masked, in the database only: no transcript file is touched, and a second run finds
     nothing. Every transcript row is read, so `brain doctor` calls this and ``brain_status``
     does not."""
@@ -163,11 +169,14 @@ def unmasked(agent: Agent, remask: bool = False) -> dict[str, int]:
         if has_secret(r["text"]) and (new := redact(r["text"])) != r["text"]
     ]
     events = []
-    for r in db.execute("SELECT id, payload FROM events WHERE event_type = 'recall_miss'"):
-        payload = json.loads(r["payload"] or "{}")
-        asked = str(payload.get("query", ""))
-        if (masked := redact(asked)) != asked:
-            events.append((json.dumps({**payload, "query": masked}), r["id"]))
+    marks = ",".join("?" * len(_LOGGED))
+    for r in db.execute(
+        f"SELECT id, event_type, payload FROM events WHERE event_type IN ({marks})", tuple(_LOGGED)
+    ):
+        payload, field = json.loads(r["payload"] or "{}"), _LOGGED[r["event_type"]]
+        said = str(payload.get(field, ""))
+        if (masked := redact(said)) != said:
+            events.append((json.dumps({**payload, field: masked}), r["id"]))
     if remask:
         with db.transaction():
             for rid, session, ts, role, _old, new in rows:
@@ -179,7 +188,7 @@ def unmasked(agent: Agent, remask: bool = False) -> dict[str, int]:
                 )
             for payload, eid in events:
                 db.execute("UPDATE events SET payload = ? WHERE id = ?", (payload, eid))
-    return {"transcripts": len(rows), "recall_misses": len(events)}
+    return {"transcripts": len(rows), "events": len(events)}
 
 
 def recall_degraded(agent: Agent, days: int = 7) -> dict[str, Any]:

@@ -581,8 +581,8 @@ def doctor_cmd(
         bool,
         typer.Option(
             "--remask",
-            help="Rewrite, masked, the transcript index rows and logged recall questions stored "
-            "before the mask knew their format. Changes brain.db only, never a transcript file.",
+            help="Rewrite, masked, the transcript index rows and journal events stored before "
+            "the mask knew their format. Changes brain.db only, never a transcript file.",
         ),
     ] = False,
 ) -> None:
@@ -625,10 +625,7 @@ def doctor_cmd(
             f"  secrets    {n} indexed record(s) hold what looks like a credential: masked in "
             "the index and in replies, still readable in the files"
         )
-    found = (
-        f"{old['transcripts']} transcript index row(s), {old['recall_misses']} logged recall "
-        "question(s)"
-    )
+    found = f"{old['transcripts']} transcript index row(s), {old['events']} journal event(s)"
     if remask:
         typer.echo(f"  remasked   {found} rewritten masked in brain.db; no file was touched")
     else:
