@@ -273,7 +273,7 @@ def test_calibration_does_not_fail_a_decision_on_short_or_common_shared_words() 
         return Record("id-" + text, "decision", text, d, "", "", 0, {"confidence": "high"})
 
     decisions = [
-        dec("Run brain core from the tool install", date(2026, 9, 1)),
+        dec("Run brain core from the tool install folder", date(2026, 9, 1)),
         dec("Archive sessions after brain weekly", date(2026, 9, 2)),
         dec("Hindsight replaced with the archive store", date(2026, 9, 3)),
         dec("Replace the brain index in one pass", date(2026, 9, 4)),
@@ -287,6 +287,38 @@ def test_calibration_does_not_fail_a_decision_on_short_or_common_shared_words() 
     ]
     out = traits.calibration(decisions, corrections, TODAY)
     assert out is not None and (out["value"], out["n"]) == (0.01, 4), "all four held"
+
+
+def test_calibration_censors_a_title_no_correction_could_name() -> None:
+    from brain_core.stores.base import Record
+
+    one_word = Record("id-a", "decision", "Use Postgres", date(2026, 9, 1), "", "", 0, {})
+    one_word.extra["confidence"] = "high"
+    # 60 days old and never corrected, but one telling word could never be named: not a hold
+    assert traits.calibration([one_word], [], TODAY) is None
+
+
+def test_calibration_counts_a_shared_word_once_whatever_its_forms() -> None:
+    from brain_core.stores.base import Record
+
+    title = "Nightly backup to restic; keep restic backups for a month"
+    decision = Record(
+        "id-b", "decision", title, date(2026, 9, 1), "", "", 0, {"confidence": "high"}
+    )
+    # "backup" and "backups" both meet "backups": one word, not two
+    correction = (date(2026, 9, 5), "Answered too long", {"error": "listed backups first"})
+    out = traits.calibration([decision], [correction], TODAY)
+    assert out is not None and (out["value"], out["n"]) == (0.01, 1), "held, not failed"
+
+
+def test_calibration_reads_the_confidence_level_by_its_first_word() -> None:
+    from brain_core.stores.base import Record
+
+    said = {"confidence": "High: measured twice, same result"}
+    title = "Keep the gateway behind the proxy"
+    decision = Record("id-c", "decision", title, date(2026, 9, 1), "", "", 0, said)
+    out = traits.calibration([decision], [], TODAY)
+    assert out is not None and (out["value"], out["n"]) == (0.01, 1)
 
 
 def test_missions_and_pending_ages_helpers(tmp_path: Path) -> None:

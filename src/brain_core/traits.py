@@ -300,12 +300,7 @@ def _metacognition(
     vault: VaultStore, critique: Path, root: Path, today: date
 ) -> dict[str, dict[str, Any]]:
     decisions = vault.read("decision", limit=10_000)
-    # the level is the first word: "high" followed by a sentence of proof is still "high"
-    levels = Counter(
-        w[0]
-        for r in decisions
-        if (w := re.findall(r"[a-z]+", r.extra.get("confidence", "").lower()))
-    )
+    levels = Counter(lv for r in decisions if (lv := _level(r.extra.get("confidence", ""))))
     rated = sum(levels.values())
     off_majority = rated - max(levels.values(), default=0)  # 0 when every decision says the same
     upd = _days_since(_frontmatter(critique).get("updated", ""), today)
@@ -504,16 +499,18 @@ def calibration(
     unresolved decisions are censored, never counted as held.
 
     "Names it" is a heuristic until outcomes are logged: the correction shares two of the
-    title's telling words (five letters or more, not a common word). Shorter and common words
-    gave false failures ("brain" + "core", "after" + "brain", "replaced" + "with").
+    title's telling words (five letters or more, not a common word), each counted once however
+    many forms of it either side has. Shorter and common words gave false failures ("brain" +
+    "core", "after" + "brain", "replaced" + "with"). A title with fewer than two telling words
+    is censored: no correction could name it, so it would only ever count as held.
     """
     rows: list[tuple[float, int]] = []
     for r in decisions:
-        p = _CONF.get(r.extra.get("confidence", "").lower())
+        p = _CONF.get(_level(r.extra.get("confidence", "")))
         if p is None:
             continue
         words = _words(r.text)
-        if not words:
+        if len(words) < 2:
             continue
         hit = any(
             d > r.date and _names(words, _words(t + " " + f.get("error", "")))
@@ -584,9 +581,15 @@ def _words(text: str) -> set[str]:
 
 
 def _names(words: set[str], other: set[str]) -> bool:
-    """Does a correction name a decision: two of the title's words, by stem, are in it."""
-    shared = sum(1 for w in words if any(o.startswith(w) or w.startswith(o) for o in other))
-    return shared >= 2
+    """Does a correction name a decision: two of the title's words, by stem, are in it. A
+    word is counted once on each side: "backup" and "backups" meeting "backups" is one."""
+    pairs = [(w, o) for w in words for o in other if o.startswith(w) or w.startswith(o)]
+    return min(len({w for w, _o in pairs}), len({o for _w, o in pairs})) >= 2
+
+
+def _level(confidence: str) -> str:
+    """The confidence level, the field's first word: "High: measured twice" is high."""
+    return next(iter(re.findall(r"[a-z]+", confidence.lower())), "")
 
 
 # ── parsers ───────────────────────────────────────────────────────────────────
