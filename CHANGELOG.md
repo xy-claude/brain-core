@@ -4,6 +4,10 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+### Changed
+- `brain_recall`'s description says what an `undated` claim is: a standing line nothing dates, never checked against later records, to be reported as what memory records, not as what still holds. It also names `disputed_with` and `claims_total`.
+- Index format 7: the first sync after the upgrade reads every file once more, so a relation line in a notes folder that 0.14.0 or 0.15.0 indexed becomes the provisional claim 0.16.0 makes of it. The texts are unchanged, so the journal's ledger closes nothing.
+
 ## [0.16.0] - 2026-11-23
 
 ### Added

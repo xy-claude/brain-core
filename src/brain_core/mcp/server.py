@@ -110,9 +110,12 @@ def build_server(agent: Agent) -> FastMCP:
         `date` or `undated` means the line has no date of its own, so never state when it
         was written. With `recall.graph` on, `claims` lists the relations around the
         entities the question names, each with `validity` on the day asked (true, false or
-        unknown: never state an unknown one as fact) and `disputed` when two of them cannot
-        both hold; a result it found carries `path`. `graph.note` says when that list was
-        cut short.
+        unknown: never state an unknown one as fact). `undated: true` means no line gives
+        that claim a date: it is held as a standing line, never checked against later
+        records, so say it is what memory records, not that it still holds. `disputed_with`
+        names the claims a disputed one cannot hold beside; `claims_total` counts the
+        claims walked beyond the ones shown; a result the walk found carries `path`.
+        `graph.note` says when the walk was cut short.
 
         Writes no memory. `stores` lists hits per store and names any that could not be
         reached, instead of failing the call. With `recall.judge: model` in brain.yaml the

@@ -172,8 +172,9 @@ if TYPE_CHECKING:
     from brain_core.knowledge.reconcile import ClaimIndex
 
 # 5 (M2): each row names its source id, for the mentions. 6 (M3): every source is read once
-# more, so its claim rows exist; the texts, and so the journal's ledger, are unchanged
-FORMAT = 6
+# more, so its claim rows exist; the texts, and so the journal's ledger, are unchanged.
+# 7 (0.16.1): again, so a notes-folder line read before 0.16.0 becomes a provisional claim
+FORMAT = 7
 
 
 def _sig(st: os.stat_result) -> str:
