@@ -113,11 +113,7 @@ class Agent:
         return p
 
     def tables(self) -> dict[str, list[tuple[Any, ...]]]:
-        self.claims.settle()
-        return {
-            t: sorted(tuple(r) for r in self.db.fetchall(f"SELECT * FROM {t}"))
-            for t in reconcile._TABLES
-        }
+        return self.claims.tables()
 
 
 def rel_id(line: str) -> str:
@@ -208,7 +204,8 @@ def test_t2_deleting_one_of_two_sources_keeps_the_claim(a: Agent) -> None:
     brain_remember([a.v], USES_NEO.replace("[[", "").replace("]]", ""), "relation")
     a.shared("x.md", f"# X\n\n## Graph\n{USES_NEO}\n")
     c = one(a.now(), NEO)
-    assert c.origins == {Origin.AGENT, Origin.USER} and len(c.evidence) == 2
+    assert c.origins == {Origin.AGENT, Origin.EXTERNAL} and len(c.evidence) == 2
+    assert c.verification is Verification.STATED  # its strongest row: relations.md's
     (a.tmp / "shared" / "x.md").unlink()
     a.clock.tick()
     c = one(a.now(), NEO)
@@ -602,3 +599,78 @@ def test_the_cli_lists_checks_and_reports(tmp_path: Path) -> None:
         doctor.output
     )
     assert run(app, ["claims", "check", str(tmp_path)]).exit_code == 0
+
+
+def test_an_impossible_date_is_reported_not_fatal(a: Agent) -> None:
+    a.relations(f"{USES_NEO} (2026-02-30)", f"{USES_KUZU} (2026-11-20)")
+    a.shared("x.md", f"# X\n\n## G\n{USES_NEO} (2026-13-01)\n")
+    a.meta(f"{rel_id('- ' + USES_KUZU)} | until: 2026-11-31")
+    got = a.now()
+    assert len(got) == 2 and one(got, NEO).periods[0].undated
+    assert one(got, KUZU).evidence[0].valid_to is None  # an impossible `until:` is no end
+    report = a.claims.summary()["report"]
+    assert sum(r.startswith("invalid_date") for r in report) == 2
+
+
+def test_who_wrote_a_line_is_its_origin(a: Agent) -> None:
+    a.relations(f"{USES_NEO} (recorded: 2026-11-20T10:00:00)", f"{USES_KUZU} (2026-11-20)")
+    a.shared("x.md", "# X\n\n## G\n[[Kuzu]] —[ALTERNATIVE_TO]→ [[Neo4j]]\n")
+    got = a.now()
+    assert one(got, NEO).origins == {Origin.AGENT}  # `recorded:`: brain-core wrote it
+    assert one(got, KUZU).origins == {Origin.USER}  # by hand, read in by a sync
+    alt = one(got, NEO, "ALTERNATIVE_TO")
+    assert alt.origins == {Origin.EXTERNAL} and alt.verification is Verification.DERIVED
+    assert alt.lifecycle is Lifecycle.ACCEPTED  # a rule-derived claim, shown as derived (R 6)
+
+
+def test_two_servers_recompute_one_after_the_other(a: Agent) -> None:
+    import threading
+
+    a.relations(f"{USES_NEO} (2026-11-22)", f"{USES_KUZU}")
+    a.sync()
+    errors: list[BaseException] = []
+
+    def server() -> None:
+        try:
+            db = Database.connect(a.tmp / "data" / "brain.db")
+            j = Journal(a.tmp / "data" / "journal.db", clock=a.clock)
+            v = VaultStore(a.v.root, index=RecordIndex(db, j))
+            assert v.claims is not None
+            for _ in range(5):
+                v.claims.mark_dirty()
+                v.claims.settle()
+            db.close()
+            j.close()
+        except BaseException as e:
+            errors.append(e)
+
+    threads = [threading.Thread(target=server) for _ in range(2)]
+    for th in threads:
+        th.start()
+    for th in threads:
+        th.join()
+    assert errors == []
+    assert a.claims.check() == [] and len(a.claims.current()) == 2
+
+
+def test_index_check_rebuilds_from_the_files(tmp_path: Path) -> None:
+    from typer.testing import CliRunner
+
+    from brain_core.cli.main import app
+
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    (vault / "relations.md").write_text(f"# Relations\n\n- {USES_NEO} (2026-11-22)\n")
+    (tmp_path / "brain.yaml").write_text(f"name: T\nstores:\n  vault: {vault}\n")
+    run = CliRunner().invoke
+    assert run(app, ["index", str(tmp_path), "--check"]).exit_code == 0
+    db = Database.connect(tmp_path / "data" / "brain.db")  # raw rows drift from the file
+    row = db.fetchone("SELECT row_key, row_json FROM claim_raw")
+    db.execute(
+        "UPDATE claim_raw SET row_json = ? WHERE row_key = ?",
+        (row["row_json"].replace("2026-11-22", "2026-11-01"), row["row_key"]),  # type: ignore[index]
+    )
+    db.execute("UPDATE claims_state SET dirty = 1")
+    db.close()
+    out = run(app, ["index", str(tmp_path), "--check"])
+    assert out.exit_code == 1 and "differ from a rebuild from the files" in out.output, out.output

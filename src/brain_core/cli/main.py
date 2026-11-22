@@ -567,6 +567,7 @@ def index_cmd(
             agent.brain_sync()
             diffs = vault.claims.check()
             n = vault.claims.summary()["claims"]
+            diffs += _rebuilt_differs(agent, vault.claims.tables())
         for d in diffs:
             typer.echo(f"  {d}")
         typer.echo(f"{n} claims; " + ("in step with a rebuild" if not diffs else "DIFFERS"))
@@ -609,6 +610,37 @@ def index_cmd(
                 typer.echo(f"vectors: stopped at {done} of {total}: {e}", err=True)
                 raise typer.Exit(code=1) from e
             typer.echo(f"vectors: {agent.vectors.stats()['rows']} records, none waiting")
+
+
+def _rebuilt_differs(agent: Agent, live: dict[str, list[Any]]) -> list[str]:
+    """Rebuild the claims from the files into a temporary brain.db, beside a copy of the
+    journal (the same recording times; the real journal is never written), and compare."""
+    import sqlite3
+    import tempfile
+
+    from brain_core.storage import Database, migrate
+
+    with tempfile.TemporaryDirectory() as d:
+        tmp = Path(d)
+        target = sqlite3.connect(tmp / "journal.db")
+        agent.journal.db.backup(target)
+        target.close()
+        stores = agent.config.stores.model_copy(
+            update={"hindsight": None, "transcripts": None, "graph": None, "vectors": None}
+        )
+        cfg = agent.config.model_copy(update={"stores": stores})
+        db = Database.connect(tmp / "brain.db")
+        migrate(db)
+        with Agent(cfg, db, tmp, agent.config_path) as fresh:
+            fresh.brain_sync()
+            v = next(s for s in fresh.stores if isinstance(s, VaultStore))
+            assert v.claims is not None
+            rebuilt = v.claims.tables()
+    return [
+        f"{t}: {len(set(live[t]) ^ set(rebuilt[t]))} row(s) differ from a rebuild from the files"
+        for t in live
+        if live[t] != rebuilt[t]
+    ]
 
 
 def _migrate_ids(path: Path, apply: bool, old_path: list[str]) -> None:

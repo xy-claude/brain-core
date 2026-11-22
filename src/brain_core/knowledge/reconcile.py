@@ -137,12 +137,23 @@ class ClaimIndex:
                 row = self.db.fetchone(
                     "SELECT sig FROM index_files WHERE store = 'claims' AND path = ?", (source,)
                 )
-                if row is not None and row[0] == sig:
-                    continue
+                if row is not None and str(row[0]).rpartition(":")[0] == sig:
+                    continue  # the file's stamp is the one its rows were read at
                 text = path.read_text(encoding="utf-8", errors="replace") if st else ""
                 self.unread.pop(name, None)
             except OSError as e:
                 self.unread[name] = type(e).__name__  # its rows stay as they were
+                continue
+            lines = [ln for _n, ln in rules.wanted(source, text)]
+            digest = hashlib.sha256(json.dumps(lines).encode()).hexdigest()[:16]
+            sig = f"{sig}:{digest}"
+            if row is not None and str(row[0]).rpartition(":")[2] == digest:
+                # a save that added search keys only: no line that times or links a record
+                # changed, so the journal has nothing to record
+                self.db.execute(
+                    "UPDATE index_files SET sig = ? WHERE store = 'claims' AND path = ?",
+                    (sig, source),
+                )
                 continue
             if source == META:
                 rows = rules.meta(text)
@@ -183,11 +194,14 @@ class ClaimIndex:
         blob = json.dumps([rows, ontology()], sort_keys=True, default=str)
         return hashlib.sha256(blob.encode()).hexdigest()
 
+    def _stale(self) -> bool:
+        row = self.db.fetchone("SELECT dirty, inputs FROM claims_state WHERE id = 1")
+        return row is not None and bool(row[0] or row[1] != self._inputs())
+
     def settle(self) -> None:
         """Recompute the claims if a raw row, an entity or the ontology changed since."""
-        row = self.db.fetchone("SELECT dirty, inputs FROM claims_state WHERE id = 1")
-        if row is not None and (row[0] or row[1] != self._inputs()):
-            self.recompute()
+        if self._stale():
+            self.recompute(only_if_stale=True)
 
     def _raws(self) -> tuple[list[tuple[str, str, str]], dict[tuple[str, str], int]]:
         rows = self.db.fetchall("SELECT kind, row_key, row_json, line FROM claim_raw")
@@ -196,25 +210,34 @@ class ClaimIndex:
             {(r["kind"], r["row_key"]): r["line"] for r in rows},
         )
 
-    def recompute(self) -> None:
-        with self.db.transaction():
+    def recompute(self, only_if_stale: bool = False) -> None:
+        """Under the journal's lock, which every writer of raw rows holds: two servers that
+        both found the tier stale compute it one after the other, never at once."""
+        with self.journal.locked():
+            if only_if_stale and not self._stale():
+                return  # another process did it while this one waited
             raws, lines = self._raws()
             out = self._rows(*self._compute(raws, self._now(), lines))
-            for t in _TABLES:
-                self.db.execute(f"DELETE FROM {t}")
-            for t in _TABLES:
-                if out[t]:
-                    marks = ",".join("?" * len(out[t][0]))
-                    self.db.executemany(f"INSERT INTO {t} VALUES ({marks})", out[t])
-            self.db.execute(
-                "UPDATE entities SET degree = (SELECT count(*) FROM claims c WHERE "
-                "c.lifecycle <> 'rejected' AND (c.subject = entities.id OR "
-                "c.object_entity = entities.id))"
-            )
-            self.db.execute(
-                "UPDATE claims_state SET dirty = 0, report = ?, inputs = ? WHERE id = 1",
-                (json.dumps(out["report"]), self._inputs()),
-            )
+            inputs = self._inputs()
+            with self.db.transaction():  # starts with a write: no stale read to upgrade
+                self._write(out, inputs)
+
+    def _write(self, out: dict[str, Any], inputs: str) -> None:
+        for t in _TABLES:
+            self.db.execute(f"DELETE FROM {t}")
+        for t in _TABLES:
+            if out[t]:
+                marks = ",".join("?" * len(out[t][0]))
+                self.db.executemany(f"INSERT INTO {t} VALUES ({marks})", out[t])
+        self.db.execute(
+            "UPDATE entities SET degree = (SELECT count(*) FROM claims c WHERE "
+            "c.lifecycle <> 'rejected' AND (c.subject = entities.id OR "
+            "c.object_entity = entities.id))"
+        )
+        self.db.execute(
+            "UPDATE claims_state SET dirty = 0, report = ?, inputs = ? WHERE id = 1",
+            (json.dumps(out["report"]), inputs),
+        )
 
     def _compute(
         self,
@@ -318,6 +341,10 @@ class ClaimIndex:
 
         rows: list[tuple[ClaimKey, Evidence]] = []
         for d in by["evidence"]:
+            if d.get("bad_date"):
+                report.append(
+                    f"invalid_date {d['source_id']}: {d['bad_date']!r} is no day; read as undated"
+                )
             occ = Occurrence(
                 source_id=d["source_id"], record_id=d["record_id"], ordinal=d["ordinal"]
             )
@@ -340,23 +367,24 @@ class ClaimIndex:
             }
             t = times(d)
             try:
-                ev = Evidence(
-                    **base,
-                    event_date=_day(t["event_date"]),
-                    valid_from=_day(t["valid_from"]),
-                    valid_to=_day(t["valid_to"]),
-                    timeless=t["timeless"],
-                )
-            except ValueError:
-                report.append(
-                    f"meta_invalid {d['record_id'][:8]}: its valid / until / always disagree"
-                )
-                ev = Evidence(
-                    **base,
-                    event_date=_day(d["event_date"]),
-                    valid_from=_day(d["valid_from"]),
-                )
-            rows.append((key_of(d), ev))
+                try:
+                    ev = Evidence(
+                        **base,
+                        event_date=_day(t["event_date"]),
+                        valid_from=_day(t["valid_from"]),
+                        valid_to=_day(t["valid_to"]),
+                        timeless=t["timeless"],
+                    )
+                except ValueError:
+                    report.append(
+                        f"meta_invalid {d['record_id'][:8]}: its valid / until / always disagree"
+                    )
+                    ev = Evidence(
+                        **base, event_date=_day(d["event_date"]), valid_from=_day(d["valid_from"])
+                    )
+                rows.append((key_of(d), ev))
+            except ValueError as bad:  # one bad row never takes the others down
+                report.append(f"evidence_invalid {d['source_id']}: {str(bad).splitlines()[0]}")
         starts: dict[str, date] = {}
         for _k, e in rows:
             s = e.start()[0]
@@ -542,6 +570,13 @@ class ClaimIndex:
             if have != fresh[t]:
                 out.append(f"{t}: {len(set(have) ^ set(fresh[t]))} row(s) differ from a rebuild")
         return out
+
+    def tables(self) -> dict[str, list[tuple[Any, ...]]]:
+        """Every row of the computed tables, sorted: what a rebuild is compared by."""
+        self.settle()
+        return {
+            t: sorted(tuple(r) for r in self.db.fetchall(f"SELECT * FROM {t}")) for t in _TABLES
+        }
 
     def summary(self) -> dict[str, Any]:
         """Counts for brain_status and brain doctor."""

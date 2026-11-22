@@ -15,6 +15,7 @@ import json
 import re
 from collections import Counter
 from collections.abc import Sequence
+from datetime import date
 from typing import Any
 
 from brain_core.journal import occurrence_id
@@ -32,6 +33,24 @@ _SPEC = re.compile(r"^\[\[(.+?)\]\] —\[(.+?)\]→ (?:\[\[(.+?)\]\]|(\S.*?))$")
 _META_LINE = re.compile(r"^- ([0-9a-f]{16})(?:@(\S+)#(\d+))? \| (.+)$")
 _REVIEW_LINE = re.compile(r"^- (reject|retract|restore|ack): (.+?)(?: \| (.*))?\s*$")
 _DAY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _date(s: str | None) -> dict[str, Any]:
+    """A stated date, checked: ``2026-02-30`` is no day, so the row is undated and says so."""
+    if not s:
+        return {"stated_date": None}
+    try:
+        date.fromisoformat(s)
+    except ValueError:
+        return {"stated_date": None, "bad_date": s}
+    return {"stated_date": s}
+
+
+def _is_day(v: str) -> bool:
+    try:
+        return bool(_DAY.match(v)) and bool(date.fromisoformat(v))
+    except ValueError:
+        return False
 
 
 def norm_predicate(p: str) -> str:
@@ -96,14 +115,19 @@ def evidence(source: str, records: Sequence[Record]) -> list[Raw]:
             rows.append(
                 _evidence(source, r.id, k, text, "relations.md/1", r.line,
                           subject_name=r.extra["subject"], raw_predicate=r.extra["predicate"],
-                          stated_date=r.extra.get("stated") or None, quote=text[:300], **obj)
+                          quote=text[:300], **_date(r.extra.get("stated")), **obj,
+                          # `(recorded: …)` is written by brain-core only: the agent's line
+                          origin="agent" if r.extra.get("recorded") else None)
             )  # fmt: skip
         elif source.startswith("notes:"):
             for m in _IN_TEXT.finditer(text):
                 rows.append(
                     _evidence(source, r.id, k, text, "relations.md/1", r.line,
                               subject_name=m[1].strip(), raw_predicate=m[2],
-                              object_name=m[3].strip(), stated_date=m[4], quote=m[0][:300])
+                              object_name=m[3].strip(), quote=m[0][:300], **_date(m[4]),
+                              # a folder brain-core reads but does not write: who wrote the
+                              # line is unknown, and the rule, not a person, made it a claim
+                              origin="external", verification="derived")
                 )  # fmt: skip
         elif r.kind == "decision" and source == DECISIONS and not r.undated:
             said = r.extra.get("decision", "").strip()
@@ -122,22 +146,27 @@ def evidence(source: str, records: Sequence[Record]) -> list[Raw]:
     return list(out.values())
 
 
-def _lines(text: str) -> list[tuple[int, str, str, int]]:
+def wanted(source: str, text: str) -> list[tuple[int, str]]:
+    """(line number, line) of the lines that time, link or review a record: search keys
+    and the rest of record_meta.md are not claims' business."""
+    return [(n, ln) for n, ln in enumerate(text.splitlines(), 1) if _wanted(source, ln)]
+
+
+def _lines(source: str, text: str) -> list[tuple[int, str, str, int]]:
     """(line number, line, its record id, its ordinal): a meta or review line is an
     occurrence too, so its ledger time orders it."""
     seen: Counter[str] = Counter()
     out = []
-    for n, ln in enumerate(text.splitlines(), 1):
-        if _META_LINE.match(ln) or _REVIEW_LINE.match(ln):
-            rid = record_id(ln)
-            seen[rid] += 1
-            out.append((n, ln, rid, seen[rid]))
+    for n, ln in wanted(source, text):
+        rid = record_id(ln)
+        seen[rid] += 1
+        out.append((n, ln, rid, seen[rid]))
     return out
 
 
 def ledger_lines(source: str, text: str) -> list[tuple[str, str]]:
     """What the journal's ledger records for a meta or review file: (record id, line)."""
-    return [(rid, ln) for _n, ln, rid, _k in _lines(text) if _wanted(source, ln)]
+    return [(rid, ln) for _n, ln, rid, _k in _lines(source, text)]
 
 
 def _wanted(source: str, ln: str) -> bool:
@@ -156,9 +185,9 @@ def meta(text: str) -> list[Raw]:
     record and scope replaces the fields it gives."""
     times: dict[tuple[str, str], dict[str, Any]] = {}
     links: dict[tuple[str, str, str], Raw] = {}
-    for n, ln, rid, k in _lines(text):
+    for n, ln, rid, k in _lines(META, text):
         m = _META_LINE.match(ln)
-        if not m or not _wanted(META, ln):
+        if not m:
             continue
         occ = occurrence_id(META, rid, k)
         line_hash = hashlib.sha256(ln.encode()).hexdigest()
@@ -170,7 +199,7 @@ def meta(text: str) -> list[Raw]:
                 t = times.setdefault((m[1], scope), {"rid": m[1], "occ_scope": scope})
                 if f == "valid" and v == "always":
                     t.update(timeless=True, valid_from=None)
-                elif _DAY.match(v):
+                elif _is_day(v):
                     col = {"valid": "valid_from", "until": "valid_to", "event": "event_date"}[f]
                     t[col] = v
                     if f == "valid":
@@ -211,7 +240,7 @@ def reviews(text: str) -> tuple[list[Raw], list[str]]:
     ``restore``, ``ack: <claim> & <claim>``. Returns the rows and the lines it cannot read."""
     out: list[Raw] = []
     bad: list[str] = []
-    for n, ln, rid, k in _lines(text):
+    for n, ln, rid, k in _lines(REVIEWS, text):
         m = _REVIEW_LINE.match(ln)
         if not m:
             continue
