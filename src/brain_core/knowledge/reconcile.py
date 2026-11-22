@@ -652,7 +652,11 @@ class ClaimIndex:
     def known_at(self, when: datetime) -> dict[str, Claim] | None:
         """What brain-core held at ``when`` (transaction time), from the journal alone: the raw
         rows that existed then, derived again. None (unknown) before the derivation journal
-        began or inside a ledger gap: an empty answer would claim nothing was known."""
+        began or inside a ledger gap: an empty answer would claim nothing was known.
+
+        The evidence is that of ``when``; the identities are today's. Entity notes and the
+        ontology have no history in the journal, so a merge or rename made after ``when``
+        applies to it. This is the evidence of a past moment, not a full snapshot of it."""
         at = Journal.stamp(when)
         started = self.journal.derivation_started()
         if started is None or at < started or self.journal.in_gap(at):

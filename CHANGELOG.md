@@ -9,6 +9,7 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ### Added
 - **Answers about a past day are marked, result by result.** With `as_of`, a record dated after that day carries `after_as_of`, and a relation carries `as_of_validity`: whether its claim held that day (true, false or unknown). A relation's own date is when it was recorded, never when it held. Nothing is re-ordered or dropped.
+- **`brain claims list --known-at` says what it reads with:** the evidence of that time, with today's entity notes and ontology. A merge or rename made later applies to it, so it is not a full snapshot of the past; the docs now say so too.
 - **A name several entity notes hold is not walked.** The graph net reports it as `graph.ambiguous`, with a note to use a name only one entity holds; before, it seeded the walk as the placeholder its claims carried.
 
 ## [0.16.1] - 2026-11-23

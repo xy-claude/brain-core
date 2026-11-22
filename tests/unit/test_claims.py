@@ -697,3 +697,41 @@ def test_load_gives_back_what_derive_gave(a: Agent) -> None:
         )
         for d in ("2026-11-01", "2026-12-01", "2027-01-01", "2027-04-01"):
             assert got.at(D(d), TODAY) == c.at(D(d), TODAY)
+
+
+def test_known_at_reads_past_evidence_with_todays_entities(a: Agent) -> None:
+    """known_at rebuilds the evidence of a past moment, not the identities of that moment: a
+    merge made later applies to it. Pinned here because the docs and the CLI say so."""
+    dup = "019a8b3e-7c2d-7f41-9a10-3b5e2d8c4f45"
+    a.relations(
+        f"{USES_NEO} (2026-11-01)",
+        "[[Brain-Core]] —[USES: graph-database]→ [[neo4j-ce]] (2026-11-02)",
+    )
+    a.sync()
+    then = a.clock.now + timedelta(minutes=1)
+    held = a.claims.known_at(then)
+    assert held is not None and len(held) == 2  # two claims at the time
+    a.clock.tick(days=1)
+    a.note("neo4j-ce", dup, merged_into=NEO)  # merged a day later
+    a.now()
+    again = a.claims.known_at(then)
+    assert again is not None and len(again) == 1  # the same evidence, read with today's notes
+    assert {e.occurrence.id() for c in again.values() for e in c.evidence} == {
+        e.occurrence.id() for c in held.values() for e in c.evidence
+    }
+
+
+def test_the_cli_says_what_known_at_reads_with(tmp_path: Path) -> None:
+    from typer.testing import CliRunner
+
+    from brain_core.cli.main import app
+
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    (vault / "relations.md").write_text(f"# Relations\n\n- {USES_NEO} (2026-11-22)\n")
+    (tmp_path / "brain.yaml").write_text(f"name: T\nstores:\n  vault: {vault}\n")
+    run = CliRunner().invoke
+    assert run(app, ["claims", "list", str(tmp_path)]).exit_code == 0
+    later = (datetime.now(UTC) + timedelta(minutes=5)).isoformat()
+    out = run(app, ["claims", "list", str(tmp_path), "--known-at", later])
+    assert "read with today's entity notes and ontology" in out.output, out.output

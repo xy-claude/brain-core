@@ -451,6 +451,11 @@ def claims_cmd(
     if got is None:
         typer.echo("unknown: the journal holds no observation for that time")
         return
+    if when is not None:
+        typer.echo(
+            f"held at {when.isoformat()}: the evidence brain-core had then, read with today's "
+            "entity notes and ontology (a later merge or rename applies)"
+        )
 
     def shown(c: Any) -> tuple[str, str]:  # an entity's note name, else the name as written
         e = c.evidence[0]
