@@ -31,7 +31,7 @@ brain-core is a library. It does not own a public ingestion endpoint. The attack
 
 ## Gates: what is built and what is planned
 
-These are ingestion-time gates — the paper shows downstream defenses fail, so they belong at the write path. As of 0.16.0 three of the six are built, three are built for claims (M3, M7) and not for every record, and one remains design intent. Each says which.
+These are ingestion-time gates — the paper shows downstream defenses fail, so they belong at the write path. As of 0.16.0 two of the six are built, three are built for claims (M3, M7) but not for every record, and one remains design intent. Each says which.
 
 1. **Provisional-by-default writes (built for claims; not for records)** — any entry written by an automated or external path must carry a provisional mark until it is explicitly promoted by a deliberate writer. **For claims (0.16.0):** a relation line found in a notes folder, a folder brain-core reads but does not write, gives a claim of origin `external` that stays a `candidate`. The graph net never walks it, and recall's `claims` block shows its lifecycle. It becomes `accepted` once the same relation is stated in `relations.md`. Session files, where the capture hook writes, are never read for claims at all. **For records:** there is still no `provisional` flag. What the capture hook files goes into the day's session notes, not into facts, and a transcript line ranks below written memory in recall.
 
