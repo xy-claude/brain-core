@@ -10,8 +10,8 @@ The plan is `docs/KNOWLEDGE_ARCHITECTURE_AUDIT.md`, revision 2.3; the decisions 
 | M1c: `data/journal.db` | 0.12.0 | live on all three agents |
 | M2: entity registry | 0.13.0 | live on all three agents |
 | M3: claims and time | 0.14.0 | live on all three agents |
-| M4: graph retrieval | 0.15.0 | built and checked on two copies; eval labels AI-written and AI-checked (the owner's decision), not human-validated |
-| M7: conflict checks | 0.16.0 | built and tested; THREAT_MODEL gates 1 to 3 built for claims |
+| M4: graph retrieval | 0.15.0 | live on all three agents (as 0.16.1); eval labels AI-written and AI-checked (the owner's decision), not human-validated |
+| M7: conflict checks | 0.16.0 | live on all three agents (as 0.16.1); THREAT_MODEL gates 1 to 3 built for claims |
 | M5, M6 | — | not in scope (the owner's decision): no outside LLM calls, no Neo4j download |
 
 ## Live cutovers of 2026-11-23
@@ -26,6 +26,27 @@ Each followed the same procedure: no brain server running, a read-only inventory
   - On the main agent the journal grew by exactly the 83 lines of `relations.md`, the one change 0.13.0 makes, and no row closed. The other two have no relations, and their journals did not change.
   - `brain entities propose` staged 77 names in the main agent's inbox and wrote no note.
   - `brain doctor` shows only what it showed before.
+
+## Live cutover of 0.16.1: M4 and M7 (2026-11-23)
+
+0.15.0 and 0.16.0 were released but not installed on their own. 0.16.1 adds the wording an agent needs for undated claims, and a re-read so older notes-folder lines become provisional. The agents went from 0.14.0 straight to 0.16.1, with no brain server running, a fresh inventory and a checked backup of each `brain.db`.
+
+- **Records, keys, vectors, events:** unchanged on all three agents.
+- **Ledger:** no row added and none closed on any agent, although index format 7 read every file again: the texts are unchanged. The derivation journal kept its 692 rows on the main agent: a re-read adds no version.
+- **Claims:** 83 on the main agent and none on the other two, as before. Nothing to report.
+- **`brain index --check`** (with its rebuild from the files): in step on all three.
+- **Recall:** for 200 eval questions asked of the main agent before (0.14.0) and after, keywords only, 190 top-10 lists are identical. The 10 that changed each carry a result the graph net found, so the net is on and nothing else moved.
+- **Not verified live:** the write-time contradiction. It needs a new relation that conflicts with one held, and none was written on the owner's agent to test it; the unit tests cover it.
+
+## Where the program stands
+
+- **Every milestone in scope is built, released and live:** M0, M1a to M1c, M2, M3, M4 and M7. M5 and M6 were left out by the owner's decision.
+- **The claims wait for entity notes.** All 83 claims on the main agent still name their entities by name: no entity note exists yet. 77 proposals sit in its inbox (`brain entities propose`); a person makes each note, and the claims then re-key onto it.
+- **Every live claim is undated.** The relation lines say when brain-core stored them, not when they became true, so a past `as_of` finds no claim true yet, and the graph net's claims are marked `undated`.
+- **The graph net is on by default on a no-regression basis.** With vectors, as the agents run, it solved 2 of 20 independently written multi-hop questions (not significant); with keywords alone, 9 of 20. `recall.graph: false` turns it off and gives 0.14.0's recall.
+- **Labels are AI-written and AI-checked**, as the owner decided for M0 and M4; no person has checked them.
+- **Decision 22** (start M3 only with evidence of need) was overridden by the owner's decision to finish the plan.
+- **The Graphify check** was still pending at every release; it is a third-party check, and the project's own CI (tests on Linux and Windows, the installer, Hindsight) passed each time.
 
 ## M7: conflict checks (2026-11-23)
 
