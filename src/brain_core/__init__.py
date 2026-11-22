@@ -8,6 +8,6 @@ Public API:
 from brain_core.agent import Agent
 from brain_core.config import BrainConfig
 
-__version__ = "0.14.0"
+__version__ = "0.15.0"
 
 __all__ = ["Agent", "BrainConfig", "__version__"]

@@ -4,6 +4,8 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-11-23
+
 ### Added
 - **The graph net (M4).** A question that names an entity also walks the relations around it, two steps out, as one more list in recall's rank fusion.
   - **Seeds.** A name in the question is a seed when an entity note holds it as an alias or a claim names it. A name inside a path, file name or address is not.
