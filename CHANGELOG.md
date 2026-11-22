@@ -4,6 +4,8 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-11-22
+
 ### Added
 - **`data/journal.db`: the history no Markdown file holds (M1c).**
   - **What it records:** one row per version of a record at an occurrence (a source, a record, the k-th copy of it there), with when the vault held it. The time comes from the clock, never from the text. A move keeps its recording time only when it is unambiguous: one copy left and one arrived.
