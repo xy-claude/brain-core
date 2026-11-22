@@ -4,6 +4,8 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-11-23
+
 ### Added
 - **Claims, evidence and time (M3).** A claim is what a relation asserts: subject, predicate, role and object, and its id hashes exactly those. Each occurrence that supports it is one piece of evidence. Valid time comes from the text, and the time brain-core first held each piece comes from the journal, never from the text.
   - **Where claims come from**, without a model:
