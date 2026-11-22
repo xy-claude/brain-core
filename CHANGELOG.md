@@ -4,6 +4,20 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+### Changed
+- Notes and archive record ids no longer depend on where a folder lives (M1b). A record's id is the hash of `<store>:<root name>/<file>#<heading>`, not of the file's absolute path; recall still shows the real path, and vault ids are unchanged. A folder's root name is its own name, or `name:` in brain.yaml (`notes: [{path: ~/x, name: team}]`). Moving a folder keeps every id, its search keys and its vectors; renaming one keeps them once it has a `name:`. Two folders of one store with the same name keep the old path ids until each is named, and `brain doctor` says so.
+- Upgrading needs no migration to keep working: each record remembers the id it had, and search keys and `supersedes` links written under that id still apply. The index reads every file once after the upgrade. Vectors of notes and archive records are made again, unless `brain index --migrate-ids --apply` moves them.
+
+### Added
+- `brain index --migrate-ids [--apply] [--old-path NAME=PATH]`: plans, and with `--apply` carries out, the move to the new ids.
+  - First a checked, owner-only backup of `brain.db` and `record_meta.md` in `data/backups/`.
+  - Then a manifest, a `was:` line in `record_meta.md` for every old id it names, the vectors remapped, and every notes and archive file indexed again, then checked.
+  - It resumes after a crash, unless the files changed since; then it refuses and asks for a new dry run. Run again, it adds nothing.
+  - `--old-path` names where a folder used to be, for keys written before it moved.
+- `brain doctor` and `brain_status` name search-key lines that fit no record: the sign of a folder renamed without `name:`.
+- `tests/eval/translate_labels.py` maps eval labels to the new ids.
+
+
 ## [0.10.0] - 2026-11-22
 
 ### Changed

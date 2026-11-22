@@ -270,6 +270,22 @@ S3 is not part of M0's completion and needs explicit approval, because it sends 
 - `human_review/apply_review.py --packet human_review/ai_draft/M0_REVIEW_PACKET_AI_ANSWERED.md --accepted-ai`
 - then `run_gold.py` and `compare.py`, as in `human_review/README.md`
 
+## 10. Re-baseline after M1b (decision 19, 2026-11-22)
+
+M1b made notes and archive ids independent of folder paths (G11). The snapshot's 588 search-key lines, written under the live agent's paths, now attach through `was:` lines. As decision 19 asked, the result is a new baseline, not a gain.
+
+- **Labels:** `questions-v2.yaml`, with 476 gold and stale ids translated to the new ids (`tests/eval/translate_labels.py`).
+- **The new ids alone** (no keys attached) reproduce M0 question for question: S0 298 of 443, 0 fixed and 0 broken.
+- **With the keys attached:**
+
+| Run | Before (section 9) | Now | Fixed / broken | p |
+|---|---:|---:|---|---:|
+| S0, keywords + keys | 298 | **301** | 12 / 9 | 0.66 |
+| S2, + vectors | 345 | **347** | 7 / 5 | 0.77 |
+
+- **Absent questions:** false answers rise from 19 to 21 of 57 in both runs. The attached keys give those records a word the question shares.
+- **This is the baseline M2 to M4 compare with.** The labels are still AI-reviewed (section 9), so M4's gate also needs its own labels.
+
 ## How it was run
 
 - **Two copies under `local/audit-m0/`:**
