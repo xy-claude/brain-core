@@ -4,6 +4,8 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-11-23
+
 ### Added
 - **The entity registry (M2).** An entity is a note in `vault/entities/`. Its frontmatter holds an `id`, a UUIDv7 written once so a rename keeps it, an `entity_type` from the packaged `ontology.yaml`, and `aliases`. Obsidian resolves `[[aliases]]` by itself, and recall finds the note like a knowledge page.
   - **Registry tables.** `brain.db` derives `entities`, `aliases` and `mentions` from the notes (migration 008), so deleting `brain.db` loses nothing.
