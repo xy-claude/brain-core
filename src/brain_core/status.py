@@ -121,6 +121,19 @@ def brain_status(agent: Agent) -> dict[str, Any]:
                     f"{len(problems)} entity note problem(s), `brain entities check`: "
                     + "; ".join(problems[:2])
                 )
+        if vault.claims is not None:
+            try:
+                out["claims"] = vault.claims.summary()  # M3
+            except (OSError, sqlite3.Error, ValueError) as e:
+                out["claims"] = {"error": type(e).__name__}
+            c = out["claims"]
+            if c.get("open_conflicts"):
+                attention.append(
+                    f"{c['open_conflicts']} claim conflict(s) no person acknowledged: "
+                    "`brain claims list`; an `ack:` line in claim_reviews.md marks one as both true"
+                )
+            if c.get("unread") or c.get("error"):
+                attention.append(f"claims: {c.get('error') or c['unread']}")
     out["not_rebuilt"] = rebuild_loss(agent.db)
     try:
         out["journal"] = agent.journal.status()  # M1c: the history brain.db cannot rebuild

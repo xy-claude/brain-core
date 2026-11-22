@@ -306,7 +306,8 @@ class RecordIndex:
             gone.append(key)
         seq = 0
         batch = {source(p): [(r.id, full_text(r)) for r in recs] for _k, _s, recs, p in changed}
-        batch |= {source(Path(key)): [] for key in gone}
+        # a source gone from one path never empties the same source found at another
+        batch |= {s: [] for key in gone if (s := source(Path(key))) not in batch}
         if self.journal is not None and batch:
             # the journal first: a crash before brain.db commits leaves the old signatures, so
             # the next sync derives again, and finds its journal rows already there
@@ -316,7 +317,7 @@ class RecordIndex:
             for _k, _s, recs, p in changed:
                 if (got := self.claims.extract(source(p), recs)) is not None:
                     raws[source(p)] = got
-            raws |= {source(Path(k)): [] for k in gone if accepts(source(Path(k)))}
+            raws |= {s: [] for k in gone if accepts(s := source(Path(k))) and s not in raws}
             self.claims.history(raws)  # the derivation journal, before brain.db too (M3)
         for key, sig, records, p in changed:
             with self.db.transaction():
@@ -361,7 +362,7 @@ class RecordIndex:
                 )
         for key in gone:
             with self.db.transaction():
-                if self.claims is not None and source(Path(key)) in raws:
+                if self.claims is not None and raws.get(source(Path(key))) == []:
                     self.claims.store(source(Path(key)), [])
                 self.db.execute(
                     "DELETE FROM records_fts WHERE store = ? AND path = ?", (store, key)

@@ -574,3 +574,31 @@ def test_a_no_change_sync_does_not_recompute(a: Agent, monkeypatch: pytest.Monke
     a.sync()
     a.claims.settle()
     assert calls == []
+
+
+def test_the_cli_lists_checks_and_reports(tmp_path: Path) -> None:
+    from typer.testing import CliRunner
+
+    from brain_core.cli.main import app
+
+    vault = tmp_path / "vault"
+    (vault / "entities").mkdir(parents=True)
+    (vault / "relations.md").write_text(
+        f"# Relations\n\n- {USES_NEO} (2026-11-22)\n- {USES_KUZU}\n"
+    )
+    (tmp_path / "brain.yaml").write_text(f"name: T\nstores:\n  vault: {vault}\n")
+    run = CliRunner().invoke
+    out = run(app, ["claims", "list", str(tmp_path), "--as-of", "2026-11-25"])
+    assert out.exit_code == 0, out.output
+    assert "Brain-Core —[USES: graph-database]→ Neo4j: true on 2026-11-25" in out.output
+    assert "2 claims" in out.output
+    assert run(
+        app, ["claims", "list", str(tmp_path), "--known-at", "2000-01-01"]
+    ).output.startswith("unknown")
+    check = run(app, ["index", str(tmp_path), "--check"])
+    assert check.exit_code == 0 and "in step with a rebuild" in check.output, check.output
+    doctor = run(app, ["doctor", str(tmp_path)])
+    assert "claims     2 (2 accepted), 1 open conflict(s), 2 waiting" in doctor.output, (
+        doctor.output
+    )
+    assert run(app, ["claims", "check", str(tmp_path)]).exit_code == 0

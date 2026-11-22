@@ -6,7 +6,7 @@ import io
 import re
 import sys
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
 
@@ -403,6 +403,74 @@ def entities_cmd(
     typer.echo(f"{n} proposed in {inbox.name}; a person makes each note (none is merged)")
 
 
+@app.command("claims")
+def claims_cmd(
+    action: Annotated[str, typer.Argument(help="list | check")] = "list",
+    path: Annotated[Path, typer.Argument(help="Agent directory or brain.yaml.")] = Path(),
+    as_of: Annotated[
+        str | None, typer.Option("--as-of", help="Valid time: was it true on this day?")
+    ] = None,
+    known_at: Annotated[
+        str | None,
+        typer.Option("--known-at", help="Transaction time: what brain-core held then (UTC)."),
+    ] = None,
+) -> None:
+    """Claims (M3): what relations.md, notes and decisions assert, from which evidence, true
+    when (`--as-of DAY`, default today) and held since when (`--known-at TIME`). `check`
+    lists what a person should look at, exit 1 if anything."""
+    from datetime import UTC, date, datetime
+
+    if action not in ("list", "check"):
+        typer.echo("action must be list | check", err=True)
+        raise typer.Exit(code=1)
+    with _open(path) as agent:
+        vault = next((s for s in agent.stores if isinstance(s, VaultStore)), None)
+        if vault is None or vault.claims is None:
+            typer.echo("ERROR: no vault configured in brain.yaml", err=True)
+            raise typer.Exit(code=1)
+        agent.brain_sync()
+        if action == "check":
+            st = vault.claims.summary()
+            items = st["report"] + [f"{k}: {v}" for k, v in st["unread"].items()]
+            for x in items:
+                typer.echo(f"  {x}")
+            typer.echo(f"{len(items)} item(s); {st['open_conflicts']} open conflict(s)")
+            if items:
+                raise typer.Exit(code=1)
+            return
+        try:
+            day = date.fromisoformat(as_of) if as_of else date.today()
+            when = datetime.fromisoformat(known_at) if known_at else None
+        except ValueError as e:
+            typer.echo(f"ERROR: {e}", err=True)
+            raise typer.Exit(code=1) from e
+        if when is not None and when.tzinfo is None:
+            when = when.replace(tzinfo=UTC)
+        got = vault.claims.known_at(when) if when else vault.claims.current()
+        names = {r["id"]: r["name"] for r in agent.db.fetchall("SELECT id, name FROM entities")}
+    if got is None:
+        typer.echo("unknown: the journal holds no observation for that time")
+        return
+
+    def shown(c: Any) -> tuple[str, str]:  # an entity's note name, else the name as written
+        e = c.evidence[0]
+        s = names.get(c.key.subject, e.subject_name)
+        o = c.key.object_literal or names.get(c.key.object_entity, e.object_name or "")
+        return s, o
+
+    today = date.today()
+    for c in sorted(got.values(), key=lambda c: (shown(c), c.key.predicate)):
+        k = c.key
+        pred = f"{k.predicate}: {k.role}" if k.role else k.predicate
+        subject, obj = shown(c)
+        conflict = " · disputed" if c.disputed_on(day, today) else ""
+        typer.echo(
+            f"{subject} —[{pred}]→ {obj}: {c.at(day, today)} on {day} · "
+            f"{c.lifecycle.value}, {c.verification.value}, {len(c.evidence)} evidence{conflict}"
+        )
+    typer.echo(f"{len(got)} claims")
+
+
 @app.command("journal")
 def journal_cmd(
     action: Annotated[str, typer.Argument(help="status | backup | restore")],
@@ -475,12 +543,35 @@ def index_cmd(
             "for search keys written before it moved. Repeatable.",
         ),
     ] = None,
+    check: Annotated[
+        bool,
+        typer.Option(
+            "--check",
+            help="Derive the claims afresh and compare them with brain.db, and brain.db's raw "
+            "claim rows with the journal's (M3). Exit 1 if they differ.",
+        ),
+    ] = False,
 ) -> None:
     """Load the vault's facts.md and patterns.md into the SQLite FTS index, and with
     `stores.vectors` set, give every record its vector. Idempotent. With --migrate-ids,
     move notes and archive records to store-relative ids instead (M1b)."""
     if migrate_ids:
         _migrate_ids(path, apply, old_path or [])
+        return
+    if check:
+        with _open(path) as agent:
+            vault = next((s for s in agent.stores if isinstance(s, VaultStore)), None)
+            if vault is None or vault.claims is None:
+                typer.echo("ERROR: no vault configured in brain.yaml", err=True)
+                raise typer.Exit(code=1)
+            agent.brain_sync()
+            diffs = vault.claims.check()
+            n = vault.claims.summary()["claims"]
+        for d in diffs:
+            typer.echo(f"  {d}")
+        typer.echo(f"{n} claims; " + ("in step with a rebuild" if not diffs else "DIFFERS"))
+        if diffs:
+            raise typer.Exit(code=1)
         return
     with _open(path) as agent:
         vault = next((s for s in agent.stores if isinstance(s, VaultStore)), None)
@@ -841,6 +932,12 @@ def doctor_cmd(
         typer.echo(
             f"  journal    {j.get('rows', 0)} rows, {j.get('open', 0)} open, since "
             f"{j.get('started', '-')}, integrity {j.get('integrity')}"
+        )
+    if c := st.get("claims"):
+        life = ", ".join(f"{v} {k}" for k, v in sorted(c.get("lifecycle", {}).items()))
+        typer.echo(
+            f"  claims     {c.get('claims', 0)} ({life or 'none'}), {c.get('open_conflicts', 0)} "
+            f"open conflict(s), {c.get('waiting_names', 0)} waiting for an entity note"
         )
     for line in st.get("attention", []):
         typer.echo(f"  attention  {line}")

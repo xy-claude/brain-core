@@ -336,9 +336,13 @@ class VaultStore:
             # keyword search, so the graph store ranks them as in 0.9.1
             return records
 
-        self.index.sync(
-            self.name, files, parse, lambda p: f"vault:{p.relative_to(self.root).as_posix()}"
-        )
+        def source(p: Path) -> str:
+            try:
+                return f"vault:{p.relative_to(self.root).as_posix()}"
+            except ValueError:  # a file the vault held before it moved: it names no source now
+                return f"vault:{p}"
+
+        self.index.sync(self.name, files, parse, source)
         if self.entities is not None:
             self.entities.refresh()  # entity notes changed: every mention is found again
         if self.claims is not None:

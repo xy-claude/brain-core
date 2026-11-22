@@ -421,3 +421,16 @@ def test_an_edit_the_file_clock_cannot_see_is_still_caught(
     clock.tick()
     sync(v)
     assert [r[0] for r in rows(j)] == [record_id("Port is 8889")]
+
+
+def test_a_moved_vault_keeps_its_history(tmp_path: Path) -> None:
+    j, db, v, clock = setup(tmp_path)
+    facts(v.root, "Port is 8888", "Uses SQLite")
+    sync(v)
+    before = rows(j)
+    moved = tmp_path / "elsewhere" / "vault"
+    moved.parent.mkdir()
+    v.root.rename(moved)
+    clock.tick()
+    sync(VaultStore(moved, index=RecordIndex(db, j)))  # the old paths are gone, the files are not
+    assert rows(j) == before  # nothing closed, nothing opened: the same sources, the same texts
