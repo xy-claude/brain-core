@@ -434,3 +434,40 @@ def test_a_moved_vault_keeps_its_history(tmp_path: Path) -> None:
     clock.tick()
     sync(VaultStore(moved, index=RecordIndex(db, j)))  # the old paths are gone, the files are not
     assert rows(j) == before  # nothing closed, nothing opened: the same sources, the same texts
+
+
+def test_a_save_whose_sync_never_ran_is_recorded_late_never_early(tmp_path: Path) -> None:
+    j, _db, v, clock = setup(tmp_path)
+    facts(v.root, "Port is 8888")
+    sync(v)
+    clock.tick()
+    v._write("fact", "Port is 9999")  # the line is filed, then the process dies before its sync
+    clock.tick()
+    sync(v)  # the next sync, by any process, finds it
+    row = next(r for r in rows(j) if r[0] == record_id("Port is 9999"))
+    assert row[4] == "ingest" and row[2] == Journal.stamp(clock.now)  # late, as an ingest
+
+
+def test_coverage_is_reported_apart_from_consistency(tmp_path: Path) -> None:
+    from typer.testing import CliRunner
+
+    from brain_core.agent import Agent
+    from brain_core.cli.main import app
+
+    cfg = _agent(tmp_path)
+    with Agent.from_config(cfg) as a:
+        a.brain_sync()
+        a.journal.backup(tmp_path / "bk", today=date(2026, 11, 23))
+        backup = next((tmp_path / "bk").glob("journal-*.db"))
+        journal = a.data_dir / "journal.db"
+    journal.unlink()
+    for extra in ("-wal", "-shm"):
+        journal.with_name(journal.name + extra).unlink(missing_ok=True)
+    time.sleep(0.01)
+    run = CliRunner().invoke
+    assert run(app, ["journal", "restore", str(backup), str(tmp_path)]).exit_code == 0
+    status = run(app, ["journal", "status", str(tmp_path)])
+    assert "history: records since" in status.output and "1 gap" in status.output, status.output
+    check = run(app, ["index", str(tmp_path), "--check"])
+    assert check.exit_code == 0, check.output  # a gap is lost history, not an inconsistency
+    assert "1 gap" in check.output, check.output

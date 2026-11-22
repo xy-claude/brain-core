@@ -14,6 +14,7 @@ from brain_core import __version__, recall
 from brain_core.agent import Agent
 from brain_core.cli.init import init_agent
 from brain_core.embed import EmbedUnavailable
+from brain_core.journal import Journal
 from brain_core.status import unmasked
 from brain_core.stores.vault import VaultStore, redact
 
@@ -503,6 +504,7 @@ def journal_cmd(
                 f"journal: {st['rows']} rows, {st['open']} open, generation {st['generation']}, "
                 f"since {st['started']}, integrity {st['integrity']}"
             )
+            typer.echo(Journal.history_line(st))
             return
         if action == "backup":
             from brain_core.cron import journal_backup
@@ -573,9 +575,13 @@ def index_cmd(
             diffs = vault.claims.check()
             n = vault.claims.summary()["claims"]
             diffs += _rebuilt_differs(agent, vault.claims.tables())
+            history = Journal.history_line(agent.journal.status())
         for d in diffs:
             typer.echo(f"  {d}")
         typer.echo(f"{n} claims; " + ("in step with a rebuild" if not diffs else "DIFFERS"))
+        # consistency is not completeness: a gap is history lost before a restore, which no
+        # rebuild can give back, and it is no fault of this check
+        typer.echo(history)
         if diffs:
             raise typer.Exit(code=1)
         return
@@ -970,6 +976,8 @@ def doctor_cmd(
             f"  journal    {j.get('rows', 0)} rows, {j.get('open', 0)} open, since "
             f"{j.get('started', '-')}, integrity {j.get('integrity')}"
         )
+        if "gaps" in j:
+            typer.echo(f"  history    {Journal.history_line(j).removeprefix('history: ')}")
     if c := st.get("claims"):
         life = ", ".join(f"{v} {k}" for k, v in sorted(c.get("lifecycle", {}).items()))
         typer.echo(

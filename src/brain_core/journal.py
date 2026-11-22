@@ -445,7 +445,38 @@ class Journal:
             "generation": (self._meta("generation") or "")[:8],
             "started": self._meta("started"),
             "integrity": str(self.db.fetchone("PRAGMA quick_check")[0]),  # type: ignore[index]
+            **self.coverage(),
         }
+
+    def coverage(self) -> dict[str, Any]:
+        """How much history the journal holds, apart from whether it is consistent: since
+        when records and claims are recorded, and the windows lost before a restore."""
+        gaps = self.db.fetchall(
+            "SELECT gap_from, gap_to FROM ledger_gaps WHERE cause = 'restore' ORDER BY gap_from"
+        )
+        # one loss can be recorded twice (a reread after the marker mismatch, then the merge of
+        # a backup): overlapping windows are one gap
+        merged: list[list[str]] = []
+        for a, b in ((str(g[0]), str(g[1])) for g in gaps):
+            if merged and a <= merged[-1][1]:
+                merged[-1][1] = max(merged[-1][1], b)
+            else:
+                merged.append([a, b])
+        return {
+            "claims_since": self._meta("derivation_started"),
+            "gaps": [(a, b) for a, b in merged],
+        }
+
+    @staticmethod
+    def history_line(st: Mapping[str, Any]) -> str:
+        """`history: records since …, claims since …, N gap(s) (from → to)`."""
+        gaps = st.get("gaps") or []
+        shown = "; ".join(f"{a[:16]} → {b[:16]}" for a, b in gaps[:3])
+        return (
+            f"history: records since {str(st.get('started') or '-')[:16]}, claims since "
+            f"{str(st.get('claims_since') or '-')[:16]}, {len(gaps)} gap(s)"
+            + (f" lost to a restore ({shown})" if gaps else "")
+        )
 
 
 class _Tx:
