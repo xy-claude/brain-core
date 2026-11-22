@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 from brain_core.entities import normalize_alias
 from brain_core.knowledge.walk import Limits, walk
+from brain_core.recall import tokens
 from brain_core.stores.base import Record
 from brain_core.stores.graph import relation_text
 
@@ -62,7 +63,9 @@ class GraphNet:
         if not names:
             return []
         alts = "|".join(re.escape(n) for n in sorted(names, key=len, reverse=True))
-        found = re.finditer(rf"(?<![\w-])({alts})(?![\w-])", normalize_alias(query))
+        # a name inside a path, a file name or an address (local/x.yaml, x.name@mail) is not
+        # the entity: the boundary keeps those out
+        found = re.finditer(rf"(?<![\w\-./@])({alts})(?![\w\-/@]|\.\w)", normalize_alias(query))
         out: dict[str, str] = {}
         for m in found:
             out.setdefault(names[m.group(1)], m.group(1))
@@ -88,7 +91,11 @@ class GraphNet:
         paths: dict[str, str] = {}
         block: list[dict[str, Any]] = []
         seen: set[str] = set()
-        for e in w.edges:
+        # what the question asks beyond the names it was seeded by: a claim that says none of
+        # it is only near the entity, not about the question, and is left out
+        asked = _words(query) - {w for n, _e in seeds for w in _words(n)}
+        shown: list[tuple[int, int, str, Any]] = []
+        for n, e in enumerate(w.edges):
             c = held.get(e.claim)
             if c is None:
                 continue
@@ -97,6 +104,14 @@ class GraphNet:
             o = c.key.object_literal or _shown(c.key.object_entity, first.object_name, self.claims)
             pred = f"{c.key.predicate}({c.key.role})" if c.key.role else c.key.predicate
             path = f"{s} —{pred}→ {o}"
+            # the claims that share most words with the question first, then by hop: the
+            # walk's own order (rank, id) says nothing about what was asked
+            score = _shared(asked, _words(path.replace("_", " ")))
+            if score:
+                shown.append((-score, n, path, (e, c)))
+        shown.sort(key=lambda x: (x[0], x[3][0].hop, x[1]))
+        for _score, _n, path, (e, c) in shown:
+            first = c.evidence[0]
             validity = c.at(day, today)
             block.append(
                 {
@@ -168,6 +183,23 @@ class GraphNet:
                 (*seeds, cap),
             )
         ]
+
+
+def _words(text: str) -> set[str]:
+    return set(tokens(text))
+
+
+def _shared(asked: set[str], said: set[str]) -> int:
+    """How many of the question's words the claim says, a word meeting its own forms by a
+    common start (trade, trades, trading; run, runs)."""
+
+    def meets(a: str, b: str) -> bool:
+        k = 0
+        while k < min(len(a), len(b)) and a[k] == b[k]:
+            k += 1
+        return k >= 3 and k >= min(4, len(a), len(b))
+
+    return sum(1 for a in asked if any(meets(a, b) for b in said))
 
 
 def _shown(eid: str | None, written: str | None, claims: ClaimIndex) -> str:

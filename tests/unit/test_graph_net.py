@@ -63,13 +63,15 @@ def test_off_recall_is_unchanged(tmp_path: Path) -> None:
 def test_the_claims_around_a_named_entity_join_the_ranking(tmp_path: Path) -> None:
     v = setup(tmp_path, *LINES)
     out = brain_recall(
-        [v], "what does the ride app use for payments?", fmt="detailed", today=TODAY,
-        graph=net(v),
+        [v], "what does the ride app use for payments, and where does that run?",
+        fmt="detailed", today=TODAY, graph=net(v),
     )  # fmt: skip
     assert out["graph"]["seeds"] == ["ride app"]
     walked = {(c["claim"], c["hop"], c["validity"]) for c in out["claims"]}
     assert ("Ride App —USES(payments)→ Stripe", 1, "true") in walked
     assert ("Stripe —RUNS_ON→ AWS", 2, "true") in walked  # two hops out
+    # a claim near the entity that says nothing the question asks is left out
+    assert not any("Driver Portal" in c for c, _h, _v in walked)
     by_graph = [r for r in out["results"] if "graph" in r.get("found_by", [])]
     assert by_graph and all(r.get("path") for r in by_graph)
     assert any(r["path"] == "Ride App —USES(payments)→ Stripe" for r in by_graph)
@@ -144,3 +146,13 @@ def test_as_of_puts_that_days_value_first(tmp_path: Path) -> None:
     assert night.index(old) < next(i for i, t in enumerate(night) if "night fare is 5" in t)
     marked = brain_recall([v], "what is the night fare?", today=TODAY, as_of=date(2026, 10, 1))
     assert not next(r for r in marked["results"] if r["text"] == old).get("superseded")
+
+
+def test_a_name_inside_a_path_or_an_address_seeds_nothing(tmp_path: Path) -> None:
+    v = setup(tmp_path, "[[Stripe]] —[RUNS_ON]→ [[AWS]] (2026-10-01)")
+    g = net(v)
+    assert v.claims is not None
+    v.claims.settle()
+    assert g.seeds("where does Stripe run?") == [("stripe", "name:stripe")]
+    for q in ("where is local/stripe.yaml?", "mail stripe.billing@example.com", "see /stripe/x"):
+        assert g.seeds(q) == [], q

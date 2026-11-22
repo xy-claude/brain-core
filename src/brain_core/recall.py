@@ -86,6 +86,9 @@ _WORD = re.compile(r"[a-z0-9]+(?:[-_.][a-z0-9]+)*")
 # c=60, 157 for keywords alone. A small c lets the head of either list lead, which is what keeps
 # an exact keyword hit on top.
 _RRF_C = 10
+# M4: a claim the graph net reached shares the question's words by construction, and a
+# relation has no vector: counted once it lost to every record two nets found
+_WEIGHT = {"graph": 2.0}
 _NETS = ("vault", "notes", "archive")  # the stores whose records carry vectors
 # a word that names one thing exactly: has a digit, or an inner _ . / (0.4.26, invalid_grant,
 # session_recovery.py). A date or a bare year is not one.
@@ -504,7 +507,7 @@ def _join(nets: dict[str, list[Hit]], found_by: dict[str, list[str]]) -> list[Hi
     for net, hits in nets.items():
         for place, hit in enumerate(hits):
             rid = hit[0].id
-            worth[rid] = worth.get(rid, 0.0) + 1.0 / (_RRF_C + place + 1)
+            worth[rid] = worth.get(rid, 0.0) + _WEIGHT.get(net, 1.0) / (_RRF_C + place + 1)
             keep.setdefault(rid, hit)
             found_by.setdefault(rid, []).append(net)
     return sorted(

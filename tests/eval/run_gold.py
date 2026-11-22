@@ -10,6 +10,7 @@ question asked in other words can fail. Slices (``s``):
 * reworded, real, same, identifier: a gold record is in the top k
 * multi: every gold record is in the top k
 * update: a gold record comes before any ``stale`` one
+* as-of: the same, asked about the day ``as_of`` (M4): the value of that day must lead
 * temporal: a gold record is in the top k; with no ``gold``, a session note dated ``date``
 * absent: nothing in the store answers it, so recall must flag a miss
 
@@ -67,7 +68,7 @@ def judge(q: dict[str, Any], out: dict[str, Any]) -> tuple[bool, bool, int | Non
         return hit, False, None
     if s == "multi":
         return all(any(r["id"].startswith(g) for r in res) for g in gold), ans, rank
-    if s == "update":
+    if s in ("update", "as-of"):
         for i, r in enumerate(res):
             if _is(r, gold) or any(a in r["text"].lower() for a in answers):
                 return True, True, i + 1
@@ -96,6 +97,7 @@ def run(
     depth: int = 0,
     runner: Any = None,  # a judge runner (system, prompt) -> reply; None: the agent's own
     today: date | None = None,  # the day recall treats as today; None: the day of the run
+    graph: bool = False,  # M4: the graph net on, whatever brain.yaml says
 ) -> list[dict[str, Any]]:
     spec = yaml.safe_load(Path(questions).read_text())
     k = int(spec.get("k", 10))
@@ -110,6 +112,14 @@ def run(
         recall.MAX_TOKENS = 10**9  # the long list is for counting, never for a reader
     rows = []
     with Agent.from_config(config) as agent:
+        net = None
+        if graph:
+            from brain_core.knowledge.net import GraphNet
+            from brain_core.stores.vault import VaultStore
+
+            v = next(s for s in agent.stores if isinstance(s, VaultStore))
+            assert v.claims is not None and v.index is not None
+            net = GraphNet(v.claims, v.index)
         for q in qs:
             t0 = time.perf_counter()
             nets: dict[str, Any] = {
@@ -118,6 +128,8 @@ def run(
                 "judge": runner or agent.judge,
                 "judge_candidates": agent.config.recall.judge_candidates,
                 "today": today,
+                "graph": net,
+                "as_of": date.fromisoformat(str(q["as_of"])) if q.get("as_of") else None,
             }
             out = brain_recall(agent.stores, q["q"], fmt="detailed", limit=k, **nets)
             ms = (time.perf_counter() - t0) * 1000
@@ -204,13 +216,14 @@ def main() -> int:
     ap.add_argument("--depth", type=int, default=0, help="also report the ceiling in the top N")
     ap.add_argument("--out")
     ap.add_argument("--misses", action="store_true", help="print every question that failed")
+    ap.add_argument("--graph", action="store_true", help="the graph net (M4) on")
     ap.add_argument(
         "--today",
         type=date.fromisoformat,
         help="the day recall treats as today (YYYY-MM-DD), so runs on different days compare",
     )
     a = ap.parse_args()
-    rows = run(a.config, a.questions, a.split, a.depth, today=a.today)
+    rows = run(a.config, a.questions, a.split, a.depth, today=a.today, graph=a.graph)
     if a.misses:
         for r in rows:
             if not r["hit"]:
@@ -263,6 +276,7 @@ def main() -> int:
                 "split": a.split,
                 "depth": a.depth,
                 "today": a.today.isoformat() if a.today else None,
+                "graph": a.graph,
             },
             "rows": rows,
         }

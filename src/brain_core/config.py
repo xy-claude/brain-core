@@ -89,9 +89,9 @@ class RecallConfig(BaseModel):
     runner: Literal["api", "claude"] = "api"
     model: str | None = None  # default: judge.JUDGE_MODEL, the small model the eval measured
     judge_timeout: float = 60  # seconds a judge call may take before recall answers without it
-    # M4: the claims around the entities a question names, as one more net. Off: recall is
-    # exactly as before
-    graph: bool = False
+    # M4: the claims around the entities a question names, as one more net. false: recall is
+    # exactly as in 0.14 (the eval gate passed with it on: docs/KNOWLEDGE_PROGRAM_STATUS.md)
+    graph: bool = True
 
 
 class SessionConfig(BaseModel):
