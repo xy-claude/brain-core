@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import stat
+import sys
 from datetime import date
 from pathlib import Path
 
@@ -143,8 +144,10 @@ def test_migration_takes_a_checked_private_backup_first(tmp_path: Path, db: Data
     before = rows(db)
     report = migrate_relations(db, vault_on(root, db), tmp_path / "backups")
     saved = [Path(p) for p in report["backup"]]
-    assert len(saved) == 2 and all(stat.S_IMODE(p.stat().st_mode) == 0o600 for p in saved)
-    assert stat.S_IMODE((tmp_path / "backups").stat().st_mode) == 0o700
+    assert len(saved) == 2
+    # Windows has no POSIX modes (a file there takes its folder's access rules)
+    assert sys.platform == "win32" or all(stat.S_IMODE(p.stat().st_mode) == 0o600 for p in saved)
+    assert sys.platform == "win32" or stat.S_IMODE((tmp_path / "backups").stat().st_mode) == 0o700
     # restored into a new folder, the backup is the database as it was
     restored = tmp_path / "restore" / "brain.db"
     restored.parent.mkdir()

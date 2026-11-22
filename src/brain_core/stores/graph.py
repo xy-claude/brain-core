@@ -208,7 +208,8 @@ class GraphStore:
 
 
 def _private(path: Path, data: bytes = b"") -> Path:
-    """A new file only the owner can read, never an existing one overwritten."""
+    """A new file only the owner can read (mode 0600; on Windows the folder's access rules
+    apply), never an existing one overwritten."""
     fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
     with os.fdopen(fd, "wb") as f:
         f.write(data)
