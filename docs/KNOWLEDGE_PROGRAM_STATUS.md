@@ -9,8 +9,8 @@ The plan is `docs/KNOWLEDGE_ARCHITECTURE_AUDIT.md`, revision 2.3; the decisions 
 | M1b: ids independent of folder paths | 0.11.0 | live on all three agents |
 | M1c: `data/journal.db` | 0.12.0 | live on all three agents |
 | M2: entity registry | 0.13.0 | live on all three agents |
-| M3: claims and time | 0.14.0 | built and checked on a copy |
-| M4: graph retrieval | — | after M3; its eval labels are AI-reviewed (the owner's decision), not human-validated |
+| M3: claims and time | 0.14.0 | live on all three agents |
+| M4: graph retrieval | 0.15.0 | built and checked on two copies; eval labels AI-written and AI-checked (the owner's decision), not human-validated |
 | M7: conflict checks | — | after M3 |
 | M5, M6 | — | not in scope (the owner's decision): no outside LLM calls, no Neo4j download |
 
@@ -26,6 +26,58 @@ Each followed the same procedure: no brain server running, a read-only inventory
   - On the main agent the journal grew by exactly the 83 lines of `relations.md`, the one change 0.13.0 makes, and no row closed. The other two have no relations, and their journals did not change.
   - `brain entities propose` staged 77 names in the main agent's inbox and wrote no note.
   - `brain doctor` shows only what it showed before.
+
+## M4 on isolated copies of the main agent (2026-11-23)
+
+**Copies.** Two copies of the main agent at 0.14.0: one as it is (83 claims, no entity notes), and one with entity notes made for its five most-connected names (5,481 mentions, 61 claims re-keyed onto the notes). Each runs with keywords alone and with vectors.
+
+**Question sets.**
+- **The 443 existing questions** (M1b's ids), which measure regression.
+- **59 new ones, written by the builder:**
+  - 40 multi-hop questions, each naming one entity and needing two relations. Gold: every relation on the path.
+  - 19 as-of questions about a value replaced later, asked for a day before the replacement. Gold: the old value, ahead of its replacement.
+  - This is fewer than the audit's 40 temporal questions: only 19 replaced values on the copy have dates that allow it.
+- **20 multi-hop questions written by a separate agent** that saw only the relation list. They paraphrase the relations rather than reuse their words, and they are the held-out set. They were run once on the final design, after being used once to reject a word filter (below).
+
+**Results against 0.14.0's behaviour** (no graph net, no `as_of`):
+
+| | keywords | keywords + vectors |
+|---|---|---|
+| 443 existing questions, broken | 0 (both copies) | 0 (both copies) |
+| held-out multi-hop, every relation in the top 10 | 0 → 9 of 20, p = 0.004 | 0 → 2 of 20, 0 broken |
+| builder multi-hop | 0 → 12 of 40, p = 0.0005 | 0 → 1 of 40, 0 broken |
+| as-of, the day's value first | 0 → 17 of 19 | 0 → 16 of 19 |
+| recall p95 added | 3 to 5 ms (101 → 105) | 0 to 3 ms (212 → 215) |
+| walks cut short on the real graph (depth aside) | 0 of 77 | |
+
+- **Gates:**
+  - zero broken in the update and identifier slices
+  - the net adds at most 25 ms at p95
+  - keyword p95 within 10% of M0's live copy (110 ms), vectors within 10% of 204 ms
+  - truncation under 5%
+- **Not measured:** the as-of-unknown, conflict and decision-history slices are not built. So "zero false assertions under `as_of`" holds by construction (an unknown claim is never walked as true), not by a measured slice.
+- **On this data the two gains do not combine.** Every live claim is undated, so a past `as_of` walks nothing.
+
+**What the copies taught, and what changed because of it:**
+- **A word filter** (keep only claims that share a word with the question) and **a double weight** for the net lifted the builder's set to 27 of 40. But they solved none of the 20 paraphrased questions, so both were dropped.
+- **The records that merely mention a seed**, which the audit adds to the net, broke 3 to 5 of the 443 once entity notes existed: they repeat the keyword search. Only the claims' own evidence is put forward.
+- **Undated relations that the vault never ended** ("X uses NotebookLM", after NotebookLM was removed) led a question asking whether they were "still" used. A question about change now leaves out undated claims, and the claims block marks the rest `undated`.
+- **A name inside a file path or an address** seeded the walk and broke an identifier question. Such a name is no seed now.
+
+## Where M4 departs from the audit
+
+- **No `nets.py` refactor.** The net joins `brain_recall` beside the date net, as the audit's "Into recall" paragraph says, without the `Net` protocol.
+- **No mention records** in the net (above).
+- **Degree is counted from the claims**, capped at the hub threshold, because most entities on a live agent are still names without a note.
+- **Ordering inside a hop.** The audit's "keyword score" is read as the number of question words a claim says.
+
+## M3 live cutover (2026-11-23)
+
+0.14.0 was installed on all three agents behind a fresh inventory and a checked backup of each `brain.db`:
+- **Ledger:** the main agent's grew by its 609 `record_meta.md` lines that link a record, exactly as predicted from the file, and closed none. The other two grew by 0.
+- **Claims:** 83 on the main agent, one per relation line; none on the other two.
+- **Checks:** `brain index --check`, with its rebuild from the files, is in step on all three.
+- **Backups:** journal backups were taken after the cutover.
 
 ## M3 on an isolated copy of the main agent (2026-11-23)
 

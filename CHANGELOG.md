@@ -4,6 +4,21 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+### Added
+- **The graph net (M4).** A question that names an entity also walks the relations around it, two steps out, as one more list in recall's rank fusion.
+  - **Seeds.** A name in the question is a seed when an entity note holds it as an alias or a claim names it. A name inside a path, file name or address is not.
+  - **The walk** is bounded in work as well as in output, so a hub with thousands of relations costs the same as any other entity. Every cut is reported in `graph.note`: extra seeds, a full frontier, a hub reached on a path, a full scan window, the per-entity fan, or the edge total.
+  - **What it adds.** Each relation it finds comes with its `path` (`Brain-Core —USES(graph-database)→ Kuzu`). A `claims` block lists up to 10 walked claims, each with its validity on the day asked: true, false or unknown. An undated claim is marked `undated`.
+  - **Questions about change** ("still", "originally", "used to") keep ended claims. They leave out undated ones, which say nothing about when they held.
+- **`brain_recall(as_of=DAY)`**, in the MCP tool too:
+  - Claims are walked only when they were true on that day.
+  - A value replaced after that day, by a `supersedes` link or a "Fact changed" banner, is not marked superseded and leads its replacement (`found_by: as_of`).
+- **`run_gold.py --graph`**, a per-question `as_of`, and an `as-of` slice.
+
+### Changed
+- `recall.graph` is on by default. With `recall.graph: false`, recall is exactly 0.14.0's.
+- To roll back to 0.14.0, remove `recall.graph` from `brain.yaml` first: 0.14.0 refuses the key.
+
 ## [0.14.0] - 2026-11-23
 
 ### Added
