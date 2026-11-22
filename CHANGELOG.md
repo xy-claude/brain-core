@@ -7,6 +7,10 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 ### Changed
 - **A reflection never makes a claim accepted.** Its `(parents: …)` must still name claims already held (else it is reported), but a parent that exists need not support the conclusion. So a reflection claim stays a candidate until the relation is stated in `relations.md`. The claims tier is recomputed once after the upgrade (rules version 2).
 
+### Added
+- **Answers about a past day are marked, result by result.** With `as_of`, a record dated after that day carries `after_as_of`, and a relation carries `as_of_validity`: whether its claim held that day (true, false or unknown). A relation's own date is when it was recorded, never when it held. Nothing is re-ordered or dropped.
+- **A name several entity notes hold is not walked.** The graph net reports it as `graph.ambiguous`, with a note to use a name only one entity holds; before, it seeded the walk as the placeholder its claims carried.
+
 ## [0.16.1] - 2026-11-23
 
 ### Changed

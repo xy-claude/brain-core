@@ -79,7 +79,10 @@ def build_server(agent: Agent) -> FastMCP:
             Field(
                 description="YYYY-MM-DD: the day the question is about ('what did we use on "
                 "2026-10-20?'). Claims are those true that day; a value replaced later is not "
-                "marked superseded."
+                "marked superseded. Each result says how it stands to that day: a record dated "
+                "after it carries `after_as_of`, and a relation its claim's `as_of_validity` "
+                "(true, false or unknown). Answer from what held that day; say unknown when "
+                "nothing does."
             ),
         ] = None,
     ) -> dict[str, Any]:

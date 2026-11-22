@@ -178,6 +178,18 @@ class GraphNet:
                 info["hubs"] = w.hubs
         return hits[:candidates], {"paths": paths, **info}
 
+    def validity(self, rid: str, day: date, today: date) -> str:
+        """Whether the claim a relation record supports held on ``day``: true, false or
+        unknown (no claim, or no row that speaks to that day)."""
+        ids = [
+            r[0]
+            for r in self.claims.db.fetchall(
+                "SELECT DISTINCT claim_id FROM claim_evidence WHERE record_id = ?", (rid,)
+            )
+        ]
+        got = {c.at(day, today) for c in self.claims.load(ids).values()}
+        return "true" if "true" in got else "false" if got == {"false"} else "unknown"
+
     def _record(self, source: str, rid: str, first: Any) -> tuple[Record, str] | None:
         """The record an evidence row stands in: a relations.md line as the graph store
         shows it, anything else from the index."""

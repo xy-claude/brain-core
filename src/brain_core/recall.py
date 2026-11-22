@@ -434,6 +434,15 @@ def brain_recall(
         _item(r, s, sc, fmt, stale(r), found_by.get(r.id), paths.get(r.id))
         for r, s, sc in ordered[offset : offset + limit]
     ]
+    if as_of is not None:
+        # asked about a day, every result says how it stands to that day; none is dropped,
+        # for a record about another time can still be the answer (H.4)
+        for (r, _s, _sc), item in zip(ordered[offset : offset + limit], results, strict=True):
+            if r.kind == "relation":
+                # its date is when it was recorded, not when it held: its claim says that
+                item["as_of_validity"] = graph.validity(r.id, as_of, today) if graph else "unknown"
+            elif not r.undated and r.date > as_of:
+                item["after_as_of"] = True
     if index and q_tok and lead:
         # written memory leads the list: it alone says whether the question is answered. Raw
         # overlap would let a record with only the question's common words count as an answer
