@@ -96,7 +96,7 @@ Each followed the same procedure: no brain server running, a read-only inventory
 ## Where M4 departs from the audit
 
 - **No `nets.py` refactor.** The net joins `brain_recall` beside the date net, as the audit's "Into recall" paragraph says, without the `Net` protocol.
-- **No mention records** in the net (above).
+- **No mention records in the net** (above). M2's `mentions` table is still built and kept current, and `brain entities list` counts from it; the graph net only does not add the records it lists to recall's ranking.
 - **Degree is counted from the claims**, capped at the hub threshold, because most entities on a live agent are still names without a note.
 - **Ordering inside a hop.** The audit's "keyword score" is read as the number of question words a claim says.
 

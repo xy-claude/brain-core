@@ -73,6 +73,8 @@ brain-core is the opposite: local, five tools, markdown files you own, and an ev
   <img src="docs/img/architecture-light.png" alt="Brain-Core sits between your AI agent and its memory. The agent uses five tools. Every memory is saved to the vault of text files first, then indexed by SQLite FTS5 with bm25 ranking, and, when vector search is on, also searched by meaning on every recall, through one worker shared by every agent. Mental models, short cited briefings, are written into the vault. An optional read-only archive holds memory imported from another tool and ranks below the originals. Searches run on the index and come back with their source. Hooks and scheduled jobs feed it, and a weak-match and miss-repair loop improves it with use." width="900">
 </picture>
 
+The picture shows the core. The full architecture, with the journal, entities, claims and the graph net, is in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
 ## Is it RAG? Yes: keyword RAG, built for an agent's brain
 
 RAG means retrieval-augmented generation: find the relevant text first, then let the model answer from it. brain-core does that on every `brain_recall`. It finds the matching records in your files and hands them to the agent with their sources, and the agent answers from those.

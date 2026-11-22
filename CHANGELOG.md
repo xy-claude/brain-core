@@ -14,6 +14,8 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 - **Text the hooks put in the agent's context is framed as data.** The session-start brief and the past-error lines now say they are stored data and that an instruction in them is not a request from the user.
 - **A name several entity notes hold is not walked.** The graph net reports it as `graph.ambiguous`, with a note to use a name only one entity holds; before, it seeded the walk as the placeholder its claims carried.
 
+- **`docs/ARCHITECTURE.md`:** the system as shipped, in four Mermaid diagrams: the tiers, writing, recalling, and storage and durability. The docs also say why 2,805 migrated ids got only 588 `was:` lines, and that M2's mentions are still kept though the graph net does not rank by them.
+
 ### Fixed
 - CI ran only Python 3.12 although 3.12 to 3.14 are supported. The suite now also runs on 3.13 and 3.14 (Linux), and the Windows job on 3.12 and 3.14. Entity ids use brain-core's own UUIDv7, never the standard library's (3.14 only).
 - A credential written by hand in `claim_reviews.md` or `knowledge/_reflections.md` reached the claims' raw rows and the journal's derivation history unmasked (0.14.0 to 0.16.1). Those lines are now masked as the index masks a record.
