@@ -28,5 +28,13 @@
 | 23 | Labelled eval (0.5.0): `run_gold.py`, 143 questions on a real vault, labelled by a model; reworded questions 13 → 51 of 75; `from_repairs.py` grows the set from real misses | ✅ |
 | 24 | Smaller session start (0.5.0): the brief's session replay cut from 3,551 to 330 tokens, the SessionStart hook capped at `session.brief_tokens` | ✅ |
 | 25 | 0.5.1: dates asked in words are found (date questions 4 → 7 of 8); the memory traits read the labelled eval | ✅ |
+| 26 | Knowledge program M0 (2026-11-22): the measured baseline, the label review (AI-reviewed, accepted by the owner), the census — `docs/M0_BASELINE.md` | ✅ |
+| 27 | M1a (0.10.0): relations live in `vault/relations.md`; the table mirrors them for older versions | ✅ |
+| 28 | M1b (0.11.0): notes and archive record ids independent of folder paths; `brain index --migrate-ids` | ✅ |
+| 29 | M1c (0.12.0): `data/journal.db`, when the vault held each version of each record; daily backup, restore with the gap recorded | ✅ |
+| 30 | M2 (0.13.0): the entity registry: entity notes with stable ids, aliases, mentions, merges by hand only | ✅ |
+| 31 | M3 (0.14.0): claims, evidence and time: three-valued validity, reviews, conflicts, `brain claims --as-of / --known-at`, `brain index --check` | ✅ |
+| 32 | M4 (0.15.0): the graph net in recall, `brain_recall(as_of)`; eval gate on AI-written labels | ✅ |
+| 33 | M7 (0.16.0): contradictions said when a relation is saved; provisional and reflection claims; THREAT_MODEL gates 1 to 3 built for claims | ✅ |
 
 Rows 10 and 14 record what was measured at the time: a substring judge on questions written in the notes' own words. Row 23 is the measure that replaced it.
