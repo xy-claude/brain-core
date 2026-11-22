@@ -4,6 +4,8 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-11-23
+
 ### Changed
 - **A reflection never makes a claim accepted.** Its `(parents: …)` must still name claims already held (else it is reported), but a parent that exists need not support the conclusion. So a reflection claim stays a candidate until the relation is stated in `relations.md`. The claims tier is recomputed once after the upgrade (rules version 2).
 
@@ -13,7 +15,6 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 - **History coverage is reported apart from consistency.** `brain journal status`, `brain doctor` and `brain index --check` add a `history:` line: since when records and claims are recorded, and any window lost before a restore (one loss is one gap). `brain index --check` passing means brain.db agrees with the files and the journal; it never meant the history is complete, and a gap does not fail it.
 - **Text the hooks put in the agent's context is framed as data.** The session-start brief and the past-error lines now say they are stored data and that an instruction in them is not a request from the user.
 - **A name several entity notes hold is not walked.** The graph net reports it as `graph.ambiguous`, with a note to use a name only one entity holds; before, it seeded the walk as the placeholder its claims carried.
-
 - **`docs/ARCHITECTURE.md`:** the system as shipped, in four Mermaid diagrams: the tiers, writing, recalling, and storage and durability. The docs also say why 2,805 migrated ids got only 588 `was:` lines, and that M2's mentions are still kept though the graph net does not rank by them.
 
 ### Fixed
