@@ -63,7 +63,7 @@ The full technical change log (problem, root cause, correction, modules, schema,
 | Graph retrieval | Truncation reported as reasons, `depth` included; on 292 random graphs every omission inside the depth was reported; bounded equals exhaustive on the real graph from all 75 entities | **Validated** | H.3 |
 | M0 evaluation | Scores provisional; the human review is pending (an AI-assisted pre-review is kept apart); 182 questions are affected by path-dependent ids; the frozen snapshot measured without 588 search-key lines | **Not complete** | M0, `docs/M0_BASELINE.md` |
 
-**Recommendation: NOT READY FOR M1.** The design is ready, but M0 is not: no person has reviewed the labels yet. M1 also needs the owner's decisions (R).
+**Recommendation: NOT READY FOR M1.** The design is ready, but M0 is not: no person has reviewed the labels yet. M1 also needs the owner's decisions (R). *(Superseded on 2026-11-22: READY FOR M1, see R.)*
 
 ### Revision 2.3: three concerns verified, all three confirmed and corrected
 
@@ -75,7 +75,7 @@ Each concern was first reproduced against the unmodified 2.2 prototype code, the
 | **B.** Two undated claims | **Confirmed.** The conflict ran from today with no end, while both claims are UNKNOWN tomorrow. The stored row also changed with the calendar, so the computed tier was not a pure function of the vault | Conflicts carry a `scope`: `interval` for dated windows, `current` where an undated row is needed, active only on whatever day is today. `derive()` no longer takes a date. A claim pair can have several conflict rows | checker 13 (B); 14 (property: a conflict is active exactly when both claims are TRUE, on random claim pairs) |
 | **C.** Identical lines with different per-copy metadata | **Confirmed.** An identical copy inserted above moved `valid_from`, `valid_to` and `event_date` to the wrong lines without any warning | An occurrence is "the k-th copy of this text in this source", not a physical line. A per-copy meta line applies only while those copies are unchanged since it was written (ledger). Otherwise it is reported (`occurrence_meta_ambiguous` or `_dangling`) and **not applied**; the record-level meta is used, and the owner re-anchors (G.2) | `occurrence_meta23.py` C1–C7 |
 
-The recommendation stays **NOT READY FOR M1**: the design is ready, and the human label review is still pending (M0).
+The recommendation stays **NOT READY FOR M1**: the design is ready, and the human label review is still pending (M0). *(Superseded on 2026-11-22: READY FOR M1, see R.)*
 
 ---
 
@@ -131,7 +131,7 @@ It is about 9,900 lines of Python (`src/brain_core`). It has 571 passing tests, 
 - **Evidence.** Hindsight already runs an entity graph, a temporal net, fusion of four searches and a cross-encoder reranker. On the reworded slice it found the same 50 of 75 questions as keywords plus search keys, at about 2 s a query against about 45 ms (README, "Does it work?"). The data does not yet show that a heavier engine pays off here.
 - **Operations.** Neo4j alone needs a JVM service with 2–8 GB of RAM **[E]**.
 
-**Status after M0 [V].** M0 ran on isolated copies (`docs/M0_BASELINE.md`). Its retrieval scores reproduce the README, but they rest on model-written labels, so they stay **provisional** until a person has checked the 104-question packet it prepared.
+**Status after M0 [V].** M0 ran on isolated copies (`docs/M0_BASELINE.md`). Its retrieval scores reproduce the README, but they rest on model-written labels, so they stay **provisional** until a person has checked the 104-question packet it prepared. **Update, 2026-11-22:** the owner waived the person check for M0. AI reviewers answered the packet, and the owner accepted their answers unchecked (`docs/M0_BASELINE.md`, section 9). M4's gate still needs labels a person has checked (ADR-010).
 
 **Next:** that review, then M1, only with the owner's approval of each of its three work packages (P). Revision 2.2 changes no code; it corrects the design and validates it in throwaway prototypes.
 
@@ -2278,7 +2278,7 @@ MCP over stdio is the API, and there is no remote caller. A read-only HTTP wrapp
 
 ### O.5 Process and success criteria [P]
 
-1. **Before anything else (M0):** a person checks ≥ 100 labels, stratified by slice, and the new slices' gold. Report how often labels change; the size of that number decides how far any earlier result can be trusted. M0 prepared the packet (104 questions). Until a person has checked it, the M0 scores, and every comparison built on them, are **provisional**.
+1. **Before anything else (M0):** a person checks ≥ 100 labels, stratified by slice, and the new slices' gold. Report how often labels change; the size of that number decides how far any earlier result can be trusted. M0 prepared the packet (104 questions). Until a person has checked it, the M0 scores, and every comparison built on them, are **provisional**. **Update, 2026-11-22:** the owner waived the person check for M0. AI reviewers answered the packet, and the owner accepted their answers unchecked (`docs/M0_BASELINE.md`, section 9). M4's gate still needs labels a person has checked (ADR-010).
 2. Keep the existing split discipline: tune on dev, open held-out once per stage, compare pairwise with `compare.py`.
 3. **Ship gate for any retrieval change:**
    - held-out found@10 must not fall, and new slices must gain with McNemar p < 0.05, or with fixed ≥ 3 × broken where n is too small
@@ -2304,7 +2304,7 @@ MCP over stdio is the API, and there is no remote caller. A read-only HTTP wrapp
 
 Each milestone ships on its own and changes nothing by default unless it says so. Every one ends with `ruff`, `mypy --strict`, `pytest` and a `run_gold.py` comparison against the previous milestone.
 
-### M0: Measurement and validation — not complete (human label review pending)
+### M0: Measurement and validation — complete 2026-11-22 (labels AI-reviewed, accepted by the owner unchecked)
 
 | | |
 |---|---|
@@ -2315,7 +2315,7 @@ Each milestone ships on its own and changes nothing by default unless it says so
 | **Required to finish** | the five completion criteria below. Separately, before M4 (not part of M0's completion): about 40 multi-hop and 40 temporal questions, person-checked |
 | **Performance gates** | none (M0 measures them) |
 | **Rollback** | nothing to roll back: copies only |
-| **Completion criteria: M0 is not reported complete until all five hold** | <ol><li>A person has reviewed all 104 items in `local/audit-m0/human_review/M0_HUMAN_REVIEW_PACKET.md`. The AI-assisted pre-review is shown as a hint only and never counts.</li><li>The owner has approved every correction to the gold labels.</li><li>The baseline is recalculated on the corrected labels, written to **new** files (`questions-v2.yaml`, `results/*-v2.json`), with paired fixed and broken counts against the historical runs.</li><li>The results are preserved and reproducible: checksums added to `MANIFEST.json`, the exact commands recorded, nothing earlier overwritten.</li><li>Concerns A, B and C are resolved (done in 2.3) or explicitly accepted as known risks.</li></ol> |
+| **Completion criteria: M0 is not reported complete until all five hold** (all five hold as of 2026-11-22; the owner waived criterion 1, see `docs/M0_BASELINE.md`, sections 8 and 9) | <ol><li>A person has reviewed all 104 items in `local/audit-m0/human_review/M0_HUMAN_REVIEW_PACKET.md`. The AI-assisted pre-review is shown as a hint only and never counts.</li><li>The owner has approved every correction to the gold labels.</li><li>The baseline is recalculated on the corrected labels, written to **new** files (`questions-v2.yaml`, `results/*-v2.json`), with paired fixed and broken counts against the historical runs.</li><li>The results are preserved and reproducible: checksums added to `MANIFEST.json`, the exact commands recorded, nothing earlier overwritten.</li><li>Concerns A, B and C are resolved (done in 2.3) or explicitly accepted as known risks.</li></ol> |
 | **Historical results, kept as they are** | 295/446 (keywords + keys) and 346/446 (+ vectors) of 2026-11-21, on model-written labels, are preserved as the historical, provisional baseline. They are never edited or overwritten |
 | **Definition of done** | the five criteria hold, and the owner approves the R decisions M1 needs |
 
@@ -2524,9 +2524,12 @@ Three work packages, each approved separately. Order: M1a and M1b before M1c, so
 
 ## R. Final recommendations
 
-**Recommendation: NOT READY FOR M1.** The design is ready: every P0 and P1 item is resolved and validated in prototypes (header; `docs/AUDIT_2_2_VALIDATION.md`). Two gates the owner set are still open:
-1. **M0 is not complete.** A person has not yet reviewed the 104 labels. The AI-assisted pre-review is a hint, not validation.
-2. **Each M1 package needs its own approval.** The owner's decisions below were taken on 2026-11-22, as recommended, except item 16, which stays open (`docs/M1_DECISION_CHECKLIST.md`, section 0).
+**Recommendation: READY FOR M1** (2026-11-22).
+- **The design is ready.** Every P0 and P1 item is resolved and validated in prototypes (header; `docs/AUDIT_2_2_VALIDATION.md`).
+- **M0 is complete.** The owner waived the human label review and accepted AI answers to the 104-question packet, without checking them. The corrected baseline is 298 and 345 of 443 (`docs/M0_BASELINE.md`, section 9). Its labels are AI-reviewed, not human-validated.
+
+Ready is not authorised:
+1. **Each M1 package needs its own approval.** The owner's decisions below were taken on 2026-11-22, as recommended, except item 16, which stays open (`docs/M1_DECISION_CHECKLIST.md`, section 0).
 
 **For the owner:** the human review packet is at `local/audit-m0/human_review/M0_HUMAN_REVIEW_PACKET.md` (private, git-ignored). The decisions M1 needs, with M1a, M1b and M1c as separate approvals, are in `docs/M1_DECISION_CHECKLIST.md`.
 
@@ -2536,9 +2539,8 @@ Three work packages, each approved separately. Order: M1a and M1b before M1c, so
 - revision 2.2's validation, in throwaway prototypes
 
 **Next, in order:**
-1. the human label review and a re-scored baseline
-2. M1a, M1b, M1c, each only with explicit approval (the owner's decisions are taken)
-3. M2, M3, M4
+1. M1a, M1b, M1c, each only with explicit approval (the owner's decisions are taken; M0 is complete)
+2. M2, M3, M4
 
 M5–M7 stay optional and evidence-driven.
 

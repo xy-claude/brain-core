@@ -3,8 +3,8 @@
 **Date:** 2026-11-22. **Applies to:** `docs/KNOWLEDGE_ARCHITECTURE_AUDIT.md` revision 2.3, section R and milestone M1.
 
 **Status:**
-- **M1 is not authorised.**
-- **M0 is not complete:** the human label review is pending.
+- **M1 is not authorised.** M1a needs its own approval (section 2).
+- **M0 is complete as of 2026-11-22,** with the human label review waived by the owner: the labels are AI-reviewed, not human-validated (`docs/M0_BASELINE.md`, section 9).
 - **The owner's decisions were taken on 2026-11-22** (section 0). M1a, M1b and M1c still each need their own approval.
 
 Each of M1a, M1b and M1c is approved on its own, by ticking its line below. Nothing in this file has been implemented.
@@ -17,7 +17,7 @@ Each of M1a, M1b and M1c is approved on its own, by ticking its line below. Noth
 | 2 | Notes and archive root names | (a) the folder's own name; `brain doctor` reports a rename |
 | 3 | Journal backup | (a) `~/Backups/brain-core/<agent>/journal-YYYY-MM-DD.db`, keeping 14 |
 | 14 | Transcript rows lost when Claude Code deletes transcripts | (a) accepted |
-| 15 | Who reviews the 104 labels; S3 | The owner reviews the main packet. S3 stays off |
+| 15 | Who reviews the 104 labels; S3 | **Changed the same day.** The owner had Claude answer the packet, then accepted the AI answers as they are, without checking them. The corrected labels are AI-reviewed, not human-validated (`docs/M0_BASELINE.md`, section 9). S3 stays off |
 | 19 | After M1b | (a) re-baseline S0 and S2, and report the two absent-question changes |
 | 4–13, 17, 18, 20 | The later decisions (section 3) | The recommended defaults are accepted, to be revisited before the milestone named |
 | 16 | Fill the live agent's vectors | **Open.** It has no default: it changes the live agent, and is done only when the owner asks |
@@ -77,10 +77,10 @@ Each of M1a, M1b and M1c is approved on its own, by ticking its line below. Noth
 | | |
 |---|---|
 | **What it means** | After M1b, run the eval again (S0 and S2) on corrected labels, and record the results as the new baseline. Do not count M1b as an improvement or a regression |
-| **Why it matters** | The frozen snapshot measured notes and archive recall **without** their 588 search-key lines, because those keys use the live agent's absolute paths (G11). On isolated copies:<ul><li>M1b's new ids alone reproduce M0 question for question.</li><li>With the keys finally attached, S0 moves 295 → 298 (12 fixed, 9 broken) and S2 346 → 347 (7 fixed, 6 broken), with two more false answers on questions that are not in memory</li></ul> |
+| **Why it matters** | The frozen snapshot measured notes and archive recall **without** their 588 search-key lines, because those keys use the live agent's absolute paths (G11). On isolated copies:<ul><li>M1b's new ids alone reproduce M0 question for question.</li><li>With the keys finally attached, on the historical labels, S0 moves 295 → 298 (12 fixed, 9 broken) and S2 346 → 347 (7 fixed, 6 broken), with two more false answers on questions that are not in memory</li></ul> |
 | **Options** | (a) re-baseline; (b) gate M1b on "no regression" (it would fail on those two absent questions, though the cause is keys that should always have applied); (c) do not attach the old keys |
 | **Recommended default** | **(a) re-baseline**, and report the two absent-question changes explicitly |
-| **Risk of the recommendation** | The new baseline is a moving point; M4's gate must compare with it, not with 295/346 |
+| **Risk of the recommendation** | The new baseline is a moving point; M4's gate must compare with it, not with the M0 baseline (298/345 of 443, or the historical 295/346 of 446) |
 | **Milestone** | M1b, then M4's gate |
 | **Explicit approval required** | **Yes** |
 
@@ -91,6 +91,7 @@ Each of M1a, M1b and M1c is approved on its own, by ticking its line below. Noth
 | **What it means** | A person must review the 104 questions in `local/audit-m0/human_review/` before M0 is complete. S3, the model judge, would send questions and memory records to Anthropic |
 | **Recommended default** | You review the main packet, and optionally give the blind copy to an independent reviewer. S3 stays off until you approve it |
 | **Explicit approval required** | **Yes**, for S3 |
+| **Taken, 2026-11-22** | The owner waived the human review: Claude answered the packet, and the owner accepted the answers unchecked. S3 stays off |
 
 ## 2. The three work packages
 
@@ -150,7 +151,11 @@ None of these is needed for M1. Each has a recommended default in the audit (sec
 
 ## 4. Readiness
 
-**NOT READY FOR M1.** The design is ready: revision 2.3 resolved the last three concerns, each with regression tests, and the owner's decisions are taken (section 0). Two things are open:
+**READY FOR M1** (2026-11-22).
+- **The design is ready.** Revision 2.3 resolved the last three concerns, each with regression tests.
+- **The owner's decisions are taken** (section 0).
+- **M0 is complete.**
 
-1. M0 is not complete: the owner must review the 104 labels, approve the corrections, and re-score.
-2. After that, M1a needs its own approval (section 2), and later M1b and M1c theirs.
+One caveat comes with it: the corrected baseline, 298 and 345 of 443, rests on labels that AI reviewed and the owner accepted without checking. No person has validated them.
+
+**Ready is not authorised.** M1a starts only when the owner ticks its approval (section 2). M1b and M1c each wait for their own approval after that.

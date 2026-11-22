@@ -31,6 +31,12 @@ Labels:
   1. **M0 is not complete.** No person has reviewed the 104 labels. An AI-assisted pre-review exists, but it is kept apart and is not validation.
   2. **M1 needs the owner's decisions**, at least audit R items 1–3, 14 and 19.
 
+**Update, 2026-11-22: both gates are closed, and the verdict is now READY FOR M1.**
+- **The decisions are taken.**
+- **M0 is complete.** The owner waived the human review and accepted AI answers to the label packet unchecked, so the labels are AI-reviewed, not human-validated.
+
+See `docs/M1_DECISION_CHECKLIST.md`, sections 0 and 4, and `docs/M0_BASELINE.md`, section 9. Each M1 package still needs its own approval.
+
 ## 2. Technical change log
 
 ### P0-01: Evidence model and SQLite schema inconsistency

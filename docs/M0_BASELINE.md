@@ -4,7 +4,7 @@
 **Plan:** `docs/KNOWLEDGE_ARCHITECTURE_AUDIT.md`, section P, milestone M0. M0 only measures: no schema change, no migration, no change to how brain-core behaves.
 **Privacy:** this file holds counts and scores only. The questions, record text, predicate and entity names, and the label-review packet stay under `local/audit-m0/`, which git ignores.
 
-**All retrieval scores here are provisional.** They rest on labels written by a model. They stay provisional until a person has checked the 104-question review packet (section 2), and no engine comparison should rest on them before then (audit O.5, revision 2.2).
+**Scores and labels.** Sections 1 to 7 report the historical, provisional scores (295 and 346 of 446), which rest on labels written by a model. On 2026-11-22 the 104-question review sample was corrected, and the baseline re-scored on it (section 9): **298 and 345 of 443**. Those corrections were answered by AI and accepted by the owner without checking them. **No person has validated any label.** Until M4, comparisons use the section 9 baseline, with that caveat. M4's gate still needs labels a person has checked (audit O.5 and ADR-010).
 
 ## Summary
 
@@ -16,7 +16,7 @@
 | Do the traversal limits bind? | **No.** A 2-hop walk from each of the 75 entities finds at most 49 edges, reads at most 74 rows, takes at most 0.8 ms, and never truncates. `hub_degree` 200 and `fan` 20 are safety limits here, not tuning |
 | Is a file watcher needed? | **No.** A sync with no change takes 5 ms; a full parse of every markdown store takes 2.5 s |
 | Is recall fast enough? | Snapshot, keywords: p50 49 ms, p95 74 ms. **Live** copy, keywords plus transcripts: p50 73 ms, **p95 110 ms**, already above the audit's 100 ms gate (O.5). The gate needs restating against this baseline. Revision 2.2 does: the gate is now baseline-relative (p95 at most 10% above these numbers), and 100 ms stays a target |
-| Are the labels trustworthy? | **Not checked yet.** A 104-question packet is ready for a person (section 2); an AI-assisted pre-review is kept apart and is not validation (section 7) |
+| Are the labels trustworthy? | **Partly corrected, never checked by a person.** AI reviewers changed 50 of the 104 sampled labels (48%), and the owner accepted their answers without checking them. That moved only 7 keyword outcomes and 3 vector outcomes (section 9). The other 342 questions keep their model-written labels |
 | Anything wrong that M0 was not looking for? | **Yes, two things.** Notes and archive record ids embed the absolute folder path (audit G11). The live agent has a current vector for only 17% of its records (section 5) |
 
 ## 1. Baseline recall
@@ -49,12 +49,12 @@
 - **S2 agrees with history too:** 346, the README's 0.9.0 vectors figure. Against S0 it fixes 56 questions and breaks 5 (reworded +31, multi +8, p < 0.001 overall). Vectors do nothing for the absent slice (38 of 57 flagged either way), as the README says: a vector search returns its nearest records for any question.
 - **S0 agrees with history.** 295 against the 2026-11-14 keyword run's 292: 7 questions fixed, 4 broken, p 0.55. That is no significant change, and it matches the README's "keywords 295 against 292".
 
-## 2. Label review: prepared, waiting for a person
+## 2. Label review: done by AI at the owner's request (section 9)
 
 - **The sample.** `local/audit-m0/label_review.md` and `label_review.csv` hold 104 questions: 24 reworded, 6 real, 6 same, 14 update, 14 temporal, 14 multi, 14 absent and 12 identifier. 47 of them are baseline misses, because a wrong label usually shows up as a false miss.
 - **What each entry shows:** the question, its gold records with their text, and today's keyword top 10.
 - **The reviewer marks** each one *right*, *wrong*, *incomplete* or *ambiguous*, and adds any corrected gold.
-- **Status.** Not done. Until it is, every score above, and every score in the README, rests on labels written by a model. The change rate this review finds sets how much weight they carry (audit ADR-010).
+- **Status.** Done on 2026-11-22 by AI reviewers, and accepted by the owner unchecked (section 9). The scores above, and the README's, rest on the uncorrected model-written labels.
 
 ## 3. Census of the live agent (copy taken 2026-11-21)
 
@@ -132,7 +132,7 @@ The snapshot of 2026-11-14 held 5,821.
 
 ## 7. Added in validation for audit revision 2.2
 
-**Status: M0 is not complete.** No person has reviewed the labels, so every score in this file is provisional. The completion criteria are in section 8.
+**Status (updated 2026-11-22): M0 is complete,** with criterion 1 waived by the owner (sections 8 and 9).
 
 **Where the labels came from.**
 - The first 143 questions were written by a model reading the records; 11 of them use the owner's own past words (README).
@@ -186,27 +186,88 @@ With the keys attached, the absent slice goes 38 → 36 in both, and S0 breaks o
 - `local/audit-m0/MANIFEST.json` holds the sha256 of the frozen questions (identical to M0's copy), the frozen 2026-11-14 baseline and every M0 result file. No earlier run was overwritten.
 - Opening the frozen database read-only updated its WAL index file (`brain.db-shm`). Its data file and WAL are unchanged since 2026-11-14.
 
-**Still required to finish M0:**
-1. the human review
-2. a re-scored baseline on the corrected labels
+**Then still required (updated 2026-11-22):**
+1. ~~the human review~~: done by AI and accepted unchecked (section 9)
+2. ~~a re-scored baseline on the corrected labels~~: done (section 9)
 3. about 40 multi-hop and 40 temporal questions, person-checked, before M4
 4. optionally S3, with the owner's approval
 
 ## 8. M0 completion criteria (from 2026-11-22)
 
-**M0 is not reported complete until all five hold:**
+**M0 is complete as of 2026-11-22.** All five hold, with criterion 1 waived by the owner:
 
 | # | Criterion | State on 2026-11-22 |
 |---|---|---|
-| 1 | A person has reviewed all 104 questions in `local/audit-m0/human_review/M0_HUMAN_REVIEW_PACKET.md` (git-ignored). The AI-assisted pre-review is a hint only and never counts | **pending.** The packet is built, with 104 empty decision blocks; a blind copy exists for an independent reviewer |
-| 2 | The owner has approved every correction to the gold labels | **pending** |
-| 3 | The baseline is recalculated on the corrected labels, written to new files (`questions-v2.yaml`, `results/s0-v2.json`, `results/s2-v2.json`), with paired fixed and broken counts against the historical runs | **pending.** `apply_review.py` and the commands are ready (`local/audit-m0/human_review/README.md`); tested only on synthetic, machine-filled copies of the packet |
-| 4 | The results are preserved and reproducible: checksums added to `MANIFEST.json`, commands recorded, nothing earlier overwritten | **pending** for the new results. The historical ones are checksummed already |
+| 1 | A person has reviewed all 104 questions in `local/audit-m0/human_review/M0_HUMAN_REVIEW_PACKET.md` (git-ignored). The AI-assisted pre-review is a hint only and never counts | **waived by the owner, 2026-11-22.** The owner asked Claude to answer the packet, then accepted the AI answers as they are, without checking them. No person reviewed the labels: the corrected labels are **AI-reviewed, not human-validated** (section 9). The main packet stays blank, so a person can still review it later |
+| 2 | The owner has approved every correction to the gold labels | **done, by acceptance.** The owner accepted every AI correction and drop as a whole, unchecked (section 9) |
+| 3 | The baseline is recalculated on the corrected labels, written to new files (`questions-v2.yaml`, `results/s0-v2.json`, `results/s2-v2.json`), with paired fixed and broken counts against the historical runs | **done.** 298 and 345 of 443; paired against the historical runs, keywords: 6 fixed and 1 broken; vectors: 2 fixed and 1 broken (section 9) |
+| 4 | The results are preserved and reproducible: checksums added to `MANIFEST.json`, commands recorded, nothing earlier overwritten | **done.** 10 new checksums were added to `MANIFEST.json`: the accepted draft, the four answer files, `questions-v2.yaml`, `decisions.json` and the new results. The 11 earlier entries are unchanged, and the historical files still match them |
 | 5 | Concerns A, B and C are resolved or explicitly accepted as known risks | **done.** All three were confirmed and corrected in audit revision 2.3, with regression tests |
 
 **Historical results, kept as they are.** 295/446 (keywords + keys) and 346/446 (+ vectors), measured on 2026-11-21 on model-written labels, are the historical, provisional baseline. They and their result files (`local/audit-m0/results/s0.json`, `s2.json`) are never edited or overwritten. Corrected scores go to new files beside them.
 
 S3 is not part of M0's completion and needs explicit approval, because it sends questions and records to Anthropic.
+
+## 9. Label review outcome and corrected baseline (2026-11-22)
+
+**Provenance: AI-reviewed, not human-validated.**
+- **Who answered.** The owner asked Claude to answer the 104-question packet. Four Claude agents did it, with one shared written rule set taken from the original labelling brief, working from the blind packet so the earlier pre-review did not anchor them.
+- **Acceptance.** The owner accepted the answers as they are, without checking them. That includes two stricter labelling choices:
+  - complete `stale` lists on 7 update questions
+  - very wide gold lists on 3 questions, of 11, 28 and 35 records
+- **Privacy.** The questions and records went through the Claude session to Anthropic, at the owner's request. S3, the model judge, was not run.
+- **Where the record is.** The accepted packet is `local/audit-m0/human_review/ai_draft/M0_REVIEW_PACKET_AI_ANSWERED.md`. The main packet stays blank, so a person can still review it later.
+
+**What changed.**
+- **Verdicts:** 54 correct, 41 incomplete, 6 incorrect, 3 ambiguous.
+- **Actions:** 54 kept, 47 corrected, 3 dropped (2 reworded, 1 identifier).
+- **Agreement:** the verdict matches the earlier AI pre-review on 77 of 104.
+
+| Labels changed | absent | multi | temporal | update | identifier | reworded | same | real |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| of those sampled | 0/14 | 1/14 | 6/14 | 8/14 | 7/12 | 17/24 | 5/6 | 6/6 |
+
+- **Most corrections add copies to the gold** (146 gold ids added, half of them archive copies, plus 33 stale ids). The original labeller often missed copies the brief required.
+- **The rate overstates the whole set.** 47 of the 104 were baseline misses, chosen because a wrong label usually shows up as a miss.
+
+**Checks on the corrected labels.**
+- Every added id is in the snapshot index, in a store both eval configs search.
+- `check_labels.py` reports 21 items, none of them a real defect. 19 are record ids that exist in the index but not in the older catalog the checker reads. The other 2 are answers found only in gold records that the catalog lacks.
+- Every new answer substring appears in a gold record.
+- No update question's answer appears in one of its stale records.
+
+**Corrected baseline.** Same snapshot, same `--today 2026-11-14`, offline, no credentials, no outside calls (the CLI tripwire stayed empty).
+
+| Slice | n | S0 keywords + keys | S2 + vectors (RRF) |
+|---|---:|---:|---:|
+| reworded | 158 | 81 | 112 |
+| real | 11 | 10 | 11 |
+| same | 20 | 20 | 20 |
+| update | 37 | 24 | 26 |
+| temporal | 53 | 44 | 47 |
+| multi (every gold) | 53 | 29 | 37 |
+| absent (flagged) | 57 | 38 | 38 |
+| identifier | 54 | 52 | 54 |
+| **all** | **443** | **298** | **345** |
+
+- **Paired against the historical runs, on the same 443 questions:**
+  - S0: 293 → 298, with 6 fixed and 1 broken (p 0.125)
+  - S2: 344 → 345, with 2 fixed and 1 broken (p 1.0). The broken one is an update question, where the stale list grew
+- **The other errors are unchanged:**
+  - false answers: 19 of 57 in both runs
+  - false refusals: 104 of 386
+  - missed with no warning: 64 of 386 for S0 and 40 of 386 for S2
+- **The label errors barely moved the historical scores.** Correcting half of the sampled labels changed 7 keyword outcomes and 3 vector outcomes, because most added copies sit beside a gold record the search already finds, or one it still misses.
+- **This is now the baseline** for M1 to M3. Decision 19's re-baseline after M1b compares with 298 and 345 of 443, not with 295 and 346 of 446.
+- **It is not enough for M4.** M4's gate needs labels a person has checked (audit ADR-010), plus about 40 multi-hop and 40 temporal questions, also person-checked. The owner's waiver covers M0 only.
+
+**Files** (all under `local/audit-m0/`, git-ignored, with checksums in `MANIFEST.json`):
+- `human_review/questions-v2.yaml` and `decisions.json`, both marked as not human-validated
+- `results/s0-v2.json`, `results/s2-v2.json` and `results/s2-v2.txt`
+
+**Commands:**
+- `human_review/apply_review.py --packet human_review/ai_draft/M0_REVIEW_PACKET_AI_ANSWERED.md --accepted-ai`
+- then `run_gold.py` and `compare.py`, as in `human_review/README.md`
 
 ## How it was run
 
