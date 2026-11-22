@@ -619,8 +619,8 @@ def test_who_wrote_a_line_is_its_origin(a: Agent) -> None:
     assert one(got, NEO).origins == {Origin.AGENT}  # `recorded:`: brain-core wrote it
     assert one(got, KUZU).origins == {Origin.USER}  # by hand, read in by a sync
     alt = one(got, NEO, "ALTERNATIVE_TO")
-    assert alt.origins == {Origin.EXTERNAL} and alt.verification is Verification.DERIVED
-    assert alt.lifecycle is Lifecycle.ACCEPTED  # a rule-derived claim, shown as derived (R 6)
+    assert alt.origins == {Origin.EXTERNAL} and alt.verification is Verification.UNVERIFIED
+    assert alt.lifecycle is Lifecycle.CANDIDATE  # provisional until a person states it (M7)
 
 
 def test_two_servers_recompute_one_after_the_other(a: Agent) -> None:

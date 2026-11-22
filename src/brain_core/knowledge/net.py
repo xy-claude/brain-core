@@ -101,11 +101,7 @@ class GraphNet:
             c = held.get(e.claim)
             if c is None:
                 continue
-            first = c.evidence[0]
-            s = _shown(c.key.subject, first.subject_name, self.claims)
-            o = c.key.object_literal or _shown(c.key.object_entity, first.object_name, self.claims)
-            pred = f"{c.key.predicate}({c.key.role})" if c.key.role else c.key.predicate
-            path = f"{s} —{pred}→ {o}"
+            path = display(c, self.claims)
             # the claims that share most words with the question first, then by hop: the
             # walk's own order (rank, id) says nothing about what was asked
             if history and all(p.undated and p.true_from is None for p in c.periods):
@@ -128,6 +124,12 @@ class GraphNet:
                 item["undated"] = True
             if c.disputed_on(day, today):
                 item["disputed"] = True
+                rivals = {
+                    x.other for x in c.conflicts if not x.acknowledged and x.active_on(day, today)
+                }
+                item["disputed_with"] = sorted(
+                    display(r, self.claims) for r in self.claims.load(sorted(rivals)).values()
+                )
             if len(block) < _BLOCK:
                 block.append(item)
             for ev in c.evidence:
@@ -179,6 +181,15 @@ class GraphNet:
                 "graph",
             )
         return self.index.get(rid)
+
+
+def display(c: Any, claims: ClaimIndex) -> str:
+    """`Brain-Core —USES(graph-database)→ Kuzu`: note names, else names as written."""
+    first = c.evidence[0]
+    s = _shown(c.key.subject, first.subject_name, claims)
+    o = c.key.object_literal or _shown(c.key.object_entity, first.object_name, claims)
+    pred = f"{c.key.predicate}({c.key.role})" if c.key.role else c.key.predicate
+    return f"{s} —{pred}→ {o}"
 
 
 def _words(text: str) -> set[str]:

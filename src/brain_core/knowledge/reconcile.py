@@ -33,7 +33,7 @@ from brain_core.knowledge.model import (
     Redirect,
     Review,
 )
-from brain_core.knowledge.rules import META, REVIEWS, Raw
+from brain_core.knowledge.rules import META, REFLECTIONS, REVIEWS, Raw
 from brain_core.storage.db import Database
 
 if TYPE_CHECKING:
@@ -130,7 +130,11 @@ class ClaimIndex:
     def refresh(self) -> None:
         """record_meta.md and claim_reviews.md: their lines are occurrences in the ledger (a
         review is ordered by its line's ledger time), and their rows raw rows like any other."""
-        for source, name in ((META, "record_meta.md"), (REVIEWS, "claim_reviews.md")):
+        for source, name in (
+            (META, "record_meta.md"),
+            (REVIEWS, "claim_reviews.md"),
+            (REFLECTIONS, "knowledge/_reflections.md"),
+        ):
             path = self.vault.root / name
             try:
                 st = path.stat() if path.exists() else None
@@ -158,6 +162,8 @@ class ClaimIndex:
                 continue
             if source == META:
                 rows = rules.meta(text)
+            elif source == REFLECTIONS:
+                rows = rules.reflections(text)
             else:
                 rows, bad = rules.reviews(text)
                 if bad:
@@ -340,8 +346,23 @@ class ClaimIndex:
                         got[f] = t[f]
             return got
 
+        # a reflection rests on claims held from other evidence, or it stays a candidate
+        held_ids = {
+            canonical(key_of(d), merged, onto.get("renames") or {}).id()
+            for d in by["evidence"]
+            if d["origin"] != "reflection"
+        }
         rows: list[tuple[ClaimKey, Evidence]] = []
         for d in by["evidence"]:
+            if d["origin"] == "reflection":
+                parents = d.get("parents") or []
+                if parents and all(any(h.startswith(p) for h in held_ids) for p in parents):
+                    d = {**d, "verification": "derived"}
+                else:
+                    report.append(
+                        f"reflection_unparented {d['subject_name']} —{d['predicate']}→ "
+                        f"{d['object_name']}: names no claim held; stays a candidate"
+                    )
             if d.get("bad_date"):
                 report.append(
                     f"invalid_date {d['source_id']}: {d['bad_date']!r} is no day; read as undated"

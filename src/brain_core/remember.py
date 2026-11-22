@@ -135,7 +135,51 @@ def brain_remember(
         out["status"] = "exists"
     else:
         out["status"] = "written"
+    if kind == "relation" and held and (parts := split_relation(text, extra)):
+        # M7: a relation that cannot hold beside one already held is said now, not found later
+        with contextlib.suppress(Exception):  # the line is written; a failed check is no error
+            if found := _clashes(vault, record_id(relation_text(*parts))):
+                out["contradiction"] = found
     return out
+
+
+def _clashes(vault: Any, rid: str) -> dict[str, Any] | None:
+    """The claims a newly written relation conflicts with on its functional predicate and
+    role (both true on the same days, no person acknowledged it), as the reply's
+    `contradiction`."""
+    claims = getattr(vault, "claims", None)
+    if claims is None:
+        return None
+    vault.read("relation", "sync", 1)  # the line becomes a claim
+    claims.settle()
+    mine = [r[0] for r in claims.db.fetchall(
+        "SELECT DISTINCT claim_id FROM claim_evidence WHERE record_id = ?", (rid,)
+    )]  # fmt: skip
+    today = date.today().isoformat()
+    # a window of two dated claims holds on every day of it; one through an undated line holds
+    # only on today, and only if today falls in it (J.2)
+    others = {
+        r[0]
+        for cid in mine
+        for r in claims.db.fetchall(
+            "SELECT CASE WHEN claim_a = ? THEN claim_b ELSE claim_a END FROM claim_conflicts "
+            "WHERE (claim_a = ? OR claim_b = ?) AND acknowledged = 0 AND (scope = 'interval' OR "
+            "((overlap_from IS NULL OR overlap_from <= ?) AND (overlap_to IS NULL OR ? < "
+            "overlap_to)))",
+            (cid, cid, cid, today, today),
+        )
+    }
+    if not others:
+        return None
+    from brain_core.knowledge.net import display
+
+    held = claims.load(sorted(others))
+    return {
+        "with": sorted(display(c, claims) for c in held.values()),
+        "note": "both are held true on the same days, and the predicate takes one value: end "
+        "the old one with an `until:` line in record_meta.md, or mark both true with an "
+        "`ack:` line in claim_reviews.md",
+    }
 
 
 def _closest(stores: Sequence[Store], kind: Kind, text: str) -> tuple[Record, float] | None:

@@ -24,6 +24,7 @@ from brain_core.stores.base import Record, full_text, record_id
 Raw = tuple[str, str, str, int]  # (kind, row_key, row_json, line): line is never versioned
 RELATIONS, DECISIONS = "vault:relations.md", "vault:decisions_log.md"
 META, REVIEWS = "vault:record_meta.md", "vault:claim_reviews.md"
+REFLECTIONS = "vault:knowledge/_reflections.md"  # `brain weekly`'s, never in the index
 # a relation written inside a note: [[S]] —[P]→ [[O]], with an optional stated date
 _IN_TEXT = re.compile(
     r"\[\[([^\]|#]+)\]\] —\[([^\]]+)\]→ \[\[([^\]|#]+)\]\](?: \((\d{4}-\d{2}-\d{2})\))?"
@@ -33,6 +34,10 @@ _SPEC = re.compile(r"^\[\[(.+?)\]\] —\[(.+?)\]→ (?:\[\[(.+?)\]\]|(\S.*?))$")
 _META_LINE = re.compile(r"^- ([0-9a-f]{16})(?:@(\S+)#(\d+))? \| (.+)$")
 _REVIEW_LINE = re.compile(r"^- (reject|retract|restore|ack): (.+?)(?: \| (.*))?\s*$")
 _DAY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+# a relation a reflection draws, with the claims it rests on (THREAT_MODEL gate 3)
+_REFLECTED = re.compile(
+    r"^- \[\[(.+?)\]\] —\[(.+?)\]→ \[\[(.+?)\]\](?: \(parents: ([0-9a-f, ]+)\))?\s*$"
+)
 
 
 def _date(s: str | None) -> dict[str, Any]:
@@ -126,8 +131,9 @@ def evidence(source: str, records: Sequence[Record]) -> list[Raw]:
                               subject_name=m[1].strip(), raw_predicate=m[2],
                               object_name=m[3].strip(), quote=m[0][:300], **_date(m[4]),
                               # a folder brain-core reads but does not write: who wrote the
-                              # line is unknown, and the rule, not a person, made it a claim
-                              origin="external", verification="derived")
+                              # line is unknown, so the claim is provisional (THREAT_MODEL
+                              # gate 1) until a person states it in relations.md
+                              origin="external", verification="unverified")
                 )  # fmt: skip
         elif r.kind == "decision" and source == DECISIONS and not r.undated:
             said = r.extra.get("decision", "").strip()
@@ -172,6 +178,8 @@ def ledger_lines(source: str, text: str) -> list[tuple[str, str]]:
 def _wanted(source: str, ln: str) -> bool:
     if source == REVIEWS:
         return bool(_REVIEW_LINE.match(ln))
+    if source == REFLECTIONS:
+        return bool(_REFLECTED.match(ln))
     m = _META_LINE.match(ln)
     return bool(m) and any(
         part.partition(": ")[0] in ("valid", "until", "event", "supersedes", "was")
@@ -218,6 +226,24 @@ def meta(text: str) -> list[Raw]:
         line = t.pop("line")
         body = {"valid_from": None, "valid_to": None, "event_date": None, "timeless": False, **t}
         out.append(("time", json.dumps([META, rid, scope]), _dump(body), line))
+    return out
+
+
+def reflections(text: str) -> list[Raw]:
+    """knowledge/_reflections.md: a relation line is evidence of origin `reflection`. It is
+    unverified, so the claim stays a candidate, unless its `(parents: …)` name claims brain-core
+    already holds; reconcile checks them."""
+    out: list[Raw] = []
+    for n, ln, rid, k in _lines(REFLECTIONS, text):
+        m = _REFLECTED.match(ln)
+        if not m:
+            continue
+        parents = sorted({p.strip() for p in (m[4] or "").split(",") if p.strip()})
+        out.append(
+            _evidence(REFLECTIONS, rid, k, ln, "reflection/1", n, subject_name=m[1].strip(),
+                      raw_predicate=m[2], object_name=m[3].strip(), quote=ln[2:302],
+                      origin="reflection", verification="unverified", parents=parents)
+        )  # fmt: skip
     return out
 
 
