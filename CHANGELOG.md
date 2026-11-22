@@ -4,6 +4,8 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-11-23
+
 ### Added
 - **Contradictions are said when a relation is saved (M7).** A relation saved on a functional predicate is checked against the claims already held: `PART_OF`, `LISTENS_ON`, `VERSION`, and `USES` with a role. If both are true on the same days, `brain_remember`'s reply carries `contradiction`, as a changed fact's does. It names the claim it cannot hold beside and says how to end one (`until:` in `record_meta.md`) or mark both true (`ack:` in `claim_reviews.md`).
 - **`disputed_with`** in recall's `claims` block names each claim a disputed one conflicts with on the day asked.
