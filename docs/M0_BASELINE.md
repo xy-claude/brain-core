@@ -194,7 +194,7 @@ With the keys attached, the absent slice goes 38 → 36 in both, and S0 breaks o
 
 ## 8. M0 completion criteria (from 2026-11-22)
 
-**M0 is complete as of 2026-11-22.** All five hold, with criterion 1 waived by the owner:
+**M0 is complete as of 2026-11-22.** Four criteria hold, and the owner waived criterion 1:
 
 | # | Criterion | State on 2026-11-22 |
 |---|---|---|
@@ -259,6 +259,7 @@ S3 is not part of M0's completion and needs explicit approval, because it sends 
   - missed with no warning: 64 of 386 for S0 and 40 of 386 for S2
 - **The label errors barely moved the historical scores.** Correcting half of the sampled labels changed 7 keyword outcomes and 3 vector outcomes, because most added copies sit beside a gold record the search already finds, or one it still misses.
 - **This is now the baseline** for M1 to M3. Decision 19's re-baseline after M1b compares with 298 and 345 of 443, not with 295 and 346 of 446.
+- **Use it as a regression smoke test for M1–M3,** not as proof of answer quality. The paired counts above describe what the label fixes changed, not a better search (second-model review, 2026-11-22).
 - **It is not enough for M4.** M4's gate needs labels a person has checked (audit ADR-010), plus about 40 multi-hop and 40 temporal questions, also person-checked. The owner's waiver covers M0 only.
 
 **Files** (all under `local/audit-m0/`, git-ignored, with checksums in `MANIFEST.json`):

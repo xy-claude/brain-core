@@ -1897,7 +1897,7 @@ CREATE TABLE IF NOT EXISTS record_ledger (        -- LedgerRow: presence of one 
     CHECK (seen_to IS NULL OR seen_to > seen_from),
     CHECK ((via = 'move') = (moved_from IS NOT NULL))
 ) WITHOUT ROWID;
-CREATE INDEX IF NOT EXISTS idx_ledger_open ON record_ledger(occ_id) WHERE seen_to IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_open ON record_ledger(occ_id) WHERE seen_to IS NULL;  -- at most one open version per occurrence
 
 CREATE TABLE IF NOT EXISTS ledger_gaps (          -- windows with no observation at all
     gap_from TEXT NOT NULL PRIMARY KEY,             -- '0001-01-01T00:00:00Z': before the epoch
@@ -2135,7 +2135,7 @@ For a hosted multi-user future only: the same tables, with `daterange` validity 
 | Derived from expiring files | `data/brain.db` | `transcripts`, `transcript_files` | `~/.claude/projects/*.jsonl` | rows whose transcript Claude Code has since deleted (R item 14) |
 | Operational logs (as today) | `data/brain.db` | `events`, `metrics` | nothing | `brain.db` is deleted. Best-effort, unchanged from 0.9.1, and said so |
 | **History (journal)** | **`data/journal.db`** | `record_ledger`, `ledger_gaps`, `derivation_journal` | **nothing** | `journal.db` is deleted or corrupted and no backup exists |
-| Legacy, not derivable | `data/brain.db` | `facts` rows marked `sole`; `relations` until M1a | nothing | M1a moves relations into the vault; `brain doctor` lists `sole` rows to save again |
+| Legacy, not derivable | `data/brain.db` | `facts` rows marked `sole` (0 on the live agent, 2026-11-21); `relations` until M1a | nothing | M1a moves relations into the vault, and keeps writing the table until M3 so that a rollback to 0.9.1 sees every relation; `brain doctor` lists `sole` rows to save again |
 
 **The write order: crash safety without a cross-file transaction [T: reconcile22].** For each sync:
 
@@ -2143,6 +2143,16 @@ For a hosted multi-user future only: the same tables, with `daterange` validity 
 2. **`brain.db` second**, in one transaction: raw rows, the recomputed tier, then the source signatures, **last**.
 
 A crash after step 1 leaves the signatures old, so the next sync derives again: its journal writes match what is already there, and its `brain.db` writes complete. A crash during step 1 rolls back that file alone. Tested by injecting a crash between the two commits, in named scenarios and inside the random sequences.
+
+**Durability and one writer [P; second-model review, 2026-11-22].** Process crashes are covered above. Power loss and concurrent writers need four more rules:
+- **Durable commits.** `journal.db` uses WAL with `synchronous=FULL`. With `NORMAL`, which `brain.db` keeps because it is derived, SQLite may roll back the last commit after a power loss or an OS crash.
+- **Consistency marker.** `journal.db` holds a random `generation` id, created with the file, and each sync takes an increasing `sync_seq`. Both are written in step 1 and, with the signatures, in step 2. At startup:
+  - **the journal ahead:** a crash after step 1. Normal: the old signatures make the sync derive again, and step 1 is idempotent.
+  - **`brain.db` ahead, or a different `generation`:** a lost commit, an older backup, or a journal from another lineage. Record a `restore` gap, ignore the signatures and re-read every source.
+  - **equal:** proceed.
+  - **the journal missing or corrupt:** a new generation and epoch. Earlier recording times answer *unknown*; none is invented.
+- **One writer.** A sync holds a per-agent OS file lock, kept outside the vault like the vault lock, from before it reads the signatures until step 2 commits. `BEGIN IMMEDIATE` is used inside each transaction, but a SQLite lock ends at its commit, so it cannot span both files. The MCP server, the CLI and cron then serialize.
+- **One open version per occurrence**, enforced by the unique index in L.1. The reconciliation prototype passes with it: 150 random sequences, the crash scenarios, and L1–L11.
 
 **Behaviour of each operation.**
 
@@ -2161,7 +2171,9 @@ A crash after step 1 leaves the signatures old, so the next sync derives again: 
 **Backup [P].**
 - `brain daily` copies `journal.db` through SQLite's backup API to `<cron.backup.journal_dir>/<agent>/journal-YYYY-MM-DD.db`, keeping 14 copies.
 - It is small: 1 row per version per occurrence, plus 1 per changed derived row.
-- The default directory is an owner decision (R item 3). It holds quotes (≤ 300 characters, masked) and hashes, not whole records.
+- The default directory is an owner decision (R item 3). M1c's ledger holds ids, hashes and timestamps. From M3, the derivation journal adds masked derived rows: names, paths and quotes of at most 300 characters. **Treat backups as private as the vault.**
+- The backup is written through the backup API into a temp file, checked with `PRAGMA integrity_check`, then renamed into place. The folder is `0700` and the files `0600`.
+- `brain journal restore` refuses a corrupt or truncated backup.
 - For a copy of a database another process may be writing, use `mode=ro` as M0 did. Even so, a reader of a WAL database updates its `-shm` file. M0 found the frozen eval database's `-shm` touched while its data file was unchanged. For a frozen file nobody writes, `immutable=1` avoids even that.
 
 **Restore [T: L11].** `brain journal restore FILE`:
@@ -2326,11 +2338,11 @@ Three work packages, each approved separately. Order: M1a and M1b before M1c, so
 | | M1a: relations canonical (G1), hygiene | M1b: stable source ids (G11) | M1c: the journal (`journal.db`) |
 |---|---|---|---|
 | **Preconditions** | M0 done; approval | M0 done; approval, including the `was:` vault write (588 lines) | M1a, M1b; approval; R item 3 (backup directory) |
-| **Scope** | `relations.md` write and parse; one-time migration from the table; docstring; v0.1 row count | ids hash `<store>:<root name>/<path>#heading`; optional `name:` per root; the displayed path is unchanged; `brain index --migrate-ids` (dry run by default) writes `was:` lines, remaps vectors and translates eval labels | `journal.db` (`record_ledger`, `ledger_gaps`); ledger in sync; `via=write` in `brain_remember`; daily journal backup; `brain journal restore`; `brain doctor` integrity checks of both files |
+| **Scope** | `relations.md` write and parse; the legacy table stays written (and upserted from the file) until M3; a one-time migration behind a verified backup, refusing unsafe characters, written atomically; the full `created_at` is kept as `recorded:` provenance, never as valid time (R item 21); `relations.md` is append-only until M3, and hand removals are reported; the mirror is written after the vault line and never read by M1 code; docstring; `brain doctor` counts what a rebuild would not restore; the README's rebuild promise is corrected | ids hash `<store>:<root name>/<path>#heading`; optional `name:` per root; the displayed path is unchanged; `brain index --migrate-ids` (dry run by default) writes `was:` lines, remaps vectors and translates eval labels; `--apply` resumes from a mapping manifest after a crash | `journal.db` (`record_ledger`, `ledger_gaps`); ledger in sync; `via=write` in `brain_remember`; daily journal backup; `brain journal restore`; `brain doctor` integrity checks of both files |
 | **Files** | `stores/vault.py`, `remember.py`, `stores/graph.py`, `cli/main.py`, `mcp/server.py`, template, `VAULT_SCHEMA.md` | `stores/notes.py`, `config.py`, `stores/vault.py` (`was:`), `stores/vectors.py`, `cli/main.py`, `tests/eval/` (label translator) | `storage/journal_migrations/001_ledger.sql`, `knowledge/ledger.py`, `knowledge/journal.py`, `stores/index.py`, `remember.py`, `cron.py`, `cli/main.py`, `status.py` |
-| **Tests** | delete `brain.db`, `brain index`: every relation back; existing write scenarios | G11-T1 to T5; the M0 eval on migrated ids, as validated (G11 results in the validation report); a 0.9.1 reader ignores `was:` | L1–L11; reconcile22's crash and rebuild properties against the real code; a backdated line gets its ingest time; deleting `brain.db` keeps history |
+| **Tests** | destructive tests on a copy only; a field-level round trip of every relation, full timestamps included; a hand-deleted line reported; a failed vault write leaves no mirror row; an existing `relations.md` keeps every line; relation recall per entity unchanged; a crash between the file and the sync; a rollback to 0.9.1 after new writes; existing write scenarios | G11-T1 to T5; the M0 eval on migrated ids, as validated (G11 results in the validation report); a 0.9.1 reader ignores `was:` | L1–L11; reconcile22's crash and rebuild properties against the real code; every state of the `generation`/`sync_seq` marker, both directions included; a crash at every commit boundary; two concurrent indexers on the outer lock; a source file edited during a sync is re-read or deferred, never recorded half-old; a second open version refused; a backdated line gets its ingest time; deleting `brain.db` keeps history; a corrupt backup refused |
 | **Performance gates** | sync and recall p95 within +10% of M0 | same, on the migrated copy | a no-change sync stays within +10% of 5 ms; journal growth measured |
-| **Rollback** | the table is kept read-only until M3; reverting the code reads it again | delete the `was:` lines and restore `brain.db` (or rebuild): old ids return. A 0.9.1 reader on migrated data loses notes and archive keys, as today | delete `journal.db` (history only); the derived tier is unaffected |
+| **Rollback** | the table stays written until M3, so reverting the code reads every relation, new ones included | delete the `was:` lines and rebuild `brain.db` (restoring the backup is the last resort): old ids return. A 0.9.1 reader on migrated data loses notes and archive keys, as today | revert the code and **keep** `journal.db`: 0.9.1 ignores it, and history continues with a gap if M1c returns |
 | **Done when** | tests pass; `brain doctor` clean on a copy | tests pass; the eval on migrated ids matches the validated result | tests pass; a backup restored on a copy recovers history and reports its gap |
 
 ### M2: Entity registry — not authorised
@@ -2349,7 +2361,7 @@ Three work packages, each approved separately. Order: M1a and M1b before M1c, so
 
 | | |
 |---|---|
-| **Preconditions** | M2; M1c (recording times); R items 5–10 and 12 decided |
+| **Preconditions** | M2; M1c (recording times); R items 5–10, 12 and 22 decided; hook-captured messages form their own trust class and never feed derived claims |
 | **Scope** | claim identity, occurrence-level evidence, provenance, periods (votes), lifecycle, review history, conflicts, `identity_redirects`, the derivation journal, deterministic reconstruction |
 | **Files** | `knowledge/model.py`, `derive.py`, `reconcile.py`, `temporal.py`, `journal.py`, `migrations/009_claims.sql`, `storage/journal_migrations/002_derivation.sql`, `stores/vault.py`, `remember.py`, `stores/index.py`, `status.py`, `cron.py` |
 | **Mandatory tests (M3 is not done without both)** | <ul><li>**T10:** the same text in the vault and twice in a notes file gives three evidence rows, with their own `recorded_at` and resolved dates; deleting any source leaves the others, in SQLite, through `reconcile`</li><li>**T11:** `known_at` never uses a stated date; a backdated line is invisible before its ledger time; a deleted evidence row is still seen before its deletion, through the journal</li></ul> |
@@ -2362,7 +2374,7 @@ Three work packages, each approved separately. Order: M1a and M1b before M1c, so
 
 | | |
 |---|---|
-| **Preconditions** | M3; the human-validated baseline; the new multi-hop and temporal questions (about 40 each) |
+| **Preconditions** | M3; the human-validated baseline (the M0 baseline is AI-reviewed, so a person-checked benchmark is required, including the 7 widened stale lists and the 3 wide gold lists); the new multi-hop and temporal questions (about 40 each); answer correctness and abstention reported apart from hit rate |
 | **Scope** | the bounded walk (H.3) as a net; temporal filtering; evidence-backed results with truncation reasons; fusion by RRF; `as_of` in `brain_recall` |
 | **Files** | `nets.py` (refactor first, a `run_gold` diff of zero), `recall.py`, `mcp/server.py` |
 | **Tests** | <ul><li>the H.3 test (hub, cycle, bounds, determinism, query plans, VM steps)</li><li>the completeness property: every omission inside the depth reports a reason, as validated</li><li>disconnected graphs, missing entities, alias collisions, multiple seeds</li></ul> |
@@ -2528,6 +2540,8 @@ Three work packages, each approved separately. Order: M1a and M1b before M1c, so
 - **The design is ready.** Every P0 and P1 item is resolved and validated in prototypes (header; `docs/AUDIT_2_2_VALIDATION.md`).
 - **M0 is complete.** The owner waived the human label review and accepted AI answers to the 104-question packet, without checking them. The corrected baseline is 298 and 345 of 443 (`docs/M0_BASELINE.md`, section 9). Its labels are AI-reviewed, not human-validated.
 
+A second-model review (2026-11-22) found gaps in M1's safety rules, not in the design. They are now in each package's scope, tests and rollback (`docs/M1_DECISION_CHECKLIST.md`, section 5). M1a runs on an isolated copy first; the live cutover only after its tests pass there.
+
 Ready is not authorised:
 1. **Each M1 package needs its own approval.** The owner's decisions below were taken on 2026-11-22, as recommended, except item 16, which stays open (`docs/M1_DECISION_CHECKLIST.md`, section 0).
 
@@ -2603,3 +2617,5 @@ M5–M7 stay optional and evidence-driven.
 | 18 | Exclude `line` (a locator) from journal versioning | yes | a line inserted above otherwise versions every row below it | M3 |
 | 19 | Re-baseline after M1b | yes: re-run S0 and S2 once G11 is fixed | the frozen snapshot measured notes and archive recall without their search keys (see the validation report) | M1b |
 | 20 | Per-copy meta after the copies changed (issue C) | report it and do not apply it until re-anchored | applying it would give dates to a copy that was never given them | M3 |
+| 21 | The date a migrated relation gets | none: the full `created_at` is kept as `recorded:` provenance, and the relation is undated (revised 2026-11-22 after the second review round; confirmed by the owner) | recording a relation does not show when it became true; promoting the recording time to valid time would break the separation revision 2.1 made | M1a |
+| 22 | Start M3 only with evidence of need | yes: a class of eval misses that typed claims would fix (open) | M0 found 82 relations and no decision-field links; M3 is the largest milestone | M3 |
