@@ -271,8 +271,8 @@ def brain_recall(
         quotes = [x for x in quotes if x not in later]
         by_text = {normalize(r.text).lower(): r.id for r, _s, _sc in hits.values()}
         for q, rid in later:
-            if (was := by_text.get(normalize(q).lower())) is not None:
-                earlier[rid[:16]] = was[:16]
+            if (quoted_id := by_text.get(normalize(q).lower())) is not None:
+                earlier[rid[:16]] = quoted_id[:16]
     superseded = {normalize(q).lower() for q, _rid in quotes}
     # a quote of full length is the start of a longer old line, which is known by that start:
     # start -> the banners that quote it. A banner is never the line it quotes (a second
