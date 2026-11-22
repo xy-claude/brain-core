@@ -110,7 +110,7 @@ def test_a_line_from_an_outside_folder_stays_provisional(tmp_path: Path) -> None
     assert by_object(v)["Neo4j"].lifecycle is Lifecycle.ACCEPTED  # type: ignore[attr-defined]
 
 
-def test_a_reflection_names_its_parents_or_stays_a_candidate(tmp_path: Path) -> None:
+def test_a_reflection_stays_a_candidate_until_its_relation_is_supported(tmp_path: Path) -> None:
     v = vault(tmp_path, f"{NEO} (2026-11-01)")
     assert v.claims is not None
     parent = next(iter(v.claims.current()))[:12]
@@ -118,17 +118,28 @@ def test_a_reflection_names_its_parents_or_stays_a_candidate(tmp_path: Path) -> 
     (v.root / "knowledge" / "_reflections.md").write_text(
         "# Reflections\n\n## 2026-12-01\n\n"
         "- [[Neo4j]] —[ALTERNATIVE_TO]→ [[Kuzu]]\n"
+        # a parent that exists, cited for a conclusion it does not support
         f"- [[Kuzu]] —[ALTERNATIVE_TO]→ [[SQLite]] (parents: {parent})\n"
         "- [[Brain-Core]] —[OWNS]→ [[Kuzu]] (parents: 0123456789ab)\n"
     )
     v.read("fact", "sync")
-    got = {
-        (c.evidence[0].subject_name, c.evidence[0].object_name): c
-        for c in v.claims.current().values()
-    }
-    assert got[("Neo4j", "Kuzu")].lifecycle is Lifecycle.CANDIDATE  # no parents
-    assert got[("Kuzu", "SQLite")].lifecycle is Lifecycle.ACCEPTED  # rests on a claim held
-    assert got[("Kuzu", "SQLite")].verification is Verification.DERIVED
-    assert got[("Brain-Core", "Kuzu")].lifecycle is Lifecycle.CANDIDATE  # a parent no one holds
+
+    def got() -> dict[tuple[str, str], object]:
+        assert v.claims is not None
+        return {
+            (c.evidence[0].subject_name, str(c.evidence[0].object_name)): c
+            for c in v.claims.current().values()
+        }
+
+    for key in (("Neo4j", "Kuzu"), ("Kuzu", "SQLite"), ("Brain-Core", "Kuzu")):
+        c = got()[key]
+        assert c.lifecycle is Lifecycle.CANDIDATE, key  # type: ignore[attr-defined]
+        assert c.verification is Verification.UNVERIFIED, key  # type: ignore[attr-defined]
     report = v.claims.summary()["report"]
-    assert sum(r.startswith("reflection_unparented") for r in report) == 2
+    assert sum(r.startswith("reflection_unparented") for r in report) == 2  # no parent, or none held
+    # a person states the relation: the claim is supported apart from the reflection
+    (v.root / "relations.md").write_text(
+        f"# Relations\n\n- {NEO} (2026-11-01)\n- [[Kuzu]] —[ALTERNATIVE_TO]→ [[SQLite]]\n"
+    )
+    v.read("fact", "sync")
+    assert got()[("Kuzu", "SQLite")].lifecycle is Lifecycle.ACCEPTED  # type: ignore[attr-defined]

@@ -41,6 +41,9 @@ if TYPE_CHECKING:
     from brain_core.stores.vault import VaultStore
 
 _RANK = {Lifecycle.ACCEPTED: 0, Lifecycle.CANDIDATE: 1, Lifecycle.REJECTED: 2}
+# Bumped when a rule of the computed tier changes, so a tier an older version computed is
+# computed again. 2 (0.17.0): a reflection with parents stays a candidate
+RULES = 2
 _TABLES = (
     "claims",
     "claim_periods",
@@ -198,7 +201,7 @@ class ClaimIndex:
             )
             for r in self.db.fetchall(q)
         ]
-        blob = json.dumps([rows, ontology()], sort_keys=True, default=str)
+        blob = json.dumps([rows, ontology(), RULES], sort_keys=True, default=str)
         return hashlib.sha256(blob.encode()).hexdigest()
 
     def _stale(self) -> bool:
@@ -346,7 +349,9 @@ class ClaimIndex:
                         got[f] = t[f]
             return got
 
-        # a reflection rests on claims held from other evidence, or it stays a candidate
+        # A reflection must name the claims it rests on; even then it is never evidence
+        # enough: a parent that exists need not support the conclusion. It stays a candidate
+        # until the relation is stated on its own (relations.md), which a person does
         held_ids = {
             canonical(key_of(d), merged, onto.get("renames") or {}).id()
             for d in by["evidence"]
@@ -356,9 +361,7 @@ class ClaimIndex:
         for d in by["evidence"]:
             if d["origin"] == "reflection":
                 parents = d.get("parents") or []
-                if parents and all(any(h.startswith(p) for h in held_ids) for p in parents):
-                    d = {**d, "verification": "derived"}
-                else:
+                if not (parents and all(any(h.startswith(p) for h in held_ids) for p in parents)):
                     report.append(
                         f"reflection_unparented {d['subject_name']} —{d['predicate']}→ "
                         f"{d['object_name']}: names no claim held; stays a candidate"

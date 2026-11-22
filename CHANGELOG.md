@@ -4,6 +4,9 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+### Changed
+- **A reflection never makes a claim accepted.** Its `(parents: …)` must still name claims already held (else it is reported), but a parent that exists need not support the conclusion. So a reflection claim stays a candidate until the relation is stated in `relations.md`. The claims tier is recomputed once after the upgrade (rules version 2).
+
 ## [0.16.1] - 2026-11-23
 
 ### Changed
