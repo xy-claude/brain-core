@@ -60,6 +60,14 @@ def brain_remember(
     # a store that is only read (transcripts, notes folders) is not a layer of a write
     ordered = [s for s in ordered if not getattr(s, "readonly", False)]
     vaulted = any(s.name == "vault" for s in ordered)
+    # until `brain graph migrate` has made relations.md behind a backup, no relation is saved:
+    # the first write would make the file without one
+    vault = next((s for s in ordered if s.name == "vault"), None)
+    if kind == "relation" and (n := getattr(vault, "relations_unmigrated", lambda: 0)()):
+        raise ValueError(
+            f"brain.db holds {n} relation(s) and relations.md does not exist yet: run `brain "
+            "graph migrate` first, which moves them into it behind a backup; nothing was written"
+        )
     # a relation the line cannot hold is refused before any store, as a secret is: else
     # Hindsight would keep what the file and its mirror cannot
     if (

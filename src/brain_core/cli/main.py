@@ -329,6 +329,13 @@ def graph_cmd(
                 typer.echo("ERROR: relations.md does not hold every row: see above", err=True)
                 raise typer.Exit(code=1)
             typer.echo("verified: relations.md holds every row that was not refused")
+            if not r["complete"]:
+                typer.echo(
+                    f"INCOMPLETE: {len(r['refused'])} relation(s) relations.md cannot hold stay "
+                    "in brain.db only; recall still reads them there, a rebuild would lose them",
+                    err=True,
+                )
+                raise typer.Exit(code=1)
             return
         if action != "import":
             typer.echo("action must be import | stats | migrate", err=True)

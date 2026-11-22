@@ -81,7 +81,7 @@ def brain_status(agent: Agent) -> dict[str, Any]:
         if gone and not (vault.root / "relations.md").exists():
             attention.append(
                 f"{gone} relation(s) are only in brain.db: `brain graph migrate` copies them into "
-                "relations.md, behind a backup"
+                "relations.md, behind a backup; until then no relation can be saved"
             )
         elif gone:
             attention.append(
@@ -92,8 +92,9 @@ def brain_status(agent: Agent) -> dict[str, Any]:
         if odd:
             attention.append(
                 f"{odd} relation(s) stay in brain.db only: relations.md cannot hold their names "
-                "(`[[`, `]]`, `|` or a line break, or `]` or `:` in the predicate); recall still "
-                "finds them there"
+                "(`[[`, `]]`, `|` or a line break, or `]` or `:` in the predicate). Recall still "
+                "finds them there, but deleting brain.db would lose them: the migration is not "
+                "complete"
             )
         if unmirrored:
             attention.append(

@@ -504,7 +504,7 @@ A trait never gets one number. It gets signals, each with a sample size and a ve
 | raw | `vault/raw/` | immutable source with sha256; the agent compiles `vault/knowledge/` |
 | key | `vault/record_meta.md` | `- <record id> \| keys: … \| source: … \| supersedes: …`, one append-only line per record |
 
-Rules: idempotent by content hash, append-only, nothing deleted. Text that looks like a common secret (API tokens, private keys, JWTs) is refused before any store sees it; the filter knows formats, so an unusual key can pass and is yours to keep out. The SQLite index is a cache: delete it and it is rebuilt from the files, except the event log and tool metrics, which only `brain.db` keeps (`brain doctor` counts them). An agent whose relations are still only in `brain.db` (0.9.1 and before) moves them into `relations.md` with `brain graph migrate`, behind a checked backup; until then recall reads them where they are. Details in [`docs/VAULT_SCHEMA.md`](docs/VAULT_SCHEMA.md).
+Rules: idempotent by content hash, append-only, nothing deleted. Text that looks like a common secret (API tokens, private keys, JWTs) is refused before any store sees it; the filter knows formats, so an unusual key can pass and is yours to keep out. The SQLite index is a cache: delete it and it is rebuilt from the files, except the event log and tool metrics, which only `brain.db` keeps (`brain doctor` counts them). An agent whose relations are still only in `brain.db` (0.9.1 and before) moves them into `relations.md` with `brain graph migrate`, behind a checked backup; until then recall reads them where they are, and a new relation is refused with that instruction. Details in [`docs/VAULT_SCHEMA.md`](docs/VAULT_SCHEMA.md).
 
 ## Requirements
 

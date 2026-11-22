@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sqlite3
 import stat
 from datetime import date
 from pathlib import Path
@@ -78,7 +77,7 @@ def test_a_failed_vault_line_leaves_no_mirror_row(db: Database) -> None:
     class DeadVault(MemoryStore):
         name = "vault"
 
-        def write(self, kind, text, **kw):  # type: ignore[no-untyped-def]
+        def write(self, kind, text, **kw):
             return WriteResult(self.name, "", "failed", "disk full")
 
     out = brain_remember(
@@ -133,7 +132,7 @@ def test_migration_refuses_rows_the_line_cannot_hold_and_names_them(
     legacy(db, "F", "uses", "G", "2026-04-10")
     report = migrate_relations(db, vault_on(tmp_path / "vault", db), tmp_path / "backups")
     assert report["appended"] == 1 and len(report["refused"]) == 2 and report["verified"]
-    assert any("A]]B" in r for r in report["refused"])
+    assert any("A]]B" in r for r in report["refused"]) and not report["complete"]
 
 
 def test_migration_takes_a_checked_private_backup_first(tmp_path: Path, db: Database) -> None:
@@ -141,13 +140,19 @@ def test_migration_takes_a_checked_private_backup_first(tmp_path: Path, db: Data
     root.mkdir()
     (root / "relations.md").write_text("# Relations\n")
     legacy(db, "A", "b", "C", "2026-04-10")
+    before = rows(db)
     report = migrate_relations(db, vault_on(root, db), tmp_path / "backups")
     saved = [Path(p) for p in report["backup"]]
     assert len(saved) == 2 and all(stat.S_IMODE(p.stat().st_mode) == 0o600 for p in saved)
     assert stat.S_IMODE((tmp_path / "backups").stat().st_mode) == 0o700
-    copy = sqlite3.connect(next(p for p in saved if p.suffix == ".db"))
-    assert copy.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
-    assert copy.execute("SELECT count(*) FROM relations").fetchone()[0] == 1
+    # restored into a new folder, the backup is the database as it was
+    restored = tmp_path / "restore" / "brain.db"
+    restored.parent.mkdir()
+    restored.write_bytes(next(p for p in saved if p.suffix == ".db").read_bytes())
+    with Database.connect(restored) as back:
+        assert back.fetchone("PRAGMA integrity_check")[0] == "ok"  # type: ignore[index]
+        assert rows(back) == before
+    assert next(p for p in saved if p.suffix == ".md").read_text() == "# Relations\n"
 
 
 def test_a_crash_after_the_file_is_written_converges_on_the_rerun(
@@ -157,7 +162,7 @@ def test_a_crash_after_the_file_is_written_converges_on_the_rerun(
     v = vault_on(tmp_path / "vault", db)
     real = VaultStore.append_relations
 
-    def crash(self, items):  # type: ignore[no-untyped-def]
+    def crash(self, items):
         real(self, items)
         raise KeyboardInterrupt  # killed after the file, before the check
 
@@ -182,7 +187,10 @@ def test_beside_a_vault_recall_reads_relations_from_the_file_only(
     found = brain_recall([v, g], "ATLAS uses", scope="relation", today=DAY)
     assert [r["text"] for r in found["results"]] == ["ATLAS —[uses]→ Hindsight"]
     assert brain_recall([v, g], "ATLAS uses", scope="graph", today=DAY)["total"] == 1
-    assert g.read("relation", "ATLAS") == [] and v.relations_drift() == (1, 0, 0)
+    assert [r.text for r in g.read("relation", "ATLAS")] == ["ATLAS —[uses]→ Hindsight"]
+    assert v.relations_drift() == (1, 0, 0)
+    # ranked as 0.9.1 ranked them: by the graph store, not by the keyword index
+    assert db.fetchone("SELECT count(*) FROM records_fts WHERE kind = 'relation'")[0] == 0  # type: ignore[index]
 
 
 def test_an_older_version_still_reads_every_relation_from_the_mirror(
@@ -251,20 +259,28 @@ def test_an_upgraded_agent_recalls_its_table_until_relations_md_exists(
     ]
 
 
-def test_the_first_relations_md_starts_with_every_row_of_the_table(
-    tmp_path: Path, db: Database
-) -> None:
+def test_a_relation_write_waits_for_the_migration(tmp_path: Path, db: Database) -> None:
     legacy(db, "ATLAS", "uses", "Hindsight", "2026-04-10")
     v, g = vault_on(tmp_path, db), GraphStore(db, tmp_path / "relations.md")
-    brain_remember(
-        [v, g], "", "relation", subject="ATLAS", predicate="uses", object="Kuzu", when=DAY
-    )
-    lines = (tmp_path / "relations.md").read_text()
-    assert (
-        "[[Hindsight]]] (recorded: 2026-04-10)".replace("]]]", "]]") in lines
-        and "[[Kuzu]]" in lines
-    )
-    assert g.mirror and v.relations_drift() == (0, 0, 0)
+    hindsight = MemoryStore()
+    hindsight.name = "hindsight"
+    with pytest.raises(ValueError, match="brain graph migrate"):
+        brain_remember([v, hindsight, g], "", "relation", subject="A", predicate="b", object="C")
+    assert not (tmp_path / "relations.md").exists() and not hindsight.records
+    assert v.write("relation", "A —[b]→ C").status == "refused"  # the store itself refuses too
+    migrate_relations(db, v, tmp_path / "backups")
+    out = brain_remember([v, hindsight, g], "", "relation", subject="A", predicate="b", object="C")
+    assert out["status"] == "written" and g.mirror and v.relations_drift() == (0, 0, 0)
+
+
+def test_a_crash_between_the_vault_line_and_the_mirror_heals_on_the_next_sync(
+    tmp_path: Path, db: Database
+) -> None:
+    v, g = vault_on(tmp_path, db), GraphStore(db, tmp_path / "relations.md")
+    v.write("relation", "", subject="A", predicate="b", object="C", when=DAY)  # then killed
+    assert not rows(db) and v.relations_drift() == (0, 1, 0)
+    v.read("relation", "A")  # the next search syncs
+    assert len(rows(db)) == 1 and [r.text for r in g.read("relation", "A")] == ["A —[b]→ C"]
 
 
 def test_a_row_the_line_cannot_hold_stays_recallable_from_the_table(
@@ -272,6 +288,7 @@ def test_a_row_the_line_cannot_hold_stays_recallable_from_the_table(
 ) -> None:
     legacy(db, "A]]B", "uses", "C", "2026-04-10")
     v, g = vault_on(tmp_path, db), GraphStore(db, tmp_path / "relations.md")
-    brain_remember([v, g], "", "relation", subject="D", predicate="uses", object="E", when=DAY)
+    assert not migrate_relations(db, v, tmp_path / "backups")["complete"]
+    brain_remember([v, g], "", "relation", subject="D", predicate="owns", object="E", when=DAY)
     assert g.mirror and [r.text for r in g.read("relation", "uses")] == ["A]]B —[uses]→ C"]
     assert v.relations_drift() == (0, 0, 1)  # not "removed by hand": it never could be a line

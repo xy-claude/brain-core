@@ -171,6 +171,10 @@ FILES: dict[Kind, str] = {
     "relation": "relations.md",
 }
 META = "record_meta.md"
+_UNMIGRATED = (
+    "brain.db holds {n} relation(s) and relations.md does not exist yet: run `brain graph "
+    "migrate` first, which moves them into it behind a backup"
+)
 _META = re.compile(r"^- ([0-9a-f]{16}) \| (.+)$")
 _INDEXED: tuple[Kind, ...] = (
     "fact",
@@ -306,6 +310,8 @@ class VaultStore:
             if kind == "relation":
                 assert self.index is not None
                 mirror(self.index.db, records)  # an older version still reads the table (M1a)
+                # kept out of the keyword index: the graph store ranks them, as in 0.9.1
+                return []
             return records
 
         self.index.sync(self.name, files, parse)
@@ -481,6 +487,8 @@ class VaultStore:
                 )
             if why := unsafe_relation(*parts):
                 return WriteResult(self.name, "", "refused", f"relations.md cannot hold it: {why}")
+            if n := self.relations_unmigrated():
+                return WriteResult(self.name, "", "refused", _UNMIGRATED.format(n=n))
             rid = record_id(relation_text(*parts))
             added = self.append_relations([(*parts, extra.get("recorded") or when.isoformat())])
             return WriteResult(self.name, rid, "written" if rid in added else "exists", FILES[kind])
@@ -574,37 +582,35 @@ class VaultStore:
     def append_relations(self, items: Iterable[tuple[str, str, str, str]]) -> set[str]:
         """Append to relations.md the relations it lacks (subject, predicate, object,
         recorded), in one atomic write under the vault lock. No line is changed or dropped.
-        A new file starts with the legacy table's rows, so making it hides none of them.
-        Returns the ids of the lines added."""
+        The file is made even when nothing is added. Returns the ids of the lines added."""
         path = self.root / FILES["relation"]
         today = date.today()
         with self._locked(path):
-            seed: list[tuple[str, str, str, str]] = []
-            if path.exists():
-                text = read_text(path, "surrogateescape")
-            else:
-                text = self._new_file("relation", today, "")
-                if self.index is not None:
-                    rows = self.index.db.fetchall(
-                        "SELECT subject, predicate, object, created_at FROM relations "
-                        "ORDER BY created_at, id"
-                    )
-                    seed = [
-                        (r[0], r[1], r[2], str(r[3]))
-                        for r in rows
-                        if not unsafe_relation(r[0], r[1], r[2])
-                    ]
+            new_file = not path.exists()
+            text = (
+                self._new_file("relation", today, "")
+                if new_file
+                else read_text(path, "surrogateescape")
+            )
             have = {r.id for r in self._records("relation", text, FILES["relation"], today)}
             lines: list[str] = []
             added: set[str] = set()
-            for s, p, o, recorded in [*seed, *items]:
+            for s, p, o, recorded in items:
                 if (rid := record_id(relation_text(s, p, o))) not in have:
                     have.add(rid)
                     added.add(rid)
                     lines.append(relation_line(s, p, o, recorded))
-            if lines:
-                self._save(path, _into_section(text, "Relations", lines), today)
+            if lines or new_file:
+                self._save(path, _into_section(text, "Relations", lines) if lines else text, today)
         return added
+
+    def relations_unmigrated(self) -> int:
+        """Relations brain.db holds while relations.md does not exist yet: until `brain graph
+        migrate` makes the file behind a backup, a relation write would make it without one."""
+        if self.index is None or (self.root / FILES["relation"]).exists():
+            return 0
+        row = self.index.db.fetchone("SELECT count(*) FROM relations")
+        return int(row[0]) if row else 0
 
     def relations_drift(self) -> tuple[int, int, int]:
         """(rows of the legacy table that a relations.md line could hold but none does:

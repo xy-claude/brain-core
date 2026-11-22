@@ -4,11 +4,12 @@ Replaces the Kuzu CLI adapter. A relation is ``subject —[predicate]→ object`
 sha256 of that text, so vault, Hindsight and graph agree on what "the same relation" is.
 ``import_dump`` loads the ``entity_graph.py all`` format from the old Kuzu store once.
 
-M1a: beside a vault, once ``vault/relations.md`` exists it is the truth and the
-``relations`` table is a mirror kept for older versions until M3: written, never read, so a
-line removed by hand does not come back through it. Until the file exists the table is read as
-before, and the first file starts with the table's rows (``VaultStore.append_relations``).
-``migrate_relations`` copies the table into the file behind a backup (`brain graph migrate`).
+M1a: beside a vault, once ``vault/relations.md`` exists it is the truth. The ``relations``
+table mirrors it (for older versions, until M3), and this store reads only the rows the file
+still holds, so a line removed by hand does not come back, and relations rank as in 0.9.1:
+they stay out of the keyword index. Until the file exists the table is read as before, and a
+relation write waits for ``migrate_relations`` (`brain graph migrate`), which makes the file
+behind a backup.
 """
 
 from __future__ import annotations
@@ -97,8 +98,22 @@ class GraphStore:
 
     @property
     def mirror(self) -> bool:
-        """The file holds the relations: the table is written for older versions, never read."""
+        """The file holds the relations: the table only mirrors it."""
         return self.relations_md is not None and self.relations_md.exists()
+
+    def _held(self) -> set[str]:
+        """Ids of the relations the file holds (read again only when it changed)."""
+        assert self.relations_md is not None
+        sig = self.relations_md.stat().st_mtime_ns
+        if getattr(self, "_sig", None) != sig:
+            text = self.relations_md.read_text(encoding="utf-8", errors="replace")
+            self._ids = {
+                record_id(relation_text(*m.groups()[:3]))
+                for ln in text.splitlines()
+                if (m := RELATION_LINE.match(ln))
+            }
+            self._sig = sig
+        return self._ids
 
     def read(self, kind: Kind, query: str | None = None, limit: int = 50) -> list[Record]:
         if kind != "relation":
@@ -115,12 +130,13 @@ class GraphStore:
             sql += " WHERE " + " OR ".join(clauses)
         sql += " ORDER BY created_at DESC"
         if self.mirror:
-            # beside relations.md only a row no line could hold is read here: a row removed by
-            # hand from the file must not come back through the table
+            # only what the file holds: a row removed by hand must not come back. A row no line
+            # can hold is still read here, until it is resolved (brain doctor names it)
+            held = self._held()
             rows = [
                 r
                 for r in self.db.fetchall(sql, tuple(params))
-                if unsafe_relation(r["subject"], r["predicate"], r["object"])
+                if r["id"] in held or unsafe_relation(r["subject"], r["predicate"], r["object"])
             ][:limit]
         else:
             rows = self.db.fetchall(sql + " LIMIT ?", (*params, limit))
@@ -241,4 +257,6 @@ def migrate_relations(db: Database, vault: VaultStore, backup_dir: Path) -> dict
         "backup": [str(p) for p in saved],
         "relations_md_sha256_before": before,
         "verified": all(i in held for i in ids),
+        # a relation the file cannot hold still lives only in brain.db: not done
+        "complete": not refused and all(i in held for i in ids),
     }
