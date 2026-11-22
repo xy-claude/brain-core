@@ -40,7 +40,8 @@ def setup(tmp: Path, *lines: str) -> VaultStore:
     v.root.mkdir(parents=True)
     (v.root / "relations.md").write_text("# Relations\n\n" + "".join(f"- {x}\n" for x in lines))
     (v.root / "facts.md").write_text(
-        "# Facts\n\n## General\n- The ride app charges riders at the end of each trip (2026-10-02)\n"
+        "# Facts\n\n## General\n"
+        "- The ride app charges riders at the end of each trip (2026-10-02)\n"
     )
     v.read("fact", "sync")
     return v
