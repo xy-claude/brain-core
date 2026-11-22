@@ -391,6 +391,7 @@ Say "thanks, we're done" and it runs `brain_session('end')`. Tomorrow at 06:07 `
 ├── .mcp.json                 brain serve . + Hindsight
 ├── brain.yaml                stores, session files, cron schedule
 ├── vault/                    facts.md patterns.md decisions_log.md corrections.md relations.md
+│   ├── entities/             one note per entity: a stable id, its type, its aliases
 │   ├── record_meta.md        search keys, source and replaced values, by record id
 │   ├── sessions/             one file per day (HSAM)
 │   ├── knowledge/ raw/       the LLM-wiki: immutable sources, compiled pages

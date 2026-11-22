@@ -4,6 +4,19 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+### Added
+- **The entity registry (M2).** An entity is a note in `vault/entities/`. Its frontmatter holds an `id`, a UUIDv7 written once so a rename keeps it, an `entity_type` from the packaged `ontology.yaml`, and `aliases`. Obsidian resolves `[[aliases]]` by itself, and recall finds the note like a knowledge page.
+  - **Registry tables.** `brain.db` derives `entities`, `aliases` and `mentions` from the notes (migration 008), so deleting `brain.db` loses nothing.
+  - **Mentions.** Found without a model: `[[wikilinks]]`, aliases in the text, `#tags`, and the subject and object of `relations.md` lines. One row per occurrence, so copies count apart.
+  - **Nothing automatic.** A merge (`merged_into`) is written by a person. One to a missing id, or a cycle, is refused and reported. An alias two entities share names each of them and is reported. A note without an id or with an unknown type is reported, not registered.
+- **`brain_remember(kind='entity', name, entity_type, aliases)`** writes an entity note, or answers `exists` for a known name or alias.
+- **`brain entities list | check | propose`.** `propose` stages in the inbox the names relations use that no note holds; it never writes a note.
+- **`brain_status` and `brain doctor`** report problems in entity notes.
+
+### Changed
+- `relations.md` lines are recorded in the journal and found as mentions; they stay out of the keyword index, so recall ranks relations as before. Index rows name their source inside `extra` (index format 5: every file is read once after the upgrade).
+
+
 ## [0.12.0] - 2026-11-22
 
 ### Added
