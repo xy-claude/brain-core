@@ -360,6 +360,49 @@ def graph_cmd(
         typer.echo(f"import: {g.import_dump(text)}")
 
 
+@app.command("entities")
+def entities_cmd(
+    action: Annotated[str, typer.Argument(help="list | check | propose")],
+    path: Annotated[Path, typer.Argument(help="Agent directory or brain.yaml.")] = Path(),
+) -> None:
+    """The entity registry (M2): vault/entities/*.md. `list` shows the entities, `check` the
+    problems (exit 1 if any), `propose` stages in the inbox the names relations use that no
+    note holds. Nothing is ever merged or made into a note automatically."""
+    from brain_core.stores.vault import VaultStore
+
+    if action not in ("list", "check", "propose"):
+        typer.echo("action must be list | check | propose", err=True)
+        raise typer.Exit(code=1)
+    with _open(path) as agent:
+        vault = next((s for s in agent.stores if isinstance(s, VaultStore)), None)
+        if vault is None or vault.entities is None:
+            typer.echo("ERROR: no vault configured in brain.yaml", err=True)
+            raise typer.Exit(code=1)
+        agent.brain_sync()
+        ents = vault.entities
+        if action == "list":
+            rows = agent.db.fetchall(
+                "SELECT e.name, e.type, e.id, e.merged_into, count(m.occ_id) AS n FROM entities e "
+                "LEFT JOIN mentions m ON m.entity_id = e.id GROUP BY e.id ORDER BY e.name"
+            )
+            for r in rows:
+                merged = f" → merged into {r['merged_into']}" if r["merged_into"] else ""
+                typer.echo(f"{r['name']} ({r['type']}) {r['id']}: {r['n']} mention(s){merged}")
+            typer.echo(f"{len(rows)} entities")
+            return
+        if action == "check":
+            problems = ents.problems()
+            for p in problems:
+                typer.echo(f"  {p}")
+            typer.echo(f"{len(problems)} problem(s)")
+            if problems:
+                raise typer.Exit(code=1)
+            return
+        inbox = vault.root / agent.config.session.inbox
+        n = ents.propose(inbox)
+    typer.echo(f"{n} proposed in {inbox.name}; a person makes each note (none is merged)")
+
+
 @app.command("journal")
 def journal_cmd(
     action: Annotated[str, typer.Argument(help="status | backup | restore")],

@@ -1,0 +1,5 @@
+# The ontology entity notes are checked against (M2). A note records `ontology: N`; a version
+# bump that renames types says how in `renames:`. Predicates and their roles arrive with M3.
+version: 1
+entity_types: [person, organization, project, component, technology, concept, mission]
+renames: {}

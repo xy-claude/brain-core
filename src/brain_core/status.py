@@ -111,6 +111,16 @@ def brain_status(agent: Agent) -> dict[str, Any]:
                 "notes or archive folder renamed without `name:` in brain.yaml, or a page "
                 "that is gone"
             )
+        if vault.entities is not None:
+            try:
+                problems = vault.entities.problems()
+            except (OSError, sqlite3.Error) as e:
+                problems = [f"entities not read: {type(e).__name__}"]
+            if problems:
+                attention.append(
+                    f"{len(problems)} entity note problem(s), `brain entities check`: "
+                    + "; ".join(problems[:2])
+                )
     out["not_rebuilt"] = rebuild_loss(agent.db)
     try:
         out["journal"] = agent.journal.status()  # M1c: the history brain.db cannot rebuild

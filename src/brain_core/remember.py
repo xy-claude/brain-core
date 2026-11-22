@@ -49,6 +49,8 @@ def brain_remember(
         and all(extra.get(k) for k in ("subject", "predicate", "object"))
     ):
         text = relation_text(extra["subject"], extra["predicate"], extra["object"])
+    if kind == "entity" and not text and extra.get("name"):
+        text = extra["name"]
     if not text:
         raise ValueError("text must not be empty")
     if any(_SECRET.search(str(v)) for v in (text, domain, source, mission or "", *extra.values())):

@@ -30,7 +30,7 @@ from pydantic import Field
 from brain_core.agent import Agent
 
 _SESSION_PREFIX = "mcp-"
-_KINDS = "fact|pattern|decision|correction|note|raw|relation"
+_KINDS = "fact|pattern|decision|correction|note|raw|relation|entity"
 
 
 def build_server(agent: Agent) -> FastMCP:
@@ -150,7 +150,9 @@ def build_server(agent: Agent) -> FastMCP:
             Field(
                 description="Kind-specific fields. decision: title, reason, classification, "
                 "confidence. correction: title, error, correction, rule, theme. relation: "
-                "subject, predicate, object (or text 'S —[p]→ O'). note: section."
+                "subject, predicate, object (or text 'S —[p]→ O'). entity: name, "
+                "entity_type, aliases (comma-separated; a note in vault/entities/ with a "
+                "stable id). note: section."
             ),
         ] = None,
     ) -> dict[str, Any]:

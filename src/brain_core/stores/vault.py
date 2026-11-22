@@ -13,10 +13,11 @@ import os
 import re
 import sys
 import time
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import replace
 from datetime import date
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from brain_core.stores.base import Kind, Record, WriteResult, record_id
 from brain_core.stores.graph import (
@@ -28,6 +29,9 @@ from brain_core.stores.graph import (
     unsafe_relation,
 )
 from brain_core.stores.index import RecordIndex
+
+if TYPE_CHECKING:
+    from brain_core.entities import EntityIndex
 
 if sys.platform == "win32":
     import msvcrt
@@ -202,6 +206,12 @@ class VaultStore:
         self.ranked = index is not None  # with an index a query comes back in bm25 order
         self._meta_sig = -1  # mtime of record_meta.md when its keys were last loaded
         self.unread: dict[str, str] = {}  # file -> why it could not be read cleanly, for health
+        self.entities: EntityIndex | None = None  # the entity registry (M2), with an index
+        if index is not None:
+            from brain_core.entities import EntityIndex
+
+            self.entities = EntityIndex(index.db, self)
+            index.entities = self.entities
 
     # ── read ────────────────────────────────────────────────────────────────
 
@@ -212,8 +222,12 @@ class VaultStore:
         if kind == "raw":
             return sorted((self.root / "raw").glob("*.md"), reverse=True)
         if kind == "knowledge":
+            # an entity note is read like a knowledge page too, so recall finds it (M2)
             return sorted(
-                p for p in (self.root / "knowledge").glob("*.md") if not p.name.startswith("_")
+                p
+                for folder in ("knowledge", "entities")
+                for p in (self.root / folder).glob("*.md")
+                if not p.name.startswith("_")
             )
         return [self.root / FILES[kind]] if kind in FILES else []
 
@@ -310,13 +324,15 @@ class VaultStore:
             if kind == "relation":
                 assert self.index is not None
                 mirror(self.index.db, records)  # an older version still reads the table (M1a)
-                # kept out of the keyword index: the graph store ranks them, as in 0.9.1
-                return []
+            # relations reach the journal and the mentions; the index keeps them out of the
+            # keyword search, so the graph store ranks them as in 0.9.1
             return records
 
         self.index.sync(
             self.name, files, parse, lambda p: f"vault:{p.relative_to(self.root).as_posix()}"
         )
+        if self.entities is not None:
+            self.entities.refresh()  # entity notes changed: every mention is found again
 
     def read(self, kind: Kind, query: str | None = None, limit: int = 50) -> list[Record]:
         if query and self.index:
@@ -471,7 +487,7 @@ class VaultStore:
                     self._sync()
             finally:
                 journal.via = "ingest"
-        if r.status in ("written", "exists") and r.id:
+        if r.status in ("written", "exists") and r.id and kind != "entity":
             try:
                 # keys can be added to an old record
                 self._note_meta(r.id, when or date.today(), extra)
@@ -490,6 +506,8 @@ class VaultStore:
         # which is meant only for a stray byte the file already had
         "".join([text, domain, *map(str, extra.values())]).encode()
         when = when or date.today()
+        if kind == "entity":
+            return self._write_entity(text, when, extra)
         if kind == "relation":
             parts = split_relation(text, extra)
             if parts is None:
@@ -589,6 +607,56 @@ class VaultStore:
         return WriteResult(
             self.name, rid, "written", f"{path.relative_to(self.root).as_posix()} › {section}"
         )
+
+    def _write_entity(self, text: str, when: date, extra: dict[str, str]) -> WriteResult:
+        """An entity note in entities/ with a new UUIDv7 id (M2). A name or alias an entity
+        already has is that entity: nothing is written."""
+        from brain_core.entities import ontology, uuid7
+
+        name = " ".join(str(extra.get("name") or text).split())
+        if not name or name.startswith("."):
+            return WriteResult(self.name, "", "refused", "an entity needs a name")
+        onto = ontology()
+        etype = extra.get("entity_type", "concept")
+        if etype not in onto["entity_types"]:
+            types = ", ".join(onto["entity_types"])
+            return WriteResult(self.name, "", "refused", f"entity_type must be one of {types}")
+        if self.entities is not None and (have := self.entities.lookup(name)):
+            return WriteResult(self.name, sorted(have)[0], "exists", "entities/")
+        aliases = [a.strip() for a in str(extra.get("aliases", "")).split(",") if a.strip()]
+        file = re.sub(r'[\\/:*?"<>|]', "-", name)
+        path = self.root / "entities" / f"{file}.md"
+        eid = uuid7()
+        body = (
+            f"---\ntype: entity\nid: {eid}\nentity_type: {etype}\nontology: {onto['version']}\n"
+            + (f"aliases: {json.dumps(aliases)}\n" if aliases else "")
+            + f"created: {when.isoformat()}\n---\n# {name}\n"
+        )
+        with self._locked(path):
+            if path.exists():
+                return WriteResult(self.name, "", "exists", path.relative_to(self.root).as_posix())
+            self._save(path, body, when, bump=False)
+        if self.entities is not None:
+            self.entities.refresh()  # registered at once, before any search syncs
+        return WriteResult(self.name, eid, "written", path.relative_to(self.root).as_posix())
+
+    def append_section(
+        self, path: Path, section: str, lines: list[str], key: Callable[[str], str] = str
+    ) -> int:
+        """Append ``lines`` under ``## section`` of ``path`` (made if missing), skipping a line
+        whose ``key`` one already there has; one atomic write. Returns how many were added."""
+        today = date.today()
+        with self._locked(path):
+            text = read_text(path, "surrogateescape") if path.exists() else f"# {path.stem}\n"
+            have = {key(ln) for ln in text.splitlines() if ln.startswith("- ")}
+            new = []
+            for ln in lines:
+                if key(ln) not in have:
+                    have.add(key(ln))
+                    new.append(ln)
+            if new:
+                self._save(path, _into_section(text, section, new), today, bump=False)
+        return len(new)
 
     def append_relations(self, items: Iterable[tuple[str, str, str, str]]) -> set[str]:
         """Append to relations.md the relations it lacks (subject, predicate, object,

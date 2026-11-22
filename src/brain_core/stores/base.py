@@ -16,6 +16,7 @@ Kind = Literal[
     "note",
     "raw",
     "relation",
+    "entity",  # an entity note in vault/entities/ (M2)
     "knowledge",
     "transcript",  # read-only: indexed from Claude Code session files, never written
 ]

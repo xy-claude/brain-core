@@ -166,9 +166,10 @@ def match_query(query: str) -> str:
 # a re-read costs no stored vector. 4 (M1b): notes and archive records take store-relative
 # ids; their vectors follow with `brain index --migrate-ids`, or are made again
 if TYPE_CHECKING:
+    from brain_core.entities import EntityIndex
     from brain_core.journal import Journal
 
-FORMAT = 4
+FORMAT = 5  # 5 (M2): each row names its source id, for the mentions
 
 
 def _sig(st: os.stat_result) -> str:
@@ -195,6 +196,7 @@ def stored(doc: str, score: float = 0.0) -> Record:
     """A row of the index back as a record. ``undated`` is read off the parser's mark."""
     d = json.loads(doc)
     d["date"] = date.fromisoformat(d["date"])
+    d["extra"].pop("source_id", None)  # the row's bookkeeping (M2), not the record's
     return Record(**{**d, "score": score, "undated": d["extra"].get("legacy") == "undated"})
 
 
@@ -203,6 +205,7 @@ class RecordIndex:
         self.db = db
         self.keys: dict[str, str] = {}  # record id -> its search keys, see set_keys
         self.journal = journal  # data/journal.db (M1c): what the vault held, and when
+        self.entities: EntityIndex | None = None  # set by the vault store (M2): mentions
         if journal is not None and journal.check(db):
             # brain.db is new, or saw history its journal lost: every file is read again, so
             # the journal records every version the files hold now (late, never early)
@@ -297,28 +300,33 @@ class RecordIndex:
                 pass
             gone.append(key)
         seq = 0
-        if self.journal is not None and (changed or gone):
+        batch = {source(p): [(r.id, full_text(r)) for r in recs] for _k, _s, recs, p in changed}
+        batch |= {source(Path(key)): [] for key in gone}
+        if self.journal is not None and batch:
             # the journal first: a crash before brain.db commits leaves the old signatures, so
             # the next sync derives again, and finds its journal rows already there
-            batch = {source(p): [(r.id, full_text(r)) for r in recs] for _k, _s, recs, p in changed}
-            batch |= {source(Path(key)): [] for key in gone}
             seq = self.journal.record(batch)
-        for key, sig, records, _p in changed:
+        for key, sig, records, p in changed:
             with self.db.transaction():
                 self.db.execute(
                     "DELETE FROM records_fts WHERE store = ? AND path = ?", (store, key)
                 )
                 for r in records:
+                    if r.kind == "relation":
+                        continue  # journaled and mentioned, never keyword-ranked (M1a)
                     # the heading and the date are searchable; the record keeps its own text.
                     # An undated line has only its file's date, which is not a day to find it by
                     body = f"{r.domain} {full_text(r)}"
                     if not r.undated:
                         body += f" {r.date.isoformat()}"
                     row = {**asdict(r), "date": r.date.isoformat()}
+                    # the source id the mentions need (M2), inside `extra`: 0.8.0 builds a
+                    # Record from the row's top-level keys and knows no other
+                    row["extra"] = {**row["extra"], "source_id": source(p)}
                     # 0.8.0 reads these rows too and its Record has no `undated`: the mark
                     # the parser leaves in `extra` carries it, see `stored`
                     if row.pop("undated"):
-                        row["extra"] = {**r.extra, "legacy": "undated"}
+                        row["extra"] = {**row["extra"], "legacy": "undated"}
                     self.db.execute(
                         "INSERT INTO records_fts (body, keys, store, kind, path, rid, record) "
                         "VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -347,6 +355,8 @@ class RecordIndex:
                 )
         if seq:
             self.journal.mark(self.db, seq)  # type: ignore[union-attr]
+        if self.entities is not None and batch:
+            self.entities.update(batch)
 
     def cover(self, query: str, rids: Sequence[str]) -> float:
         """How much of what was asked the best of ``rids`` holds, 0 to 1. Each query word
