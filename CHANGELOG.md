@@ -4,6 +4,8 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-22
+
 ### Changed
 - Relations live in the vault (M1a of `docs/KNOWLEDGE_ARCHITECTURE_AUDIT.md`). `brain_remember(kind='relation')` writes a line of `vault/relations.md`, `- [[subject]] —[predicate]→ [[object]] (recorded: date)`, so a relation survives a rebuild of `brain.db` and shows in Obsidian's graph. The id is unchanged. `recorded` is when brain-core stored it, never the day it became true. A relation whose subject or object holds `[[`, `]]`, `|` or a line break, or whose predicate holds `]` or `:`, is refused before any store sees it (beside a vault).
 - `brain.db`'s `relations` table becomes a mirror of `relations.md`: every save and every sync of the file writes it, so a 0.9.1 install on the same agent still reads every relation. Recall reads relations through it, but only the ones the file holds, so a line removed by hand stays out (`brain doctor` names such rows) and relations rank exactly as before: they are kept out of the keyword index.
