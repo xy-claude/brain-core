@@ -70,8 +70,11 @@ def test_the_claims_around_a_named_entity_join_the_ranking(tmp_path: Path) -> No
     walked = {(c["claim"], c["hop"], c["validity"]) for c in out["claims"]}
     assert ("Ride App —USES(payments)→ Stripe", 1, "true") in walked
     assert ("Stripe —RUNS_ON→ AWS", 2, "true") in walked  # two hops out
-    # a claim near the entity that says nothing the question asks is left out
-    assert not any("Driver Portal" in c for c, _h, _v in walked)
+    # within a hop, the claim that says what the question asks comes first
+    order = [c["claim"] for c in out["claims"] if c["hop"] == 1]
+    assert order.index("Ride App —USES(payments)→ Stripe") < order.index(
+        "Ride App —OWNS→ Driver Portal"
+    )
     by_graph = [r for r in out["results"] if "graph" in r.get("found_by", [])]
     assert by_graph and all(r.get("path") for r in by_graph)
     assert any(r["path"] == "Ride App —USES(payments)→ Stripe" for r in by_graph)
@@ -156,3 +159,11 @@ def test_a_name_inside_a_path_or_an_address_seeds_nothing(tmp_path: Path) -> Non
     assert g.seeds("where does Stripe run?") == [("stripe", "name:stripe")]
     for q in ("where is local/stripe.yaml?", "mail stripe.billing@example.com", "see /stripe/x"):
         assert g.seeds(q) == [], q
+
+
+def test_an_undated_line_cannot_answer_a_question_about_change(tmp_path: Path) -> None:
+    v = setup(tmp_path, "[[Ride App]] —[USES: maps]→ [[MapBox]] (recorded: 2026-10-01T10:00:00)")
+    now = brain_recall([v], "what maps does the ride app use?", today=TODAY, graph=net(v))
+    assert [c.get("undated") for c in now["claims"]] == [True]  # shown, and marked
+    still = brain_recall([v], "does the ride app still use MapBox maps?", today=TODAY, graph=net(v))
+    assert still.get("claims", []) == []

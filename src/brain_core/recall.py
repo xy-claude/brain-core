@@ -86,9 +86,9 @@ _WORD = re.compile(r"[a-z0-9]+(?:[-_.][a-z0-9]+)*")
 # c=60, 157 for keywords alone. A small c lets the head of either list lead, which is what keeps
 # an exact keyword hit on top.
 _RRF_C = 10
-# M4: a claim the graph net reached shares the question's words by construction, and a
-# relation has no vector: counted once it lost to every record two nets found
-_WEIGHT = {"graph": 2.0}
+# a net's share in the fusion; every net counts once (M4 tried the graph net at 2: it lifted
+# multi-hop questions written in the relations' own words and broke others)
+_WEIGHT: dict[str, float] = {}
 _NETS = ("vault", "notes", "archive")  # the stores whose records carry vectors
 # a word that names one thing exactly: has a digit, or an inner _ . / (0.4.26, invalid_grant,
 # session_recovery.py). A date or a bare year is not one.

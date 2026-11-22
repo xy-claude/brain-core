@@ -25,10 +25,11 @@ if TYPE_CHECKING:
     from brain_core.stores.index import RecordIndex
 
 Hit = tuple[Record, str, float]
+_BLOCK = 10  # claims shown in the reply's block; the rest are counted, never dropped silently
 # a question about how things were, not how they are: ended claims stay, marked (H.2)
 _HISTORY = re.compile(
     r"\b(originally|at first|first|before|used to|changed|since|until|why did we|history|"
-    r"previously|no longer|anymore|replaced|switched)\b",
+    r"previously|no longer|anymore|any more|still|replaced|switched)\b",
     re.I,
 )
 
@@ -91,8 +92,9 @@ class GraphNet:
         paths: dict[str, str] = {}
         block: list[dict[str, Any]] = []
         seen: set[str] = set()
-        # what the question asks beyond the names it was seeded by: a claim that says none of
-        # it is only near the entity, not about the question, and is left out
+        # what the question asks beyond the names it was seeded by orders the claims of one
+        # hop (H.3: by hop, then by the record's keyword score). A filter on it was tried:
+        # it kept only questions that reuse a relation's own words, and paraphrases lost all
         asked = _words(query) - {w for n, _e in seeds for w in _words(n)}
         shown: list[tuple[int, int, str, Any]] = []
         for n, e in enumerate(w.edges):
@@ -106,23 +108,28 @@ class GraphNet:
             path = f"{s} —{pred}→ {o}"
             # the claims that share most words with the question first, then by hop: the
             # walk's own order (rank, id) says nothing about what was asked
+            if history and all(p.undated and p.true_from is None for p in c.periods):
+                continue  # a line with no date says nothing about what changed, or when
             score = _shared(asked, _words(path.replace("_", " ")))
-            if score:
-                shown.append((-score, n, path, (e, c)))
-        shown.sort(key=lambda x: (x[0], x[3][0].hop, x[1]))
+            shown.append((-score, n, path, (e, c)))
+        shown.sort(key=lambda x: (x[3][0].hop, x[0], x[1]))
         for _score, _n, path, (e, c) in shown:
             first = c.evidence[0]
             validity = c.at(day, today)
-            block.append(
-                {
-                    "claim": path,
-                    "hop": e.hop,
-                    "validity": validity,
-                    "lifecycle": c.lifecycle.value,
-                    "evidence": len(c.evidence),
-                    **({"disputed": True} if c.disputed_on(day, today) else {}),
-                }
-            )
+            item: dict[str, Any] = {
+                "claim": path,
+                "hop": e.hop,
+                "validity": validity,
+                "lifecycle": c.lifecycle.value,
+                "evidence": len(c.evidence),
+            }
+            if all(p.undated and p.true_from is None for p in c.periods):
+                # no row gives a date: true "now" by the votes, but nothing says it still holds
+                item["undated"] = True
+            if c.disputed_on(day, today):
+                item["disputed"] = True
+            if len(block) < _BLOCK:
+                block.append(item)
             for ev in c.evidence:
                 got = self._record(ev.occurrence.source_id, ev.occurrence.record_id, first)
                 if got is None or got[0].id in seen or not in_scope(*got):
@@ -130,12 +137,12 @@ class GraphNet:
                 seen.add(got[0].id)
                 paths[got[0].id] = path
                 hits.append((got[0], got[1], 0.0))
-        for rid, _store in self._mentioning([e for _n, e in seeds], candidates):
-            got = self.index.get(rid)
-            if got and got[0].id not in seen and in_scope(*got):
-                seen.add(got[0].id)
-                hits.append((got[0], got[1], 0.0))
+        # The audit adds the records that merely mention a seed. Measured on a real agent
+        # with five entity notes they repeat the keyword search at the graph net's weight and
+        # broke 3 to 5 of 443 questions, so only the claims' own evidence is put forward
         info: dict[str, Any] = {"seeds": [n for n, _e in seeds], "claims": block}
+        if len(shown) > len(block):
+            info["claims_total"] = len(shown)
         if history:
             info["history"] = True
         if w.truncated:
@@ -172,17 +179,6 @@ class GraphNet:
                 "graph",
             )
         return self.index.get(rid)
-
-    def _mentioning(self, seeds: list[str], cap: int) -> list[tuple[str, str]]:
-        marks = ",".join("?" * len(seeds))
-        return [
-            (r["record_id"], r["source_id"])
-            for r in self.claims.db.fetchall(
-                f"SELECT DISTINCT record_id, source_id FROM mentions WHERE entity_id IN ({marks}) "
-                "ORDER BY record_id LIMIT ?",
-                (*seeds, cap),
-            )
-        ]
 
 
 def _words(text: str) -> set[str]:
