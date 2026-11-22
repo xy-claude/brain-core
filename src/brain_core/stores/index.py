@@ -12,6 +12,7 @@ and embedded as ``[redacted]``. The file itself is never touched.
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import math
 import os
@@ -170,6 +171,11 @@ if TYPE_CHECKING:
 FORMAT = 4
 
 
+def _sig(st: os.stat_result) -> str:
+    """A file's stamp: the index format, its modified time and its size."""
+    return f"{FORMAT}:{st.st_mtime_ns}:{st.st_size}"
+
+
 def _masked(r: Record) -> Record:
     """``r`` with every credential-shaped run replaced: what the index stores, returns and
     hands to the embed worker. The id stays that of the original text."""
@@ -264,14 +270,20 @@ class RecordIndex:
             key = str(p)
             seen.add(key)
             try:
-                st = p.stat()
-                sig = f"{FORMAT}:{st.st_mtime_ns}:{st.st_size}"
+                sig = _sig(p.stat())
                 if known.get(key) == sig:
                     continue
+                try:
+                    before: bytes | None = hashlib.sha256(p.read_bytes()).digest()
+                except OSError:
+                    before = None  # the parser names an unreadable file (health), then raises
                 records = [_masked(r) for r in parse(kind, p)]
-                st = p.stat()
-                if f"{FORMAT}:{st.st_mtime_ns}:{st.st_size}" != sig:
-                    continue  # changed while it was read: the next sync reads it whole
+                # changed while it was read: the next sync reads it whole. The bytes too, as a
+                # coarse file clock (Windows) keeps the stamp of an edit of the same size
+                if _sig(p.stat()) != sig or (
+                    before is not None and hashlib.sha256(p.read_bytes()).digest() != before
+                ):
+                    continue
             except OSError:
                 continue  # a file a sync service has evicted: keep the rows it has
             changed.append((key, sig, records, p))

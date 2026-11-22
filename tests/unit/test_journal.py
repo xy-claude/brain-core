@@ -395,3 +395,29 @@ def test_brain_status_reports_the_journal(tmp_path: Path) -> None:
         a.brain_sync()
         st = a.brain_status()
     assert st["journal"]["integrity"] == "ok" and st["journal"]["rows"] == 1
+
+
+def test_an_edit_the_file_clock_cannot_see_is_still_caught(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Windows keeps coarse file times: an edit of the same size inside one tick leaves the
+    stamp as it was. The bytes are compared too, so the old text is never recorded as read."""
+    monkeypatch.setattr("brain_core.stores.index._sig", lambda st: f"5:{st.st_size}")
+    j, _db, v, clock = setup(tmp_path)
+    facts(v.root, "Port is 8888")
+    real = VaultStore._parse
+
+    def edit_while_reading(self, kind, path, full=False):
+        out = real(self, kind, path, full)
+        if path.name == "facts.md" and not getattr(self, "_edited", False):
+            self._edited = True
+            facts(self.root, "Port is 8889")  # the same size: the stamp cannot tell
+        return out
+
+    monkeypatch.setattr(VaultStore, "_parse", edit_while_reading)
+    sync(v)
+    assert rows(j) == []
+    monkeypatch.setattr(VaultStore, "_parse", real)
+    clock.tick()
+    sync(v)
+    assert [r[0] for r in rows(j)] == [record_id("Port is 8889")]
