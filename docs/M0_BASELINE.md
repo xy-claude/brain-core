@@ -4,20 +4,24 @@
 **Plan:** `docs/KNOWLEDGE_ARCHITECTURE_AUDIT.md`, section P, milestone M0. M0 only measures: no schema change, no migration, no change to how brain-core behaves.
 **Privacy:** this file holds counts and scores only. The questions, record text, predicate and entity names, and the label-review packet stay under `local/audit-m0/`, which git ignores.
 
+**All retrieval scores here are provisional.** They rest on labels written by a model. They stay provisional until a person has checked the 104-question review packet (section 2), and no engine comparison should rest on them before then (audit O.5, revision 2.2).
+
 ## Summary
 
 | Question M0 had to answer | Answer |
 |---|---|
-| Does 0.9.1 still score what the README publishes? | **Yes.** Keywords find 295 of 446, the README's 0.9.0 figure. Against the 2026-11-14 run: 7 fixed, 4 broken, McNemar p 0.55. With vectors: 346, also the README figure (56 fixed and 5 broken against keywords, p < 0.001) |
+| Does 0.9.1 still score what the README publishes? | **Yes, on provisional labels.** Keywords find 295 of 446, the README's 0.9.0 figure. Against the 2026-11-14 run: 7 fixed, 4 broken, McNemar p 0.55. With vectors: 346, also the README figure (56 fixed and 5 broken against keywords, p < 0.001) |
 | How big is the graph the plan would build on? | **Tiny.** 82 relations, 43 predicates (31 used once), 75 entity names, highest degree 19, nothing written since 2026-11-02 |
 | Would decisions feed it? | **Not today.** None of the 81 decisions has a `[[link]]` in its fields, so rule `decision-field/1` derives 0 claims. 313 records do carry wikilinks, 301 of them knowledge pages |
 | Do the traversal limits bind? | **No.** A 2-hop walk from each of the 75 entities finds at most 49 edges, reads at most 74 rows, takes at most 0.8 ms, and never truncates. `hub_degree` 200 and `fan` 20 are safety limits here, not tuning |
 | Is a file watcher needed? | **No.** A sync with no change takes 5 ms; a full parse of every markdown store takes 2.5 s |
-| Is recall fast enough? | Snapshot, keywords: p50 49 ms, p95 74 ms. **Live** copy, keywords plus transcripts: p50 73 ms, **p95 110 ms**, already above the audit's 100 ms gate (O.5). The gate needs restating against this baseline |
-| Are the labels trustworthy? | **Not checked yet.** A 104-question review packet is ready for a person (section 2) |
+| Is recall fast enough? | Snapshot, keywords: p50 49 ms, p95 74 ms. **Live** copy, keywords plus transcripts: p50 73 ms, **p95 110 ms**, already above the audit's 100 ms gate (O.5). The gate needs restating against this baseline. Revision 2.2 does: the gate is now baseline-relative (p95 at most 10% above these numbers), and 100 ms stays a target |
+| Are the labels trustworthy? | **Not checked yet.** A 104-question packet is ready for a person (section 2); an AI-assisted pre-review is kept apart and is not validation (section 7) |
 | Anything wrong that M0 was not looking for? | **Yes, two things.** Notes and archive record ids embed the absolute folder path (audit G11). The live agent has a current vector for only 17% of its records (section 5) |
 
 ## 1. Baseline recall
+
+*Provisional: model-written labels, not yet checked by a person.*
 
 446 labelled questions on the frozen eval snapshot of 2026-11-14, the one the labels were written against, with `--today 2026-11-14`. A hit means a gold record is in the top 10.
 
@@ -107,6 +111,7 @@ The snapshot of 2026-11-14 held 5,821.
    - How it showed: a copy of the eval snapshot "lost" 64 gold records this way.
    - What it breaks: search keys in `record_meta.md`, vectors and `supersedes` links all key on those ids.
    - The fix: hash the path relative to the store's root. That is a migration of existing keys, so it is the owner's call, and the natural place is M1 hygiene. M0 worked around it by reading those folders in place, read-only.
+   - Sized on the live copy, read-only, for revision 2.2: a migration touches 2,805 records. It would write 588 `was:` meta lines for the records that have search keys and remap 633 vectors. No `supersedes` link names them. The plan is M1b in the audit.
 2. **The live agent's vector index is 83% empty.**
    - What happens: 4,976 of 6,016 records have no vector for their current text. Recall embeds at most 16 a call, so hybrid recall on the live agent sees about a sixth of memory, and the README's hybrid gains do not hold there.
    - The fix: `brain index` on the live agent fills it, about five minutes on this machine.
@@ -121,9 +126,87 @@ The snapshot of 2026-11-14 held 5,821.
 |---|---|
 | M1 | Proceed as planned, and add the G11 id fix and a `brain index` reminder for stale vectors. Starting the ledger in M1 matters more than M0 expected: the graph is nearly empty, so the knowledge layer will be built mostly from records written after M1 |
 | M2–M4 | The value of the graph net depends on M2's deterministic links (knowledge pages, entity notes, alias matches in decisions), not on the 82 existing relations. Before building M4, draft the relation and multi-hop slices (O.2) and measure how many of their answers any graph could reach |
-| O.5 gate | Restate "p95 under 100 ms with keywords" as "no worse than this baseline's p95 + 10%": live p95 is 110 ms today |
+| O.5 gate | Done in audit revision 2.2: p95 at most 10% above this baseline on the same corpus and machine; a keyword p95 under 100 ms stays an optimisation target |
 | S3 | Measuring the judge on 0.9.1 needs the owner's approval to send eval questions and records to Anthropic |
 | Labels | The person-checked review (section 2) gates any engine comparison (audit O.5 item 1) |
+
+## 7. Added in validation for audit revision 2.2
+
+**Status: M0 is not complete.** No person has reviewed the labels, so every score in this file is provisional. The completion criteria are in section 8.
+
+**Where the labels came from.**
+- The first 143 questions were written by a model reading the records; 11 of them use the owner's own past words (README).
+- The other 303 were drafted by a model from a catalog of the snapshot, under the rules in `local/eval/m0/BRIEF.md`:
+  - the gold must answer fully
+  - an exact answer substring is given
+  - every other record stating the answer is added, archive copies included
+  - one clear answer per question
+- Each answerable question was then checked once by a second model (README), and mechanically by `check_labels.py`: the gold resolves and the answer is in the store.
+- No person has checked any of them.
+- The catalog holds 5,394 unique records (5,762 lines), while 0.9.1 indexes 5,821 for the same snapshot. Labels can therefore miss records the 0.9.0 reader added.
+
+**AI-assisted pre-review of the 104-item packet: a hint, not validation.**
+- Four model agents classified the items. Their verdicts are in `local/audit-m0/ai_review/label_review_ai.csv`, apart from the human `label_review.csv`, whose verdict column is empty.
+- Results: 58 correct, 40 incomplete, 4 ambiguous, 2 incorrect, 0 unverifiable.
+- Every absent item was judged correct.
+- Most "incomplete" verdicts name an archive copy or a same-day note missing from the gold. The agents applied that rule differently, which is one more reason a person must decide.
+
+**Questions affected by path-dependent ids (G11).**
+- 182 of 446: reworded 76, real 1, same 4, update 28, multi 34, identifier 39.
+- The frozen snapshot's 588 search-key lines for notes and archive records are keyed by the live agent's paths, so in this snapshot none of them ever attached. The scores above, and the README's, measure notes and archive recall without their search keys.
+
+**What fixing G11 does, measured on fresh isolated copies, labels translated:**
+
+| Variant | S0 | S2 |
+|---|---|---|
+| New ids only | 295, 0 fixed, 0 broken | 346, 0 fixed, 0 broken |
+| New ids plus the 588 live key lines attached | 298 (12 fixed, 9 broken, p 0.66) | 347 (7 fixed, 6 broken, p 1.0) |
+
+With the keys attached, the absent slice goes 38 → 36 in both, and S0 breaks one identifier question. So after M1b the baseline must be re-measured, not counted as an improvement.
+
+**Paired S0 → S2, by slice** (from `compare.py`):
+
+| Slice | S0 → S2 | Fixed / broken |
+|---|---|---|
+| reworded | 83 → 114 | 33 / 2 |
+| real | 8 → 10 | 2 / 0 |
+| same | 20 → 20 | 0 / 0 |
+| update | 24 → 27 | 5 / 2 |
+| temporal | 42 → 46 | 4 / 0 |
+| multi | 29 → 37 | 9 / 1 |
+| absent | 38 → 38 | 0 / 0 |
+| identifier | 51 → 54 | 3 / 0 |
+| **all** | **295 → 346** | **56 / 5, p < 0.001** |
+
+**Memory.**
+- A keyword eval process peaks at 52 MB resident; a recall process with vectors at 124 MB.
+- The embed worker showed 58 MB in `ps`. That does not count the model's GPU memory on Apple Silicon, so the worker's real footprint was not measured.
+
+**Preserved.**
+- `local/audit-m0/MANIFEST.json` holds the sha256 of the frozen questions (identical to M0's copy), the frozen 2026-11-14 baseline and every M0 result file. No earlier run was overwritten.
+- Opening the frozen database read-only updated its WAL index file (`brain.db-shm`). Its data file and WAL are unchanged since 2026-11-14.
+
+**Still required to finish M0:**
+1. the human review
+2. a re-scored baseline on the corrected labels
+3. about 40 multi-hop and 40 temporal questions, person-checked, before M4
+4. optionally S3, with the owner's approval
+
+## 8. M0 completion criteria (from 2026-11-22)
+
+**M0 is not reported complete until all five hold:**
+
+| # | Criterion | State on 2026-11-22 |
+|---|---|---|
+| 1 | A person has reviewed all 104 questions in `local/audit-m0/human_review/M0_HUMAN_REVIEW_PACKET.md` (git-ignored). The AI-assisted pre-review is a hint only and never counts | **pending.** The packet is built, with 104 empty decision blocks; a blind copy exists for an independent reviewer |
+| 2 | The owner has approved every correction to the gold labels | **pending** |
+| 3 | The baseline is recalculated on the corrected labels, written to new files (`questions-v2.yaml`, `results/s0-v2.json`, `results/s2-v2.json`), with paired fixed and broken counts against the historical runs | **pending.** `apply_review.py` and the commands are ready (`local/audit-m0/human_review/README.md`); tested only on synthetic, machine-filled copies of the packet |
+| 4 | The results are preserved and reproducible: checksums added to `MANIFEST.json`, commands recorded, nothing earlier overwritten | **pending** for the new results. The historical ones are checksummed already |
+| 5 | Concerns A, B and C are resolved or explicitly accepted as known risks | **done.** All three were confirmed and corrected in audit revision 2.3, with regression tests |
+
+**Historical results, kept as they are.** 295/446 (keywords + keys) and 346/446 (+ vectors), measured on 2026-11-21 on model-written labels, are the historical, provisional baseline. They and their result files (`local/audit-m0/results/s0.json`, `s2.json`) are never edited or overwritten. Corrected scores go to new files beside them.
+
+S3 is not part of M0's completion and needs explicit approval, because it sends questions and records to Anthropic.
 
 ## How it was run
 
