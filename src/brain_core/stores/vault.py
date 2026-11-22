@@ -24,6 +24,7 @@ from brain_core.stores.graph import (
     RELATION_LINE,
     mirror,
     relation_line,
+    relation_parts,
     relation_text,
     split_relation,
     unsafe_relation,
@@ -32,6 +33,7 @@ from brain_core.stores.index import RecordIndex
 
 if TYPE_CHECKING:
     from brain_core.entities import EntityIndex
+    from brain_core.knowledge.reconcile import ClaimIndex
 
 if sys.platform == "win32":
     import msvcrt
@@ -207,11 +209,17 @@ class VaultStore:
         self._meta_sig = -1  # mtime of record_meta.md when its keys were last loaded
         self.unread: dict[str, str] = {}  # file -> why it could not be read cleanly, for health
         self.entities: EntityIndex | None = None  # the entity registry (M2), with an index
+        self.claims: ClaimIndex | None = None  # claims (M3), with an index and a journal
         if index is not None:
             from brain_core.entities import EntityIndex
 
             self.entities = EntityIndex(index.db, self)
             index.entities = self.entities
+            if index.journal is not None:
+                from brain_core.knowledge.reconcile import ClaimIndex
+
+                self.claims = ClaimIndex(index.db, index.journal, self)
+                index.claims = self.claims
 
     # ── read ────────────────────────────────────────────────────────────────
 
@@ -333,6 +341,8 @@ class VaultStore:
         )
         if self.entities is not None:
             self.entities.refresh()  # entity notes changed: every mention is found again
+        if self.claims is not None:
+            self.claims.refresh()  # record_meta.md and claim_reviews.md
 
     def read(self, kind: Kind, query: str | None = None, limit: int = 50) -> list[Record]:
         if query and self.index:
@@ -393,17 +403,23 @@ class VaultStore:
             out: list[Record] = []
             for n, line in enumerate(text.splitlines(), 1):
                 if m := RELATION_LINE.match(line):
-                    s, p, o, recorded = m.groups()
+                    s, p, o = relation_parts(m)
+                    recorded, stated = m["recorded"], m["stated"]
+                    extra = {"subject": s, "predicate": p, "object": o, "recorded": recorded or ""}
+                    if stated:
+                        extra["stated"] = stated  # the date the line states (M3)
+                    if m["o"] is None:
+                        extra["literal"] = "1"  # `—[LISTENS_ON]→ 8888`: a value, no entity
                     out.append(
                         Record(
                             record_id(relation_text(s, p, o)),
                             "relation",
                             relation_text(s, p, o),
-                            _parse_date((recorded or "")[:10]) or fallback,
+                            _parse_date(stated or (recorded or "")[:10]) or fallback,
                             p,
                             rel,
                             n,
-                            {"subject": s, "predicate": p, "object": o, "recorded": recorded or ""},
+                            extra,
                         )
                     )
             return out

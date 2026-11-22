@@ -60,6 +60,18 @@ CREATE TABLE IF NOT EXISTS ledger_occurrences (
 ) WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS idx_occurrence_source ON ledger_occurrences(source_id);
 CREATE TABLE IF NOT EXISTS journal_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL) WITHOUT ROWID;
+-- M3: every version of every raw derived row, with the syncs it existed in (audit J.1)
+CREATE TABLE IF NOT EXISTS derivation_journal (
+    kind         TEXT NOT NULL CHECK (kind IN ('evidence', 'review', 'link', 'time')),
+    row_key      TEXT NOT NULL,
+    row_json     TEXT NOT NULL,
+    journal_from TEXT NOT NULL,
+    journal_to   TEXT,
+    PRIMARY KEY (kind, row_key, journal_from),
+    CHECK (journal_to IS NULL OR journal_to > journal_from)
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS idx_derivation_open ON derivation_journal(kind, row_key)
+    WHERE journal_to IS NULL;
 """
 
 
@@ -176,6 +188,12 @@ class Journal:
 
     def recorded_at(self, occ_id: str, content_hash: str) -> str | None:
         """When the vault first held this version here, following unambiguous moves back."""
+        got = self.first_seen(occ_id, content_hash)
+        return got[0] if got else None
+
+    def first_seen(self, occ_id: str, content_hash: str) -> tuple[str, str] | None:
+        """(recording time, how: write / ingest / move) of this version here, an unambiguous
+        move followed back to where the text was first held."""
         row = self.db.fetchone(
             "SELECT seen_from, via, moved_from FROM record_ledger WHERE occ_id = ? AND "
             "content_hash = ? ORDER BY seen_from LIMIT 1",
@@ -184,8 +202,95 @@ class Journal:
         if row is None:
             return None
         if row["via"] == "move" and row["moved_from"]:
-            return self.recorded_at(row["moved_from"], content_hash) or str(row["seen_from"])
-        return str(row["seen_from"])
+            back = self.first_seen(row["moved_from"], content_hash)
+            return (back[0], "move") if back else (str(row["seen_from"]), "move")
+        return str(row["seen_from"]), str(row["via"])
+
+    def copies_changed_since(self, source: str, rid: str, since: str, until: str) -> bool:
+        """Did a copy of ``rid`` in ``source`` appear or go between ``since`` and ``until``?
+        Ordinals are contiguous, so counting up finds every copy that ever existed (issue C)."""
+        k = 1
+        while rows := self.db.fetchall(
+            "SELECT seen_from, seen_to FROM record_ledger WHERE occ_id = ?",
+            (occurrence_id(source, rid, k),),
+        ):
+            for r in rows:
+                if since < r["seen_from"] <= until or (
+                    r["seen_to"] is not None and since < r["seen_to"] <= until
+                ):
+                    return True
+            k += 1
+        return False
+
+    def in_gap(self, when: str) -> bool:
+        """Inside a window with no observation: before the epoch, or after a restore."""
+        return (
+            self.db.fetchone(
+                "SELECT 1 FROM ledger_gaps WHERE gap_from <= ? AND ? < gap_to", (when, when)
+            )
+            is not None
+        )
+
+    # ── the derivation journal (M3) ──────────────────────────────────────────
+
+    def version(self, raws: Mapping[str, Sequence[tuple[str, str, str]]]) -> None:
+        """``raws``: source id -> its raw derived rows, (kind, row key, row JSON); the key's
+        first element is the source. Closes the versions that changed or went, opens the new
+        ones, in one transaction. Idempotent, so a rebuild adds no version."""
+        if not raws:
+            return
+        now = self.stamp(self.clock())
+        with self._tx():
+            self.db.execute(
+                "INSERT OR IGNORE INTO journal_meta VALUES ('derivation_started', ?)", (now,)
+            )
+            for source, rows in raws.items():
+                cur = {
+                    (r["kind"], r["row_key"]): (r["row_json"], r["journal_from"])
+                    for r in self.db.fetchall(
+                        "SELECT kind, row_key, row_json, journal_from FROM derivation_journal "
+                        "WHERE journal_to IS NULL AND json_extract(row_key, '$[0]') = ?",
+                        (source,),
+                    )
+                }
+                new = {(k, rk): rj for k, rk, rj in rows}
+                for (k, rk), (rj, since) in cur.items():
+                    if new.get((k, rk)) == rj:
+                        continue
+                    if since >= now:  # opened in this same instant: it never existed
+                        self.db.execute(
+                            "DELETE FROM derivation_journal WHERE kind = ? AND row_key = ? "
+                            "AND journal_from = ?",
+                            (k, rk, since),
+                        )
+                    else:
+                        self.db.execute(
+                            "UPDATE derivation_journal SET journal_to = ? WHERE kind = ? AND "
+                            "row_key = ? AND journal_to IS NULL",
+                            (now, k, rk),
+                        )
+                for (k, rk), rj in new.items():
+                    if cur.get((k, rk), ("",))[0] != rj:
+                        self.db.execute(
+                            "INSERT OR REPLACE INTO derivation_journal VALUES (?, ?, ?, ?, NULL)",
+                            (k, rk, rj, now),
+                        )
+
+    def versions(self, at: str | None = None) -> list[tuple[str, str, str]]:
+        """The raw derived rows that existed at ``at`` (UTC stamp), or now: (kind, key, JSON)."""
+        args: tuple[str, ...] = ()
+        q = "journal_to IS NULL"
+        if at is not None:
+            q, args = "journal_from <= ? AND (journal_to IS NULL OR journal_to > ?)", (at, at)
+        return [
+            (r["kind"], r["row_key"], r["row_json"])
+            for r in self.db.fetchall(
+                f"SELECT kind, row_key, row_json FROM derivation_journal WHERE {q}", args
+            )
+        ]
+
+    def derivation_started(self) -> str | None:
+        return self._meta("derivation_started")
 
     # ── the marker ───────────────────────────────────────────────────────────
 
@@ -269,6 +374,15 @@ class Journal:
             rows = src.execute("SELECT * FROM record_ledger").fetchall()
             occs = src.execute("SELECT * FROM ledger_occurrences").fetchall()
             gaps = src.execute("SELECT * FROM ledger_gaps WHERE cause = 'restore'").fetchall()
+            has_derived = src.execute(
+                "SELECT 1 FROM sqlite_master WHERE name = 'derivation_journal'"
+            ).fetchone()
+            derived = (
+                src.execute("SELECT * FROM derivation_journal").fetchall() if has_derived else []
+            )
+            began = src.execute(
+                "SELECT value FROM journal_meta WHERE key = 'derivation_started'"
+            ).fetchone()
             src.close()
         except sqlite3.Error as e:
             raise ValueError(f"{file} is not a sound journal backup: {e}") from e
@@ -297,6 +411,19 @@ class Journal:
             self.db.executemany(
                 "INSERT OR IGNORE INTO ledger_occurrences VALUES (?, ?, ?, ?)", occs
             )
+            for kind, key, body, since, until in derived:  # M3: closed at the backup's time too
+                if until is None and since >= taken[0]:
+                    continue
+                self.db.execute(
+                    "INSERT OR IGNORE INTO derivation_journal VALUES (?, ?, ?, ?, ?)",
+                    (kind, key, body, since, until if until is not None else taken[0]),
+                )
+            if began is not None:
+                mine_began = self._meta("derivation_started")
+                self.db.execute(
+                    "INSERT OR REPLACE INTO journal_meta VALUES ('derivation_started', ?)",
+                    (min(began[0], mine_began or began[0]),),
+                )
             self.db.execute("DELETE FROM ledger_gaps WHERE cause = 'epoch'")
             self.db.execute(
                 "INSERT OR IGNORE INTO ledger_gaps VALUES (?, ?, 'epoch')", (EPOCH, started[0])

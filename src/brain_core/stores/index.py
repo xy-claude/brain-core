@@ -23,6 +23,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from brain_core.knowledge.rules import Raw, accepts
 from brain_core.storage.db import Database
 from brain_core.stores.base import Kind, Record, full_text, holds
 
@@ -168,8 +169,11 @@ def match_query(query: str) -> str:
 if TYPE_CHECKING:
     from brain_core.entities import EntityIndex
     from brain_core.journal import Journal
+    from brain_core.knowledge.reconcile import ClaimIndex
 
-FORMAT = 5  # 5 (M2): each row names its source id, for the mentions
+# 5 (M2): each row names its source id, for the mentions. 6 (M3): every source is read once
+# more, so its claim rows exist; the texts, and so the journal's ledger, are unchanged
+FORMAT = 6
 
 
 def _sig(st: os.stat_result) -> str:
@@ -206,6 +210,7 @@ class RecordIndex:
         self.keys: dict[str, str] = {}  # record id -> its search keys, see set_keys
         self.journal = journal  # data/journal.db (M1c): what the vault held, and when
         self.entities: EntityIndex | None = None  # set by the vault store (M2): mentions
+        self.claims: ClaimIndex | None = None  # set by the vault store (M3): raw claim rows
         if journal is not None and journal.check(db):
             # brain.db is new, or saw history its journal lost: every file is read again, so
             # the journal records every version the files hold now (late, never early)
@@ -306,6 +311,13 @@ class RecordIndex:
             # the journal first: a crash before brain.db commits leaves the old signatures, so
             # the next sync derives again, and finds its journal rows already there
             seq = self.journal.record(batch)
+        raws: dict[str, list[Raw]] = {}
+        if self.claims is not None:
+            for _k, _s, recs, p in changed:
+                if (got := self.claims.extract(source(p), recs)) is not None:
+                    raws[source(p)] = got
+            raws |= {source(Path(k)): [] for k in gone if accepts(source(Path(k)))}
+            self.claims.history(raws)  # the derivation journal, before brain.db too (M3)
         for key, sig, records, p in changed:
             with self.db.transaction():
                 self.db.execute(
@@ -340,6 +352,8 @@ class RecordIndex:
                             json.dumps(row),
                         ),
                     )
+                if self.claims is not None and source(p) in raws:
+                    self.claims.store(source(p), raws[source(p)])
                 self.db.execute(
                     "INSERT INTO index_files (store, path, sig) VALUES (?, ?, ?) "
                     "ON CONFLICT (store, path) DO UPDATE SET sig = excluded.sig",
@@ -347,6 +361,8 @@ class RecordIndex:
                 )
         for key in gone:
             with self.db.transaction():
+                if self.claims is not None and source(Path(key)) in raws:
+                    self.claims.store(source(Path(key)), [])
                 self.db.execute(
                     "DELETE FROM records_fts WHERE store = ? AND path = ?", (store, key)
                 )

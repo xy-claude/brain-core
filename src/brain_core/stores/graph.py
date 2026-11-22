@@ -34,9 +34,17 @@ _ARROW = re.compile(r"^(.+?)\s+—\[(.+?)\]→\s+(.+)$")
 _WORD = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
 # a line of vault/relations.md. `recorded` is when brain-core first stored the relation (the
 # table's created_at, kept verbatim): provenance only, never the day the relation became true
+# M3: the object may be a literal (`—[LISTENS_ON]→ 8888`), and a bare `(YYYY-MM-DD)` is the
+# date the line states (valid time), unlike `recorded`
 RELATION_LINE = re.compile(
-    r"^- \[\[(.+?)\]\] —\[(.+?)\]→ \[\[(.+?)\]\](?: \(recorded: ([^)]+)\))?\s*$"
+    r"^- \[\[(?P<s>.+?)\]\] —\[(?P<p>.+?)\]→ (?:\[\[(?P<o>.+?)\]\]|(?P<lit>[^\[\s(][^(]*?))"
+    r"(?: \((?:recorded: (?P<recorded>[^)]+)|(?P<stated>\d{4}-\d{2}-\d{2}))\))?\s*$"
 )
+
+
+def relation_parts(m: re.Match[str]) -> tuple[str, str, str]:
+    """Subject, predicate and object (an entity name or a literal) of a RELATION_LINE match."""
+    return m["s"], m["p"], m["o"] if m["o"] is not None else m["lit"]
 
 
 def relation_text(s: str, p: str, o: str) -> str:
@@ -57,8 +65,11 @@ def split_relation(text: str, extra: dict[str, str]) -> tuple[str, str, str] | N
 
 
 def unsafe_relation(s: str, p: str, o: str) -> str:
-    """Why a relations.md line could not give this relation back exactly, or "". A ``:`` in a
-    predicate is kept free for the role M3 adds (``—[p: role]→``)."""
+    """Why a relations.md line could not give this relation back exactly, or "". One ``: ``
+    in a predicate gives its role (M3: ``—[USES: graph-database]→``)."""
+    name_, colon, role = p.partition(": ")
+    if colon and name_.strip() and role.strip() and ":" not in name_ + role:
+        p = f"{name_}{role}"  # the role form: check its two halves
     for name, v, bad in (
         ("subject", s, "[[ ]] |"),
         ("object", o, "[[ ]] |"),
@@ -108,7 +119,7 @@ class GraphStore:
         if getattr(self, "_sig", None) != sig:
             text = self.relations_md.read_text(encoding="utf-8", errors="replace")
             self._ids = {
-                record_id(relation_text(*m.groups()[:3]))
+                record_id(relation_text(*relation_parts(m)))
                 for ln in text.splitlines()
                 if (m := RELATION_LINE.match(ln))
             }

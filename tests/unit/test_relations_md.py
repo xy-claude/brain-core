@@ -129,7 +129,7 @@ def test_migration_refuses_rows_the_line_cannot_hold_and_names_them(
     tmp_path: Path, db: Database
 ) -> None:
     legacy(db, "A]]B", "uses", "C", "2026-04-10")
-    legacy(db, "D", "has: role", "E", "2026-04-10")
+    legacy(db, "D", "has:role", "E", "2026-04-10")  # one ": " is a role (M3); a bare ":" is not
     legacy(db, "F", "uses", "G", "2026-04-10")
     report = migrate_relations(db, vault_on(tmp_path / "vault", db), tmp_path / "backups")
     assert report["appended"] == 1 and len(report["refused"]) == 2 and report["verified"]

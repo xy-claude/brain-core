@@ -1,5 +1,24 @@
-# The ontology entity notes are checked against (M2). A note records `ontology: N`; a version
-# bump that renames types says how in `renames:`. Predicates and their roles arrive with M3.
+# The ontology entity notes and claims are checked against (M2, M3). A note records
+# `ontology: N`; a version bump says how names changed in `renames:` (predicates: old -> new),
+# so a rebuild re-keys the claims and never rewrites a vault file.
 version: 1
 entity_types: [person, organization, project, component, technology, concept, mission]
+# functional: at most one current object per subject (per role with `per_role`): only these
+# can conflict. datatype: the type of a literal object. A predicate not listed is kept as
+# written (upper case), never functional.
+predicates:
+  USES: {functional: per_role}
+  DEPENDS_ON: {}
+  PART_OF: {functional: true}
+  WORKS_ON: {}
+  MEMBER_OF: {}
+  OWNS: {}
+  ALTERNATIVE_TO: {}
+  LISTENS_ON: {functional: true, datatype: port}
+  VERSION: {functional: true, datatype: version}
+  SELECTS: {}
+  REJECTS: {}
+  APPLIES_TO: {}
+  DERIVED_FROM: {}
+  RELATED_TO: {}
 renames: {}

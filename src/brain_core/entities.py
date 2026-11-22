@@ -210,6 +210,21 @@ class EntityIndex:
         self.refresh()
         return list(self._problems)
 
+    def alias_map(self) -> dict[str, set[str]]:
+        """Normalised alias -> entity ids, read once for many lookups (M3's claims)."""
+        self.refresh()
+        return self._aliases
+
+    def merges(self) -> dict[str, str]:
+        """Entity id -> the id it was merged into (checked: no dangling link, no cycle)."""
+        self.refresh()
+        return {
+            r["id"]: r["merged_into"]
+            for r in self.db.fetchall(
+                "SELECT id, merged_into FROM entities WHERE merged_into IS NOT NULL"
+            )
+        }
+
     # ── mentions ─────────────────────────────────────────────────────────────
 
     def _found(self, source: str, text: str) -> set[tuple[str, str]]:
@@ -260,9 +275,9 @@ class EntityIndex:
             for ln in rel.read_text(encoding="utf-8", errors="replace").splitlines():
                 if m := RELATION_LINE.match(ln):
                     from brain_core.stores.base import record_id
-                    from brain_core.stores.graph import relation_text
+                    from brain_core.stores.graph import relation_parts, relation_text
 
-                    text = relation_text(*m.groups()[:3])
+                    text = relation_text(*relation_parts(m))
                     batch["vault:relations.md"].append((record_id(text), text))
         self.db.execute("DELETE FROM mentions")
         self.update(batch)
@@ -280,8 +295,8 @@ class EntityIndex:
         )
         for ln in lines:
             if m := RELATION_LINE.match(ln):
-                for name in (m.group(1), m.group(3)):
-                    if not self._aliases.get(normalize_alias(name)):
+                for name in (m["s"], m["o"]):  # a literal object names no entity
+                    if name and not self._aliases.get(normalize_alias(name)):
                         names[name] += 1
         day = date.today().isoformat()
         staged = [
