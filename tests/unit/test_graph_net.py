@@ -167,3 +167,17 @@ def test_an_undated_line_cannot_answer_a_question_about_change(tmp_path: Path) -
     assert [c.get("undated") for c in now["claims"]] == [True]  # shown, and marked
     still = brain_recall([v], "does the ride app still use MapBox maps?", today=TODAY, graph=net(v))
     assert still.get("claims", []) == []
+
+
+def test_a_name_two_notes_share_is_reported_not_walked(tmp_path: Path) -> None:
+    v = setup(tmp_path, "[[Atlas]] —[USES]→ [[Redis]] (2026-10-01)")
+    (v.root / "entities").mkdir()
+    for name, eid in (("Atlas Mobile", "019a8b3e-7c2d-7f41-9a10-3b5e2d8c4f51"),
+                      ("Atlas Billing", "019a8b3e-7c2d-7f41-9a10-3b5e2d8c4f52")):  # fmt: skip
+        (v.root / "entities" / f"{name}.md").write_text(
+            f"---\ntype: entity\nid: {eid}\nentity_type: project\naliases: [atlas]\n---\n# {name}\n"
+        )
+    v.read("fact", "sync")
+    out = brain_recall([v], "what does atlas use?", today=TODAY, graph=net(v))
+    assert out["claims"] == [] and out["graph"]["ambiguous"] == ["atlas"]
+    assert "ambiguous" in out["graph"]["note"]

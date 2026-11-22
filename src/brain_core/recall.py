@@ -449,9 +449,11 @@ def brain_recall(
         out["claims"] = graph_info.pop("claims")
         out["graph"] = graph_info
         if why := graph_info.get("truncated"):
-            out["graph"]["note"] = f"graph expansion truncated ({', '.join(why)}) at " + ", ".join(
+            walk_cut = f"graph expansion truncated ({', '.join(why)}) at " + ", ".join(
                 graph_info.get("hubs") or graph_info["seeds"]
             )
+            had = out["graph"].get("note")
+            out["graph"]["note"] = f"{had}; {walk_cut}" if had else walk_cut
     if as_of is not None:
         out["as_of"] = as_of.isoformat()
     if asked_chars > _QUERY_CHARS:

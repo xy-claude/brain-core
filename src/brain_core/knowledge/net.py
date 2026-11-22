@@ -26,6 +26,17 @@ if TYPE_CHECKING:
 
 Hit = tuple[Record, str, float]
 _BLOCK = 10  # claims shown in the reply's block; the rest are counted, never dropped silently
+AMBIGUOUS = "?"  # a name several entity notes hold: not a seed
+
+
+def _ambiguous(names: list[str]) -> dict[str, Any]:
+    return {
+        "ambiguous": names,
+        "note": f"{', '.join(names)}: ambiguous, several entity notes hold this name, so the "
+        "relations around it were not walked; name the entity by a name only it holds",
+    }
+
+
 # a question about how things were, not how they are: ended claims stay, marked (H.2)
 _HISTORY = re.compile(
     r"\b(originally|at first|first|before|used to|changed|since|until|why did we|history|"
@@ -46,11 +57,13 @@ class GraphNet:
 
     def _names(self) -> dict[str, str]:
         """Normalised name -> entity id: every alias a note holds, and every name a claim
-        still waits on (``name:<alias>``)."""
+        still waits on (``name:<alias>``). A name two notes hold maps to ``AMBIGUOUS``: it is
+        no seed, or the walk would join two things that only share a name."""
         out: dict[str, str] = {}
         ents = self.claims.vault.entities
         if ents is not None:
-            out |= {a: next(iter(ids)) for a, ids in ents.alias_map().items() if len(ids) == 1}
+            for a, ids in ents.alias_map().items():
+                out[a] = next(iter(ids)) if len(ids) == 1 else AMBIGUOUS
         for (x,) in self.claims.db.fetchall(
             "SELECT subject FROM claims UNION SELECT object_entity FROM claims"
         ):
@@ -60,17 +73,25 @@ class GraphNet:
 
     def seeds(self, query: str) -> list[tuple[str, str]]:
         """(name as found, entity id) in order of mention, the longest name first at a place."""
+        return self._link(query)[0]
+
+    def _link(self, query: str) -> tuple[list[tuple[str, str]], list[str]]:
+        """The seeds, and the names in the question that several notes hold."""
         names = self._names()
         if not names:
-            return []
+            return [], []
         alts = "|".join(re.escape(n) for n in sorted(names, key=len, reverse=True))
         # a name inside a path, a file name or an address (local/x.yaml, x.name@mail) is not
         # the entity: the boundary keeps those out
         found = re.finditer(rf"(?<![\w\-./@])({alts})(?![\w\-/@]|\.\w)", normalize_alias(query))
         out: dict[str, str] = {}
+        shared: list[str] = []
         for m in found:
-            out.setdefault(names[m.group(1)], m.group(1))
-        return [(n, e) for e, n in out.items()]
+            if names[m.group(1)] == AMBIGUOUS:
+                shared += [m.group(1)] if m.group(1) not in shared else []
+            else:
+                out.setdefault(names[m.group(1)], m.group(1))
+        return [(n, e) for e, n in out.items()], shared
 
     def search(
         self,
@@ -81,9 +102,11 @@ class GraphNet:
         candidates: int,
     ) -> tuple[list[Hit], dict[str, Any]]:
         self.claims.settle()  # the names come from the claims: bring them up to date first
-        seeds = self.seeds(query)
+        seeds, shared = self._link(query)
         if not seeds:
-            return [], {}
+            if not shared:
+                return [], {}
+            return [], {"seeds": [], "claims": [], **_ambiguous(shared)}
         history = bool(_HISTORY.search(query))
         day = as_of or today
         w = walk(self.claims.db, [e for _n, e in seeds], self.limits, day, today, history)
@@ -143,6 +166,8 @@ class GraphNet:
         # with five entity notes they repeat the keyword search at the graph net's weight and
         # broke 3 to 5 of 443 questions, so only the claims' own evidence is put forward
         info: dict[str, Any] = {"seeds": [n for n, _e in seeds], "claims": block}
+        if shared:
+            info |= _ambiguous(shared)
         if len(shown) > len(block):
             info["claims_total"] = len(shown)
         if history:

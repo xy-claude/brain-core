@@ -136,7 +136,9 @@ def test_a_reflection_stays_a_candidate_until_its_relation_is_supported(tmp_path
         assert c.lifecycle is Lifecycle.CANDIDATE, key  # type: ignore[attr-defined]
         assert c.verification is Verification.UNVERIFIED, key  # type: ignore[attr-defined]
     report = v.claims.summary()["report"]
-    assert sum(r.startswith("reflection_unparented") for r in report) == 2  # no parent, or none held
+    assert (
+        sum(r.startswith("reflection_unparented") for r in report) == 2
+    )  # no parent, or none held
     # a person states the relation: the claim is supported apart from the reflection
     (v.root / "relations.md").write_text(
         f"# Relations\n\n- {NEO} (2026-11-01)\n- [[Kuzu]] —[ALTERNATIVE_TO]→ [[SQLite]]\n"
