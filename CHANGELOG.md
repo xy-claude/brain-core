@@ -4,6 +4,8 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-22
+
 ### Changed
 - Notes and archive record ids no longer depend on where a folder lives (M1b). A record's id is the hash of `<store>:<root name>/<file>#<heading>`, not of the file's absolute path; recall still shows the real path, and vault ids are unchanged. A folder's root name is its own name, or `name:` in brain.yaml (`notes: [{path: ~/x, name: team}]`). Moving a folder keeps every id, its search keys and its vectors; renaming one keeps them once it has a `name:`. Two folders of one store with the same name keep the old path ids until each is named, and `brain doctor` says so.
 - Upgrading needs no migration to keep working: each record remembers the id it had, and search keys and `supersedes` links written under that id still apply. The index reads every file once after the upgrade. Vectors of notes and archive records are made again, unless `brain index --migrate-ids --apply` moves them.
