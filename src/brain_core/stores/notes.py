@@ -76,7 +76,10 @@ class NotesStore:
                 if not d.is_dir() and self.index.under(self.name, d):
                     raise FileNotFoundError(f"{self.name} folder missing: {d}")
             self.index.sync(
-                self.name, dict.fromkeys(files, kind), lambda _k, p: self._records(p, None)
+                self.name,
+                dict.fromkeys(files, kind),
+                lambda _k, p: self._records(p, None),
+                lambda p: self._source(p) or f"{self.name}:{p}",
             )
             return self.index.search(self.name, [kind], query, limit)
         out: list[Record] = []

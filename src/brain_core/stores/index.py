@@ -11,6 +11,7 @@ and embedded as ``[redacted]``. The file itself is never touched.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import math
 import os
@@ -19,6 +20,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, replace
 from datetime import date, timedelta
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from brain_core.storage.db import Database
 from brain_core.stores.base import Kind, Record, full_text, holds
@@ -162,6 +164,9 @@ def match_query(query: str) -> str:
 # the next sync reads every file again. Rows come back under the same record ids, which is why
 # a re-read costs no stored vector. 4 (M1b): notes and archive records take store-relative
 # ids; their vectors follow with `brain index --migrate-ids`, or are made again
+if TYPE_CHECKING:
+    from brain_core.journal import Journal
+
 FORMAT = 4
 
 
@@ -188,9 +193,14 @@ def stored(doc: str, score: float = 0.0) -> Record:
 
 
 class RecordIndex:
-    def __init__(self, db: Database) -> None:
+    def __init__(self, db: Database, journal: Journal | None = None) -> None:
         self.db = db
         self.keys: dict[str, str] = {}  # record id -> its search keys, see set_keys
+        self.journal = journal  # data/journal.db (M1c): what the vault held, and when
+        if journal is not None and journal.check(db):
+            # brain.db is new, or saw history its journal lost: every file is read again, so
+            # the journal records every version the files hold now (late, never early)
+            db.execute("DELETE FROM index_files")
 
     def files(self, store: str) -> set[str]:
         """The files of ``store`` the index has read. An empty folder where they stood is a
@@ -225,15 +235,31 @@ class RecordIndex:
                 self.db.execute("UPDATE records_fts SET keys = ? WHERE rowid = ?", (new, row[0]))
 
     def sync(
-        self, store: str, files: Mapping[Path, Kind], parse: Callable[[Kind, Path], list[Record]]
+        self,
+        store: str,
+        files: Mapping[Path, Kind],
+        parse: Callable[[Kind, Path], list[Record]],
+        source: Callable[[Path], str] | None = None,
     ) -> None:
         """Bring the rows of ``store`` in line with ``files``. Only a changed file is parsed,
-        and every file once after ``FORMAT`` changed."""
+        and every file once after ``FORMAT`` changed. With a journal: under its lock, the
+        journal records the changed files first (``source`` names each), then brain.db."""
+        with self.journal.locked() if self.journal is not None else contextlib.nullcontext():
+            self._sync(store, files, parse, source or (lambda p: f"{store}:{p}"))
+
+    def _sync(
+        self,
+        store: str,
+        files: Mapping[Path, Kind],
+        parse: Callable[[Kind, Path], list[Record]],
+        source: Callable[[Path], str],
+    ) -> None:
         known = {
             r["path"]: r["sig"]
             for r in self.db.fetchall("SELECT path, sig FROM index_files WHERE store = ?", (store,))
         }
         seen: set[str] = set()
+        changed: list[tuple[str, str, list[Record], Path]] = []
         for p, kind in files.items():
             key = str(p)
             seen.add(key)
@@ -243,8 +269,29 @@ class RecordIndex:
                 if known.get(key) == sig:
                     continue
                 records = [_masked(r) for r in parse(kind, p)]
+                st = p.stat()
+                if f"{FORMAT}:{st.st_mtime_ns}:{st.st_size}" != sig:
+                    continue  # changed while it was read: the next sync reads it whole
             except OSError:
                 continue  # a file a sync service has evicted: keep the rows it has
+            changed.append((key, sig, records, p))
+        gone: list[str] = []
+        for key in known.keys() - seen:
+            try:
+                os.stat(key)
+            except PermissionError:
+                continue  # under a folder that cannot be opened: not listed is not deleted
+            except OSError:
+                pass
+            gone.append(key)
+        seq = 0
+        if self.journal is not None and (changed or gone):
+            # the journal first: a crash before brain.db commits leaves the old signatures, so
+            # the next sync derives again, and finds its journal rows already there
+            batch = {source(p): [(r.id, full_text(r)) for r in recs] for _k, _s, recs, p in changed}
+            batch |= {source(Path(key)): [] for key in gone}
+            seq = self.journal.record(batch)
+        for key, sig, records, _p in changed:
             with self.db.transaction():
                 self.db.execute(
                     "DELETE FROM records_fts WHERE store = ? AND path = ?", (store, key)
@@ -278,13 +325,7 @@ class RecordIndex:
                     "ON CONFLICT (store, path) DO UPDATE SET sig = excluded.sig",
                     (store, key, sig),
                 )
-        for key in known.keys() - seen:
-            try:
-                os.stat(key)
-            except PermissionError:
-                continue  # under a folder that cannot be opened: not listed is not deleted
-            except OSError:
-                pass
+        for key in gone:
             with self.db.transaction():
                 self.db.execute(
                     "DELETE FROM records_fts WHERE store = ? AND path = ?", (store, key)
@@ -292,6 +333,8 @@ class RecordIndex:
                 self.db.execute(
                     "DELETE FROM index_files WHERE store = ? AND path = ?", (store, key)
                 )
+        if seq:
+            self.journal.mark(self.db, seq)  # type: ignore[union-attr]
 
     def cover(self, query: str, rids: Sequence[str]) -> float:
         """How much of what was asked the best of ``rids`` holds, 0 to 1. Each query word

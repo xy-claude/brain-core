@@ -33,6 +33,7 @@ from typing import Any, Self, cast, get_args
 from brain_core.config import BrainConfig, RootConfig
 from brain_core.distill import brain_distill
 from brain_core.embed import EmbedUnavailable, WorkerEmbedder
+from brain_core.journal import Journal
 from brain_core.judge import JUDGE_MODEL, Runner
 from brain_core.memory import episodic
 from brain_core.memory.episodic import Event
@@ -140,7 +141,9 @@ class Agent:
         if self._stores is None:
             s = self._config.stores
             self._stores = [SqliteStore(self._db)]
-            index = RecordIndex(self._db)  # one bm25 scale for every markdown store
+            # one bm25 scale for every markdown store; the journal keeps their history (M1c)
+            self._journal = Journal(self.data_dir / "journal.db")
+            index = RecordIndex(self._db, self._journal)
             if s.vault:
                 self._stores.append(
                     VaultStore(self.resolve(s.vault), owner=self.name.lower(), index=index)
@@ -467,6 +470,8 @@ class Agent:
 
     def close(self) -> None:
         self._db.close()
+        if getattr(self, "_journal", None) is not None:
+            self._journal.close()
 
     def __enter__(self) -> Self:
         return self

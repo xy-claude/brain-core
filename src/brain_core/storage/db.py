@@ -13,7 +13,7 @@ dataclasses on top of the Row results.
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 from types import TracebackType
@@ -50,6 +50,9 @@ class Database:
     def execute(self, sql: str, params: Params = ()) -> sqlite3.Cursor:
         """Execute a single statement with parameters."""
         return self._conn.execute(sql, params)
+
+    def executemany(self, sql: str, rows: Iterable[Params]) -> sqlite3.Cursor:
+        return self._conn.executemany(sql, rows)
 
     def executescript(self, sql: str) -> sqlite3.Cursor:
         """Execute multiple statements separated by semicolons (DDL/migrations).

@@ -6,6 +6,7 @@ dated, idempotent, append-only forms the schema defines.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
@@ -313,7 +314,9 @@ class VaultStore:
                 return []
             return records
 
-        self.index.sync(self.name, files, parse)
+        self.index.sync(
+            self.name, files, parse, lambda p: f"vault:{p.relative_to(self.root).as_posix()}"
+        )
 
     def read(self, kind: Kind, query: str | None = None, limit: int = 50) -> list[Record]:
         if query and self.index:
@@ -459,6 +462,15 @@ class VaultStore:
         self, kind: Kind, text: str, *, domain: str = "", when: date | None = None, **extra: str
     ) -> WriteResult:
         r = self._write(kind, text, domain=domain, when=when, **extra)
+        journal = self.index.journal if self.index is not None else None
+        if r.status == "written" and journal is not None:
+            # the save's own time is its recording time (M1c), not the next search's
+            journal.via = "write"
+            try:
+                with contextlib.suppress(OSError):
+                    self._sync()
+            finally:
+                journal.via = "ingest"
         if r.status in ("written", "exists") and r.id:
             try:
                 # keys can be added to an old record
