@@ -101,6 +101,16 @@ def brain_status(agent: Agent) -> dict[str, Any]:
                 f"{unmirrored} relations.md line(s) are not in brain.db yet: an older brain-core "
                 "would not see them until the next `brain index`"
             )
+        try:
+            detached = vault.detached_keys()
+        except (OSError, sqlite3.Error, ValueError):
+            detached = 0
+        if detached:
+            attention.append(
+                f"{detached} search-key line(s) in record_meta.md fit no indexed record: a "
+                "notes or archive folder renamed without `name:` in brain.yaml, or a page "
+                "that is gone"
+            )
     out["not_rebuilt"] = rebuild_loss(agent.db)
     if agent.vectors is not None:
         out["vectors"] = agent.vectors.stats()  # model, rows, rows waiting, worker up or down

@@ -15,14 +15,14 @@ behind a backup.
 from __future__ import annotations
 
 import hashlib
-import os
 import re
 import sqlite3
 from collections.abc import Iterable
-from datetime import UTC, date, datetime
+from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from brain_core.backup import backup_db, private_file, stamp
 from brain_core.storage.db import Database
 from brain_core.stores.base import Kind, Record, WriteResult, record_id
 
@@ -207,15 +207,6 @@ class GraphStore:
         return counts
 
 
-def _private(path: Path, data: bytes = b"") -> Path:
-    """A new file only the owner can read (mode 0600; on Windows the folder's access rules
-    apply), never an existing one overwritten."""
-    fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-    with os.fdopen(fd, "wb") as f:
-        f.write(data)
-    return path
-
-
 def migrate_relations(db: Database, vault: VaultStore, backup_dir: Path) -> dict[str, Any]:
     """`brain graph migrate` (M1a): copy the legacy ``relations`` table into relations.md.
 
@@ -224,22 +215,13 @@ def migrate_relations(db: Database, vault: VaultStore, backup_dir: Path) -> dict
     hold is refused and named, only the ids the file lacks are appended (in one atomic write;
     no line is ever dropped), and the file is checked to hold every other row. Run again, it
     adds nothing."""
-    backup_dir.mkdir(parents=True, exist_ok=True)
-    os.chmod(backup_dir, 0o700)
-    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
-    copy = _private(backup_dir / f"brain-{stamp}.db")
-    with sqlite3.connect(copy) as dst:
-        db.backup(dst)
-        ok = dst.execute("PRAGMA integrity_check").fetchone()[0]
-    dst.close()
-    if ok != "ok":
-        raise RuntimeError(f"the backup {copy} failed its integrity check ({ok}): nothing migrated")
-    saved, before = [copy], ""
+    at = stamp()
+    saved, before = [backup_db(db, backup_dir, at)], ""
     path = vault.root / "relations.md"
     if path.exists():
         data = path.read_bytes()
         before = hashlib.sha256(data).hexdigest()
-        saved.append(_private(backup_dir / f"relations-{stamp}.md", data))
+        saved.append(private_file(backup_dir / f"relations-{at}.md", data))
     rows = db.fetchall("SELECT id, subject, predicate, object, created_at FROM relations")
     refused, items, ids = [], [], []
     for r in rows:

@@ -160,8 +160,9 @@ def match_query(query: str) -> str:
 
 # Bumped when the reader or what the index stores changes: it is part of every file's stamp, so
 # the next sync reads every file again. Rows come back under the same record ids, which is why
-# a re-read costs no stored vector.
-FORMAT = 3
+# a re-read costs no stored vector. 4 (M1b): notes and archive records take store-relative
+# ids; their vectors follow with `brain index --migrate-ids`, or are made again
+FORMAT = 4
 
 
 def _masked(r: Record) -> Record:
@@ -197,6 +198,13 @@ class RecordIndex:
         rows = self.db.fetchall("SELECT path FROM index_files WHERE store = ?", (store,))
         return {r["path"] for r in rows}
 
+    def _keys(self, rid: str, was: str = "") -> str:
+        """The keys of ``rid``, and of the id it had before M1b (``was``), if any."""
+        n = len(next(iter(self.keys), ""))
+        if not n:
+            return ""
+        return "; ".join(k for k in (self.keys.get(rid[:n], ""), self.keys.get(was[:n], "")) if k)
+
     def under(self, store: str, folder: Path) -> bool:
         """Whether ``store`` has indexed a file under ``folder``."""
         stem = f"{folder}{os.sep}"
@@ -208,9 +216,9 @@ class RecordIndex:
         from brain_core.stores.vault import redact  # vault imports this module
 
         self.keys = keys
-        n = len(next(iter(keys), ""))
-        for row in self.db.fetchall("SELECT rowid, rid, keys FROM records_fts"):
-            new = redact(keys.get(row["rid"][:n], "")) if n else ""
+        for row in self.db.fetchall("SELECT rowid, rid, keys, record FROM records_fts"):
+            was = json.loads(row["record"]).get("extra", {}).get("was", "") if keys else ""
+            new = redact(self._keys(row["rid"], was))
             if new != row["keys"]:
                 self.db.execute("UPDATE records_fts SET keys = ? WHERE rowid = ?", (new, row[0]))
 
@@ -250,13 +258,12 @@ class RecordIndex:
                     # the parser leaves in `extra` carries it, see `stored`
                     if row.pop("undated"):
                         row["extra"] = {**r.extra, "legacy": "undated"}
-                    n = len(next(iter(self.keys), ""))
                     self.db.execute(
                         "INSERT INTO records_fts (body, keys, store, kind, path, rid, record) "
                         "VALUES (?, ?, ?, ?, ?, ?, ?)",
                         (
                             body,
-                            self.keys.get(r.id[:n], "") if n else "",
+                            self._keys(r.id, r.extra.get("was", "")),
                             store,
                             r.kind,
                             key,

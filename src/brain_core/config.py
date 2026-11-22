@@ -50,6 +50,15 @@ class VectorsConfig(BaseModel):
     idle_minutes: float = 5  # how long the worker stays up after a call; 0 = exit after each
 
 
+class RootConfig(BaseModel):
+    """A notes or archive folder with the name its record ids use (M1b)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    path: Path
+    name: str
+
+
 class StoresConfig(BaseModel):
     """Where the agent's memory already lives (v0.2). SQLite is always on; the rest are optional."""
 
@@ -60,9 +69,11 @@ class StoresConfig(BaseModel):
     transcripts: Path | None = None  # Claude Code projects root, e.g. ~/.claude/projects
     transcripts_cwd: Path | None = None  # the folder Claude Code runs in; default: brain.yaml's
     graph: GraphConfig | None = None
-    notes: list[Path] = Field(default_factory=list)  # read-only markdown folders recall searches
+    # read-only markdown folders recall searches: a path, or {path, name} (M1b: the name the
+    # record ids use instead of the folder's own, so a rename keeps them)
+    notes: list[Path | RootConfig] = Field(default_factory=list)
     # read-only folders of older memory (an export from another tool): searched, ranked below
-    archive: list[Path] = Field(default_factory=list)
+    archive: list[Path | RootConfig] = Field(default_factory=list)
     vectors: VectorsConfig | None = None  # absent: keyword search only
 
 

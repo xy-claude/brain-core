@@ -366,9 +366,38 @@ def index_cmd(
         Path,
         typer.Argument(help="Path to agent directory (contains brain.yaml)."),
     ] = Path(),
+    migrate_ids: Annotated[
+        bool,
+        typer.Option(
+            "--migrate-ids",
+            help="Plan the move of notes and archive records to store-relative ids (M1b): "
+            "how many ids change, and how many search-key lines and vectors follow. Writes "
+            "nothing without --apply.",
+        ),
+    ] = False,
+    apply: Annotated[
+        bool,
+        typer.Option(
+            "--apply",
+            help="With --migrate-ids: back up brain.db and record_meta.md, append `was:` lines "
+            "to record_meta.md, remap the vectors and index again. Resumes after a crash.",
+        ),
+    ] = False,
+    old_path: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--old-path",
+            help="With --migrate-ids: NAME=PATH, where a folder of that root name used to be, "
+            "for search keys written before it moved. Repeatable.",
+        ),
+    ] = None,
 ) -> None:
     """Load the vault's facts.md and patterns.md into the SQLite FTS index, and with
-    `stores.vectors` set, give every record its vector. Idempotent."""
+    `stores.vectors` set, give every record its vector. Idempotent. With --migrate-ids,
+    move notes and archive records to store-relative ids instead (M1b)."""
+    if migrate_ids:
+        _migrate_ids(path, apply, old_path or [])
+        return
     with _open(path) as agent:
         vault = next((s for s in agent.stores if isinstance(s, VaultStore)), None)
         if vault is None:
@@ -405,6 +434,39 @@ def index_cmd(
                 typer.echo(f"vectors: stopped at {done} of {total}: {e}", err=True)
                 raise typer.Exit(code=1) from e
             typer.echo(f"vectors: {agent.vectors.stats()['rows']} records, none waiting")
+
+
+def _migrate_ids(path: Path, apply: bool, old_path: list[str]) -> None:
+    from brain_core.migrate_ids import migrate_ids
+    from brain_core.stores.notes import NotesStore
+
+    old: dict[str, Path] = {}
+    for item in old_path:
+        name, sep, where = item.partition("=")
+        if not sep or not name or not where:
+            typer.echo(f"ERROR: --old-path takes NAME=PATH, not {item!r}", err=True)
+            raise typer.Exit(code=1)
+        old[name] = Path(where).expanduser()
+    with _open(path) as agent:
+        vault = next((s for s in agent.stores if isinstance(s, VaultStore)), None)
+        stores = [s for s in agent.stores if isinstance(s, NotesStore)]
+        if vault is None or not stores:
+            typer.echo("nothing to migrate: no vault, or no notes or archive folder")
+            return
+        r = migrate_ids(agent.db, vault, stores, agent.data_dir, apply=apply, old_paths=old)
+    typer.echo(
+        f"ids: {r['changed']} change; {r['meta_ids']} have record_meta.md lines that follow "
+        f"through `was:`; {r['vectors']} vectors follow"
+    )
+    if not apply:
+        typer.echo("dry run: nothing written. Run again with --apply to migrate.")
+        return
+    typer.echo(f"backup: {', '.join(r['backup'])}")
+    typer.echo(f"was: lines added {r['was_lines']}; vectors remapped {r['vectors_remapped']}")
+    if not r["verified"]:
+        typer.echo("ERROR: some new ids are not in the index; run --apply again", err=True)
+        raise typer.Exit(code=1)
+    typer.echo("verified: every new id is in the index")
 
 
 @app.command("brief")

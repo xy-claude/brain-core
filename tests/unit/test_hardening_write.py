@@ -137,7 +137,9 @@ def test_ids_of_every_old_record_shape_are_pinned(tmp_path: Path) -> None:
         "knowledge": [sha("knowledge/wiki.md#Core Concepts")],
         "raw": ["abc123"],
     }
-    assert [r.id for r in NotesStore([plain.parent]).read("knowledge")] == [sha(f"{plain}#")]
+    # M1b: a notes id hashes the store, the folder's name and the file, not the absolute path
+    (note,) = NotesStore([plain.parent]).read("knowledge")
+    assert (note.id, note.extra["was"]) == (sha("notes:memory/push_rule.md#"), sha(f"{plain}#"))
 
 
 # ── WRITE-1, memarch-missed-1: with a vault, the files decide what is a duplicate ───────
@@ -218,7 +220,9 @@ def test_text_before_the_first_section_is_its_own_record(tmp_path: Path) -> None
         "Push rule: Marguerite approves every push. Never push on a Friday.",
         "Push rule › Why: A Friday push broke the build.",
     ]
-    assert [r.id for r in recs] == [sha(f"{page}#"), sha(f"{page}#Why")], "section id unchanged"
+    src = "notes:memory/feedback_push.md"
+    assert [r.id for r in recs] == [sha(f"{src}#"), sha(f"{src}#Why")], "section ids (M1b)"
+    assert [r.extra["was"] for r in recs] == [sha(f"{page}#"), sha(f"{page}#Why")]
     assert len({r.line for r in recs}) == 2, "a source names one record"
     assert [r.line for r in store.read("knowledge", "Marguerite")] == [1]
     # a vault knowledge page is read by the same code

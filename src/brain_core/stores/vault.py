@@ -7,6 +7,7 @@ dated, idempotent, append-only forms the schema defines.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 import sys
@@ -225,7 +226,7 @@ class VaultStore:
                 d = out.setdefault(m.group(1), {})
                 for part in m.group(2).split(" | "):
                     k, _, v = part.partition(": ")
-                    grows = k in ("keys", "learned", "supersedes") and k in d
+                    grows = k in ("keys", "learned", "supersedes", "was") and k in d
                     d[k] = f"{d[k]}; {v}" if grows else v
         return out
 
@@ -238,10 +239,14 @@ class VaultStore:
         """Old record id -> the id of the record that replaced it (16 characters each), from
         the ``supersedes`` fields. A record can replace several."""
         out: dict[str, str] = {}
-        for new, d in self.meta().items():
+        meta = self.meta()
+        became = _was(meta)  # an id M1b's migration remapped -> the id it has now
+        for new, d in meta.items():
             for old in d.get("supersedes", "").replace(";", " ").split():
                 if old[:16] != new[:16]:
                     out[old[:16]] = new[:16]
+                    if old[:16] in became:
+                        out[became[old[:16]]] = new[:16]
         return out
 
     def retired(self) -> set[str]:
@@ -285,13 +290,7 @@ class VaultStore:
         try:
             sig = meta.stat().st_mtime_ns if meta.exists() else 0
             if sig != self._meta_sig:  # keys changed on disk: bring the index in line
-                self.index.set_keys(
-                    {
-                        i: "; ".join(d[k] for k in ("keys", "learned") if k in d)
-                        for i, d in self.meta().items()
-                        if "keys" in d or "learned" in d
-                    }
-                )
+                self.index.set_keys(_keys_by_id(self.meta()))
                 self._meta_sig = sig
             self.unread.pop(META, None)
         except OSError as e:
@@ -612,6 +611,41 @@ class VaultStore:
         row = self.index.db.fetchone("SELECT count(*) FROM relations")
         return int(row[0]) if row else 0
 
+    def append_meta(self, lines: list[str], note: str) -> int:
+        """Append ``lines`` to record_meta.md under a ``note`` comment line, skipping any line
+        already there, in one atomic write. Returns how many were added."""
+        path = self.root / META
+        today = date.today()
+        with self._locked(path):
+            text = read_text(path, "surrogateescape") or (
+                f"---\ntype: index\nowner: {self.owner}\nstatus: active\n"
+                f"updated: {today.isoformat()}\n---\n# Record meta\n\n"
+            )
+            have = set(text.splitlines())
+            new = [ln for ln in dict.fromkeys(lines) if ln not in have]
+            if new:
+                self._save(path, text.rstrip("\n") + f"\n{note}\n" + "\n".join(new) + "\n", today)
+        return len(new)
+
+    def detached_keys(self) -> int:
+        """Search-key lines of record_meta.md that no indexed record takes: written for a
+        record whose id changed (a notes or archive folder renamed without `name:`), or for a
+        page that is gone."""
+        if self.index is None:
+            return 0
+        meta = self.meta()
+        held: set[str] = set()
+        for row in self.index.db.fetchall("SELECT rid, record FROM records_fts"):
+            held.add(row["rid"][:16])
+            if was := json.loads(row["record"]).get("extra", {}).get("was"):
+                held.add(was[:16])
+        became = _was(meta)
+        return sum(
+            1
+            for i, d in meta.items()
+            if ("keys" in d or "learned" in d) and i not in held and became.get(i) not in held
+        )
+
     def relations_drift(self) -> tuple[int, int, int]:
         """(rows of the legacy table that a relations.md line could hold but none does:
         removed by hand or saved by an older version, which recall leaves out; lines the table
@@ -857,11 +891,15 @@ def _parse_date(value: str | None) -> date | None:
         return None
 
 
-def knowledge_records(text: str, rel: str, when: date, cap: int | None = 600) -> list[Record]:
+def knowledge_records(
+    text: str, rel: str, when: date, cap: int | None = 600, source: str | None = None
+) -> list[Record]:
     """One record per `## section` of a page: title › heading: body. The text before the first
     section is a record too (title: text); for a page without `## ` sections (a plain note, a
     Claude Code memory file) that is its whole body. ``cap`` cuts the body for a whole-store
-    read; the index passes None so every word is searchable."""
+    read; the index passes None so every word is searchable. ``rel`` is the path shown;
+    ``source`` (M1b: ``<store>:<root name>/<file>``), when given, is what the id hashes, and
+    the id ``rel`` would give is kept as ``extra["was"]`` so keys written under it still hold."""
     fm = frontmatter(text)
     m = _FRONTMATTER.match(text)
     skip = m.group(0).count("\n") if m else 0  # frontmatter lines: never body, never a title
@@ -877,7 +915,9 @@ def knowledge_records(text: str, rel: str, when: date, cap: int | None = 600) ->
     for n, line in enumerate(lines, 1):
         if line.startswith("## "):
             if heading:
-                records.append(_knowledge_record(title, heading, body, rel, start, when, cap))
+                records.append(
+                    _knowledge_record(title, heading, body, rel, start, when, cap, source)
+                )
             heading, body, start = line[3:].strip(), [], n
         # a rule line is dropped, a key block's two lines are not: without them its body was
         # indexed with nothing left for the secret pattern to find it by
@@ -890,18 +930,50 @@ def knowledge_records(text: str, rel: str, when: date, cap: int | None = 600) ->
         elif not heading and n > skip and line.strip() and line[0] != "#":
             lead.append(line.strip())
     if heading:
-        records.append(_knowledge_record(title, heading, body, rel, start, when, cap))
+        records.append(_knowledge_record(title, heading, body, rel, start, when, cap, source))
     if lead:
-        records.insert(0, _knowledge_record(title, "", lead, rel, 1, when, cap))
+        records.insert(0, _knowledge_record(title, "", lead, rel, 1, when, cap, source))
     return records
 
 
 def _knowledge_record(
-    title: str, heading: str, body: list[str], rel: str, line: int, when: date, cap: int | None
+    title: str,
+    heading: str,
+    body: list[str],
+    rel: str,
+    line: int,
+    when: date,
+    cap: int | None,
+    source: str | None = None,
 ) -> Record:
     joined = " ".join(body)[:cap]
     text = f"{title} › {heading}: {joined}" if heading else f"{title}: {joined}"
-    return Record(record_id(f"{rel}#{heading}"), "knowledge", text, when, "", rel, line, {})
+    if source is None:
+        return Record(record_id(f"{rel}#{heading}"), "knowledge", text, when, "", rel, line, {})
+    rid, was = record_id(f"{source}#{heading}"), record_id(f"{rel}#{heading}")
+    return Record(rid, "knowledge", text, when, "", rel, line, {"was": was} if was != rid else {})
+
+
+def _was(meta: dict[str, dict[str, str]]) -> dict[str, str]:
+    """From the `was:` lines of record_meta.md: old id (16) -> the id it became (16)."""
+    return {
+        old[:16]: new[:16]
+        for new, d in meta.items()
+        for old in d.get("was", "").replace(";", " ").split()
+    }
+
+
+def _keys_by_id(meta: dict[str, dict[str, str]]) -> dict[str, str]:
+    """Search keys by id (16), the keys of an id a `was:` line names included."""
+    keys = {
+        i: "; ".join(d[k] for k in ("keys", "learned") if k in d)
+        for i, d in meta.items()
+        if "keys" in d or "learned" in d
+    }
+    for old, new in _was(meta).items():
+        if old in keys:
+            keys[new] = "; ".join(k for k in (keys.get(new, ""), keys[old]) if k)
+    return keys
 
 
 def frontmatter(text: str) -> dict[str, str]:

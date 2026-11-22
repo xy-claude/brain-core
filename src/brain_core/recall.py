@@ -285,7 +285,8 @@ def brain_recall(
         )
 
     def stale(r: Record) -> bool:
-        return quoted(r) or r.id[:16] in retired
+        # a notes record not yet migrated (M1b) is named by the id it had before
+        return quoted(r) or r.id[:16] in retired or r.extra.get("was", "")[:16] in retired
 
     def halved(r: Record) -> float:
         # a line a "Fact changed" banner quotes has no link to its replacement, so its score is

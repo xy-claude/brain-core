@@ -30,7 +30,7 @@ from pathlib import Path
 from types import TracebackType
 from typing import Any, Self, cast, get_args
 
-from brain_core.config import BrainConfig
+from brain_core.config import BrainConfig, RootConfig
 from brain_core.distill import brain_distill
 from brain_core.embed import EmbedUnavailable, WorkerEmbedder
 from brain_core.judge import JUDGE_MODEL, Runner
@@ -128,6 +128,12 @@ class Agent:
         base = self.config_path.parent if self.config_path else Path.cwd()
         return _resolve_dir(base, Path(p).expanduser())
 
+    def _root(self, p: Path | RootConfig) -> tuple[Path, str | None]:
+        """A notes or archive folder from brain.yaml, resolved, with its configured name."""
+        if isinstance(p, RootConfig):
+            return (self.resolve(p.path), p.name)
+        return (self.resolve(p), None)
+
     @property
     def stores(self) -> list[Store]:
         """Every configured store (v0.2). SQLite first, then vault, Hindsight, graph as set."""
@@ -154,9 +160,9 @@ class Agent:
                 )
                 self._stores.append(TranscriptStore(self._db, s.transcripts, cwd))
             if s.notes:
-                self._stores.append(NotesStore([self.resolve(p) for p in s.notes], index))
+                self._stores.append(NotesStore([self._root(p) for p in s.notes], index))
             if s.archive:
-                self._stores.append(ArchiveStore([self.resolve(p) for p in s.archive], index))
+                self._stores.append(ArchiveStore([self._root(p) for p in s.archive], index))
         return self._stores
 
     @property
