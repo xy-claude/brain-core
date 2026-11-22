@@ -117,3 +117,30 @@ def test_as_of_keeps_a_value_replaced_later(tmp_path: Path) -> None:
         r["text"]: r for r in brain_recall([v], q, today=TODAY, as_of=date(2026, 10, 1))["results"]
     }
     assert not then["The fare cap is 30 euros"].get("superseded")  # still the value on 10-01
+
+
+def test_as_of_puts_that_days_value_first(tmp_path: Path) -> None:
+    v = setup(tmp_path, *LINES)
+    (v.root / "facts.md").write_text(
+        "# Facts\n\n## General\n- The fare cap is 30 euros (2026-09-01)\n"
+        "- The fare cap is 40 euros (2026-11-15)\n"
+        "- **⚠ Fact changed 2026-11-20:** The night fare is 5 euros "
+        "(was: The night fare is 3 euros)\n"
+        "- The night fare is 3 euros (2026-08-01)\n"
+    )
+    v.read("fact", "sync")
+    recs = {r.text: r.id for r in v.read("fact", None, 10)}
+    v.supersede(recs["The fare cap is 40 euros"], recs["The fare cap is 30 euros"])
+
+    def order(q: str, as_of: date | None) -> list[str]:
+        return [r["text"] for r in brain_recall([v], q, today=TODAY, as_of=as_of)["results"]]
+
+    now = order("what is the fare cap?", None)
+    assert now.index("The fare cap is 40 euros") < now.index("The fare cap is 30 euros")
+    then = order("what is the fare cap?", date(2026, 10, 1))
+    assert then.index("The fare cap is 30 euros") < then.index("The fare cap is 40 euros")
+    night = order("what is the night fare?", date(2026, 10, 1))  # the banner came later
+    old = "The night fare is 3 euros"
+    assert night.index(old) < next(i for i, t in enumerate(night) if "night fare is 5" in t)
+    marked = brain_recall([v], "what is the night fare?", today=TODAY, as_of=date(2026, 10, 1))
+    assert not next(r for r in marked["results"] if r["text"] == old).get("superseded")

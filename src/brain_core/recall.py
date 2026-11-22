@@ -263,6 +263,16 @@ def brain_recall(
     # a value a "Fact changed" banner superseded is kept on disk but ranks below the banner;
     # a transcript line is what was said, not what was decided, so written memory outranks it
     quotes = [(m.group(1), r.id) for r, _s, _sc in hits.values() for m in _WAS.finditer(r.text)]
+    # M4: asked about a day before a banner, its old line was still the value then (H.4)
+    earlier: dict[str, str] = {}  # a replacement made after as_of -> what it replaced
+    if as_of is not None:
+        day = {r.id: _changed(r) for r, _s, _sc in hits.values()}
+        later = [(q, rid) for q, rid in quotes if (d := day.get(rid)) is not None and d > as_of]
+        quotes = [x for x in quotes if x not in later]
+        by_text = {normalize(r.text).lower(): r.id for r, _s, _sc in hits.values()}
+        for q, rid in later:
+            if (was := by_text.get(normalize(q).lower())) is not None:
+                earlier[rid[:16]] = was[:16]
     superseded = {normalize(q).lower() for q, _rid in quotes}
     # a quote of full length is the start of a longer old line, which is known by that start:
     # start -> the banners that quote it. A banner is never the line it quotes (a second
@@ -288,12 +298,13 @@ def brain_recall(
                 replaced |= store.replaced()
     if as_of is not None and index is not None:
         # a value replaced after the day asked about was still the value that day (H.4)
-        later = {
+        after = {
             new
             for new in set(replaced.values())
-            if (got := index.get(new)) and not got[0].undated and got[0].date > as_of
+            if (got := index.get(new)) and (d := _changed(got[0])) is not None and d > as_of
         }
-        replaced = {old: new for old, new in replaced.items() if new not in later}
+        earlier |= {new: old for old, new in replaced.items() if new in after}
+        replaced = {old: new for old, new in replaced.items() if new not in after}
     retired = set(replaced)
 
     def quoted(r: Record) -> bool:
@@ -382,6 +393,8 @@ def brain_recall(
     if walked:  # keywords alone: the graph net joins them the same way
         ordered = _join({"keyword": ordered[:candidates], "graph": walked}, found_by)
     ordered = _current(ordered, replaced, index, found_by, in_scope)
+    if earlier:  # the value of the day asked about goes just above what replaced it later
+        ordered = _current(ordered, earlier, index, found_by, in_scope, "as_of")
     # what the judge said: its status, the ids it picked, how many it read of those gathered
     judgement = dict(picked) if picked is not None else None
     if judgement is None and judge is not None and ordered and offset == 0:
@@ -410,6 +423,8 @@ def brain_recall(
             found_by.setdefault(r.id, []).append("judge")
         ordered = front + [h for h in ordered if h[0].id not in judgement["picks"]]
         ordered = _current(ordered, replaced, index, found_by, in_scope)  # for the judge too
+        if earlier:
+            ordered = _current(ordered, earlier, index, found_by, in_scope, "as_of")
     total = len(ordered)
     paths = graph_info.pop("paths", {})
     results = [
@@ -505,10 +520,12 @@ def _current(
     index: RecordIndex | None,
     found_by: dict[str, list[str]],
     in_scope: Callable[[Record, str], bool] = lambda r, s: True,
+    why: str = "replaces",
 ) -> list[Hit]:
     """Current beats old, by rule and not by score: a record that another one replaced never
     stands above its replacement. The replacement is moved up to just before it, and brought
-    in when the search did not find it."""
+    in when the search did not find it. With ``as_of`` the same rule, reversed, puts the
+    value of that day above a replacement made after it (``why``: "as_of")."""
     if not replaced or not any(h[0].id[:16] in replaced for h in ordered):
         return ordered
     place = {h[0].id[:16]: h for h in ordered}
@@ -534,11 +551,22 @@ def _current(
             if current is not None:
                 out.append(current)
                 done.add(new)
-                if "replaces" not in found_by.setdefault(current[0].id, []):
-                    found_by[current[0].id].append("replaces")
+                if why not in found_by.setdefault(current[0].id, []):
+                    found_by[current[0].id].append(why)
         out.append(hit)
         done.add(rid)
     return out
+
+
+_CHANGED = re.compile(r"Fact changed (\d{4}-\d{2}-\d{2})")
+
+
+def _changed(r: Record) -> date | None:
+    """The day a record took effect: a banner's change date, else its own date."""
+    if m := _CHANGED.search(r.text):
+        with contextlib.suppress(ValueError):
+            return date.fromisoformat(m.group(1))
+    return None if r.undated else r.date
 
 
 def identifiers(query: str) -> list[str]:
