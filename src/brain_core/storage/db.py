@@ -81,6 +81,10 @@ class Database:
         else:
             self._conn.execute("COMMIT")
 
+    def backup(self, target: sqlite3.Connection) -> None:
+        """Copy the whole database into ``target`` with SQLite's online backup API."""
+        self._conn.backup(target)
+
     def close(self) -> None:
         """Close the underlying connection."""
         self._conn.close()

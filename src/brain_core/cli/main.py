@@ -291,13 +291,15 @@ def hindsight_cmd(
 
 @app.command("graph")
 def graph_cmd(
-    action: Annotated[str, typer.Argument(help="import | stats")],
+    action: Annotated[str, typer.Argument(help="import | stats | migrate")],
     path: Annotated[Path, typer.Argument(help="Agent directory or brain.yaml.")] = Path(),
     dump: Annotated[
         Path | None, typer.Option("--dump", help="File in `S —[p]→ O  (YYYY-MM-DD)` format.")
     ] = None,
 ) -> None:
-    """Entity graph in brain.db. `import` loads a dump, or the legacy Kuzu graph from brain.yaml."""
+    """Entity graph. `import` loads a dump, or the legacy Kuzu graph from brain.yaml, into
+    brain.db. `migrate` copies brain.db's relations into the vault's relations.md, behind a
+    checked backup in data/backups; run again, it adds nothing."""
     import subprocess
 
     from brain_core.stores.graph import GraphStore
@@ -307,8 +309,29 @@ def graph_cmd(
         if action == "stats":
             typer.echo(g.health()[1])
             return
+        if action == "migrate":
+            from brain_core.stores.graph import migrate_relations
+            from brain_core.stores.vault import VaultStore
+
+            vault = next((s for s in agent.stores if isinstance(s, VaultStore)), None)
+            if vault is None:
+                typer.echo("ERROR: no vault in brain.yaml: relations stay in brain.db", err=True)
+                raise typer.Exit(code=1)
+            r = migrate_relations(agent.db, vault, agent.data_dir / "backups")
+            typer.echo(f"backup: {', '.join(r['backup'])}")
+            typer.echo(
+                f"relations: {r['rows']} in brain.db, {r['appended']} appended to "
+                f"relations.md, {len(r['refused'])} refused"
+            )
+            for why in r["refused"]:
+                typer.echo(f"  refused: {why}")
+            if not r["verified"]:
+                typer.echo("ERROR: relations.md does not hold every row: see above", err=True)
+                raise typer.Exit(code=1)
+            typer.echo("verified: relations.md holds every row that was not refused")
+            return
         if action != "import":
-            typer.echo("action must be import | stats", err=True)
+            typer.echo("action must be import | stats | migrate", err=True)
             raise typer.Exit(code=1)
         if dump is not None:
             text = dump.read_text(encoding="utf-8")
@@ -655,6 +678,12 @@ def doctor_cmd(
     typer.echo(
         f"  traits     {len(grown)}/{len(st.get('traits', {}))} grown: {', '.join(grown) or '-'}"
     )
+    if lost := st.get("not_rebuilt"):
+        typer.echo(
+            "  rebuild    brain.db alone holds "
+            + ", ".join(f"{v} {k}" for k, v in lost.items())
+            + ": deleting it to rebuild the index loses them"
+        )
     for line in st.get("attention", []):
         typer.echo(f"  attention  {line}")
     typer.echo(f"Brain: {'OK' if st['ok'] else 'ATTENTION'}")

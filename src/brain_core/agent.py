@@ -143,7 +143,9 @@ class Agent:
                 h = HindsightStore(s.hindsight.url, s.hindsight.bank, self.name)
                 h.recall = s.hindsight.recall
                 self._stores.append(h)
-            self._stores.append(GraphStore(self._db))  # relations table in brain.db, always on
+            # relations table in brain.db, always on; beside a vault a mirror of relations.md
+            md = self.resolve(s.vault) / "relations.md" if s.vault else None
+            self._stores.append(GraphStore(self._db, md))
             if s.transcripts and self.config_path:
                 cwd = (
                     self.resolve(s.transcripts_cwd)

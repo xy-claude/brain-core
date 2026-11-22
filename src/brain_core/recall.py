@@ -156,6 +156,8 @@ def brain_recall(
     ):
         spare = [s for s in asked if s.name == "sqlite"]
         asked = [s for s in asked if s.name != "sqlite"] + spare
+    if scope == "graph" and any(getattr(s, "mirror", False) for s in stores):
+        scope = "relation"  # beside a vault the table is a mirror: the relations are in the file
     if scope == "all":
         kinds, chosen = KINDS, asked
     elif scope in KINDS:

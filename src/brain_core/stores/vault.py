@@ -11,11 +11,20 @@ import os
 import re
 import sys
 import time
+from collections.abc import Iterable
 from dataclasses import replace
 from datetime import date
 from pathlib import Path
 
 from brain_core.stores.base import Kind, Record, WriteResult, record_id
+from brain_core.stores.graph import (
+    RELATION_LINE,
+    mirror,
+    relation_line,
+    relation_text,
+    split_relation,
+    unsafe_relation,
+)
 from brain_core.stores.index import RecordIndex
 
 if sys.platform == "win32":
@@ -159,6 +168,7 @@ FILES: dict[Kind, str] = {
     "pattern": "patterns.md",
     "decision": "decisions_log.md",
     "correction": "corrections.md",
+    "relation": "relations.md",
 }
 META = "record_meta.md"
 _META = re.compile(r"^- ([0-9a-f]{16}) \| (.+)$")
@@ -170,6 +180,7 @@ _INDEXED: tuple[Kind, ...] = (
     "note",
     "raw",
     "knowledge",
+    "relation",
 )
 
 
@@ -289,7 +300,15 @@ class VaultStore:
             raise FileNotFoundError(
                 f"vault holds no file, though the index knows some: {self.root}"
             )
-        self.index.sync(self.name, files, lambda k, p: self._parse(k, p, full=True))
+
+        def parse(kind: Kind, path: Path) -> list[Record]:
+            records = self._parse(kind, path, full=True)
+            if kind == "relation":
+                assert self.index is not None
+                mirror(self.index.db, records)  # an older version still reads the table (M1a)
+            return records
+
+        self.index.sync(self.name, files, parse)
 
     def read(self, kind: Kind, query: str | None = None, limit: int = 50) -> list[Record]:
         if query and self.index:
@@ -346,6 +365,24 @@ class VaultStore:
             ]
         if kind == "knowledge":
             return knowledge_records(text, rel, fallback, cap=None if full else 600)
+        if kind == "relation":
+            out: list[Record] = []
+            for n, line in enumerate(text.splitlines(), 1):
+                if m := RELATION_LINE.match(line):
+                    s, p, o, recorded = m.groups()
+                    out.append(
+                        Record(
+                            record_id(relation_text(s, p, o)),
+                            "relation",
+                            relation_text(s, p, o),
+                            _parse_date((recorded or "")[:10]) or fallback,
+                            p,
+                            rel,
+                            n,
+                            {"subject": s, "predicate": p, "object": o, "recorded": recorded or ""},
+                        )
+                    )
+            return out
         if kind == "note":
             fallback = _parse_date(Path(rel).stem) or fallback
         # a correction written in the decisions' heading shape is an entry too, not lost fields
@@ -436,6 +473,17 @@ class VaultStore:
         # which is meant only for a stray byte the file already had
         "".join([text, domain, *map(str, extra.values())]).encode()
         when = when or date.today()
+        if kind == "relation":
+            parts = split_relation(text, extra)
+            if parts is None:
+                return WriteResult(
+                    self.name, "", "refused", "give subject/predicate/object or 'S —[p]→ O'"
+                )
+            if why := unsafe_relation(*parts):
+                return WriteResult(self.name, "", "refused", f"relations.md cannot hold it: {why}")
+            rid = record_id(relation_text(*parts))
+            added = self.append_relations([(*parts, extra.get("recorded") or when.isoformat())])
+            return WriteResult(self.name, rid, "written" if rid in added else "exists", FILES[kind])
         if kind != "raw":
             text = " ".join(text.split())  # one bullet line; the id is hashed the same way
         rid = record_id(text)
@@ -518,23 +566,59 @@ class VaultStore:
             )
             if rid in {r.id for r in self._parse(kind, path)} if path.exists() else False:
                 return WriteResult(self.name, rid, "exists", path.relative_to(self.root).as_posix())
-            lines = text.rstrip("\n").split("\n")
-            heading = f"## {section}"
-            idx = next((i for i, ln in enumerate(lines) if ln.strip() == heading), None)
-            if idx is None:
-                lines += ["", heading, line]
-            else:
-                end = next(
-                    (j for j in range(idx + 1, len(lines)) if lines[j].startswith("## ")),
-                    len(lines),
-                )
-                while end > idx + 1 and not lines[end - 1].strip():
-                    end -= 1
-                lines.insert(end, line)
-            self._save(path, "\n".join(lines) + "\n", when)
+            self._save(path, _into_section(text, section, [line]), when)
         return WriteResult(
             self.name, rid, "written", f"{path.relative_to(self.root).as_posix()} › {section}"
         )
+
+    def append_relations(self, items: Iterable[tuple[str, str, str, str]]) -> set[str]:
+        """Append to relations.md the relations it lacks (subject, predicate, object,
+        recorded), in one atomic write under the vault lock. No line is changed or dropped.
+        A new file starts with the legacy table's rows, so making it hides none of them.
+        Returns the ids of the lines added."""
+        path = self.root / FILES["relation"]
+        today = date.today()
+        with self._locked(path):
+            seed: list[tuple[str, str, str, str]] = []
+            if path.exists():
+                text = read_text(path, "surrogateescape")
+            else:
+                text = self._new_file("relation", today, "")
+                if self.index is not None:
+                    rows = self.index.db.fetchall(
+                        "SELECT subject, predicate, object, created_at FROM relations "
+                        "ORDER BY created_at, id"
+                    )
+                    seed = [
+                        (r[0], r[1], r[2], str(r[3]))
+                        for r in rows
+                        if not unsafe_relation(r[0], r[1], r[2])
+                    ]
+            have = {r.id for r in self._records("relation", text, FILES["relation"], today)}
+            lines: list[str] = []
+            added: set[str] = set()
+            for s, p, o, recorded in [*seed, *items]:
+                if (rid := record_id(relation_text(s, p, o))) not in have:
+                    have.add(rid)
+                    added.add(rid)
+                    lines.append(relation_line(s, p, o, recorded))
+            if lines:
+                self._save(path, _into_section(text, "Relations", lines), today)
+        return added
+
+    def relations_drift(self) -> tuple[int, int, int]:
+        """(rows of the legacy table that a relations.md line could hold but none does:
+        removed by hand or saved by an older version, which recall leaves out; lines the table
+        lacks, which an older version would not see; rows no line can hold, which recall
+        still reads from the table)."""
+        if self.index is None:
+            return (0, 0, 0)
+        path = self.root / FILES["relation"]
+        held = {r.id for r in self._parse("relation", path)} if path.exists() else set()
+        rows = self.index.db.fetchall("SELECT id, subject, predicate, object FROM relations")
+        table = {r["id"] for r in rows}
+        odd = {r["id"] for r in rows if unsafe_relation(r["subject"], r["predicate"], r["object"])}
+        return (len(table - held - odd), len(held - table), len(odd))
 
     def _insert_entry(
         self, path: Path, kind: Kind, title: str, body: str, when: date
@@ -674,6 +758,24 @@ class VaultStore:
             True,
             f"{self.root} ({notes} notes)" + (f"; not read cleanly: {bad}" if bad else ""),
         )
+
+
+def _into_section(text: str, section: str, new: list[str]) -> str:
+    """``text`` with ``new`` lines at the end of its ``## section`` (made at the end if
+    missing)."""
+    lines = text.rstrip("\n").split("\n")
+    heading = f"## {section}"
+    idx = next((i for i, ln in enumerate(lines) if ln.strip() == heading), None)
+    if idx is None:
+        lines += ["", heading, *new]
+    else:
+        end = next(
+            (j for j in range(idx + 1, len(lines)) if lines[j].startswith("## ")), len(lines)
+        )
+        while end > idx + 1 and not lines[end - 1].strip():
+            end -= 1
+        lines[end:end] = new
+    return "\n".join(lines) + "\n"
 
 
 def _lock_dir() -> Path:

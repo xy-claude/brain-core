@@ -14,11 +14,14 @@ Root: the folder `stores.vault` names in `brain.yaml` (one folder per agent). Al
 | mission (read-only) | `goals/missions/<ID>.md` | frontmatter `mission_id`, `title`, `priority`, `status`, `next_step`, `last_reviewed` | one file per mission; wins over the `goals/mission_queue.md` table when the folder has files | — |
 | `raw` | `raw/YYYY-MM-DD-<slug>.md` | whole file | frontmatter `type: raw, source, title, author, published, fetched, sha256, words, compiled_into` + body | immutable |
 | `knowledge` (read-only) | `knowledge/<topic>.md` (files starting with `_` are skipped) | one record per heading | written by the agent through `/distill`; read and indexed here | — |
+| `relation` | `relations.md` | `## Relations` | `- [[<subject>]] —[<predicate>]→ [[<object>]] (recorded: <date>)`. The id is the SHA-256 of `<subject> —[<predicate>]→ <object>`, as before. `recorded` is when brain-core first stored the relation: provenance only, never the day it became true. A subject or object with `[[`, `]]`, `\|` or a line break, or a predicate with `]` or `:`, is refused | append |
 | record meta | `record_meta.md` | one line per record id | `- <id16> \| keys: … \| learned: … \| source: … \| mission: … \| supersedes: <id16>` | append-only; a later line for the same id adds keys and replaces the rest |
 
 `models/<name>.md` holds the mental models `brain models` writes (frontmatter `type: model`, `question`, `records: N read, M cited`; bullets ending in `[file:line]`), with `<name>.prev.md` one generation back. They are not records: no kind reads them and the index leaves them out.
 
 Not written by `VaultStore`: `knowledge/` pages (compiled by the LLM through `/distill`; read and indexed, never written), `executive_state.md`, `session_critique.md` (whole-file rewrites by the agent).
+
+**Relations (M1a).** `relations.md` is the truth once it exists. `brain.db`'s `relations` table mirrors it, so an older brain-core reading the same agent still sees every relation; brain-core itself never reads the mirror, so a line removed by hand stays out of recall (`brain doctor` names such rows). The first `relations.md`, whether made by `brain graph migrate` or by the first relation saved, starts with every row the table already held. Until M3 the file is append-only: retracting a relation arrives with the claim reviews.
 
 `record_meta.md` holds what a record's own line cannot carry. `keys` are the other words a memory would be asked for by, written by the agent at save time. `learned` are words from a question that missed and was then answered by this record (`brain_remember(kind='key')`), kept apart so they can be reviewed. `supersedes` names the record this one replaced. The id is the first 16 characters of the record id.
 

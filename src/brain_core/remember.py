@@ -1,6 +1,8 @@
 """``brain_remember``: one write, every store, in a fixed order, with per-layer status.
 
-Order: vault → sqlite → hindsight → graph (graph only for ``relation``). Before writing, the
+Order: vault → sqlite → hindsight → graph (graph only for ``relation``). Beside a vault a
+relation is a relations.md line first; the graph table mirrors it for older versions and is
+written only once the line is. Before writing, the
 vault (SQLite when there is no vault) is scanned for a near-duplicate (skipped) or a
 contradiction (written with the ``⚠ Fact changed`` banner, old line kept). A layer that fails
 is reported, never swallowed.
@@ -16,7 +18,7 @@ from typing import Any
 
 from brain_core.recall import _WAS, WAS_CHARS, tokens
 from brain_core.stores.base import Kind, Record, Store, WriteResult, normalize, record_id
-from brain_core.stores.graph import relation_text
+from brain_core.stores.graph import relation_text, split_relation, unsafe_relation
 from brain_core.stores.vault import _SECRET, redact
 
 ORDER = ("vault", "sqlite", "hindsight", "graph")
@@ -57,6 +59,16 @@ def brain_remember(
         ordered = [s for s in ordered if s.name != "graph"]
     # a store that is only read (transcripts, notes folders) is not a layer of a write
     ordered = [s for s in ordered if not getattr(s, "readonly", False)]
+    vaulted = any(s.name == "vault" for s in ordered)
+    # a relation the line cannot hold is refused before any store, as a secret is: else
+    # Hindsight would keep what the file and its mirror cannot
+    if (
+        kind == "relation"
+        and vaulted
+        and (parts := split_relation(text, extra))
+        and (why := unsafe_relation(*parts))
+    ):
+        raise ValueError(f"relations.md cannot hold this relation: {why}; nothing was written")
 
     match = _closest(ordered, kind, text) if kind in ("fact", "pattern") else None
     out: dict[str, Any] = {"kind": kind, "text": text, "layers": {}}
@@ -90,7 +102,14 @@ def brain_remember(
         # recall answers from it where it otherwise leaves the vault's lines to the index
         more = {"sole": "1"} if store.name == "sqlite" and not held else {}
         try:
-            r = store.write(kind, text, domain=domain, when=when, **{**extra, **more})
+            if store.name == "graph" and kind == "relation" and vaulted and not held:
+                # the mirror follows the file: a row with no line would be a relation only an
+                # older version sees
+                r = WriteResult(
+                    store.name, record_id(text), "refused", "not mirrored: no vault line"
+                )
+            else:
+                r = store.write(kind, text, domain=domain, when=when, **{**extra, **more})
         except Exception as e:  # a crashing layer is a failed layer, not a crashed call
             r = WriteResult(store.name, record_id(text), "failed", f"{type(e).__name__}: {e}"[:200])
         held = held or (store.name == "vault" and r.status in ("written", "exists"))

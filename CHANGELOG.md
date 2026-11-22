@@ -4,6 +4,16 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+### Changed
+- Relations live in the vault (M1a of `docs/KNOWLEDGE_ARCHITECTURE_AUDIT.md`). `brain_remember(kind='relation')` writes a line of `vault/relations.md`, `- [[subject]] —[predicate]→ [[object]] (recorded: date)`, so a relation survives a rebuild of `brain.db` and shows in Obsidian's graph. The id is unchanged. `recorded` is when brain-core stored it, never the day it became true. A relation whose subject or object holds `[[`, `]]`, `|` or a line break, or whose predicate holds `]` or `:`, is refused before any store sees it (beside a vault).
+- `brain.db`'s `relations` table becomes a mirror: every save and every sync of `relations.md` writes it, so a 0.9.1 install on the same agent still reads every relation. Once `relations.md` exists, recall reads relations from the file only, so a line removed by hand stays out (`brain doctor` names such rows). `scope='graph'` then searches the relations in the file.
+- The first `relations.md` starts with every row the table held, so making it hides no relation. When a relation write makes it, no backup is taken (nothing existing changes); run `brain graph migrate` first to make it behind one. A row whose names the line cannot hold stays in `brain.db` and is still recalled from there.
+- Default-scope recall ranks relations on the keyword index's shared score, with every other record, instead of apart: the order of mixed result lists changes.
+
+### Added
+- `brain graph migrate`: copies `brain.db`'s relations into `relations.md`. First it backs up `brain.db` (SQLite's backup API, checked with `integrity_check`) and `relations.md` as it was into `data/backups/`, readable by the owner only. It refuses and names a row the line cannot hold, appends only what the file lacks (one atomic write; no line is ever dropped), and checks that the file holds every other row. Run again, it adds nothing.
+- `brain doctor` and `brain_status` count what only `brain.db` holds (events, metrics, `sole` facts, v0.1 rows), which deleting it to rebuild the index loses, and name relations that are in `brain.db` but not in `relations.md`.
+
 ## [0.9.1] - 2026-11-16
 
 ### Security

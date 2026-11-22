@@ -4,9 +4,9 @@ One process per agent, spawned by Claude Code via .mcp.json::
 
     {"mcpServers": {"brain-core": {"command": "brain", "args": ["serve", "."]}}}
 
-The v0.1 one-tool-per-function surface (remember, recall, decide, …) stays available as the
-Python API in :mod:`brain_core.mcp.tools`; the MCP no longer exposes it. Five consolidated
-workflow tools beat fourteen endpoint mirrors for an agent choosing what to call.
+The v0.1 one-tool-per-function surface (remember, recall, decide, …) is gone from the MCP:
+five consolidated workflow tools beat fourteen endpoint mirrors for an agent choosing what to
+call. The Python API is :class:`brain_core.agent.Agent`.
 
 Each tool carries MCP annotations and a description per parameter: the description is the
 only thing an agent reads before it picks a tool, so it says what the tool does, when to use
@@ -155,8 +155,8 @@ def build_server(agent: Agent) -> FastMCP:
         ] = None,
     ) -> dict[str, Any]:
         """Write one memory item to every configured store in one call: the markdown vault
-        first, then SQLite, then any other store the agent has, and the entity graph for
-        relations.
+        first, then SQLite, then any other store the agent has. A relation is a line of the vault's
+        relations.md, mirrored in the entity graph table for older versions.
 
         Use it the moment the user states a fact, decision, correction, preference or
         relationship worth keeping across sessions; one call per item. Not for whole documents

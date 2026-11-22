@@ -11,6 +11,7 @@ import glob
 import json
 import math
 import re
+import sqlite3
 from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -18,6 +19,7 @@ from typing import TYPE_CHECKING, Any
 from brain_core import update
 from brain_core.judge import JUDGE_MODEL
 from brain_core.session import _marker, _minutes_ago, closed, exec_note
+from brain_core.storage.db import Database
 from brain_core.stores.index import RecordIndex
 from brain_core.stores.vault import VaultStore, has_secret, redact
 from brain_core.stores.vault import read_safe as _read
@@ -71,6 +73,34 @@ def brain_status(agent: Agent) -> dict[str, Any]:
             f"vault: {len(lost)} file(s) could not be read, their records are missing or old: "
             + ", ".join(lost[:3])
         )
+    if vault is not None:
+        try:
+            gone, unmirrored, odd = vault.relations_drift()
+        except (OSError, sqlite3.Error):
+            gone = unmirrored = odd = 0
+        if gone and not (vault.root / "relations.md").exists():
+            attention.append(
+                f"{gone} relation(s) are only in brain.db: `brain graph migrate` copies them into "
+                "relations.md, behind a backup"
+            )
+        elif gone:
+            attention.append(
+                f"{gone} relation(s) in brain.db have no relations.md line (removed by hand, or "
+                "saved by an older brain-core): recall leaves them out; `brain graph migrate` "
+                "appends them back if they should stay"
+            )
+        if odd:
+            attention.append(
+                f"{odd} relation(s) stay in brain.db only: relations.md cannot hold their names "
+                "(`[[`, `]]`, `|` or a line break, or `]` or `:` in the predicate); recall still "
+                "finds them there"
+            )
+        if unmirrored:
+            attention.append(
+                f"{unmirrored} relations.md line(s) are not in brain.db yet: an older brain-core "
+                "would not see them until the next `brain index`"
+            )
+    out["not_rebuilt"] = rebuild_loss(agent.db)
     if agent.vectors is not None:
         out["vectors"] = agent.vectors.stats()  # model, rows, rows waiting, worker up or down
     if agent.config.recall.judge == "model":
@@ -313,3 +343,25 @@ def _is_table_chrome(line: str) -> bool:
         "id",
         "title",
     )
+
+
+def rebuild_loss(db: Database) -> dict[str, int]:
+    """Rows only ``brain.db`` holds: deleting it to rebuild the index loses them."""
+
+    def count(sql: str) -> int:
+        try:
+            row = db.fetchone(sql)
+        except sqlite3.Error:  # a table an older schema lacks holds nothing
+            return 0
+        return int(row[0]) if row else 0
+
+    return {
+        "events": count("SELECT count(*) FROM events"),
+        "metrics": count("SELECT count(*) FROM metrics"),
+        "sole facts": count(
+            "SELECT count(*) FROM facts WHERE json_extract(metadata, '$.sole') = '1'"
+        ),
+        "v0.1 rows": sum(
+            count(f"SELECT count(*) FROM {t}") for t in ("decisions", "hsam_days", "reflections")
+        ),
+    }

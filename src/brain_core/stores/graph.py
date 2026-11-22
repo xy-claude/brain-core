@@ -3,31 +3,102 @@
 Replaces the Kuzu CLI adapter. A relation is ``subject —[predicate]→ object``; its id is the
 sha256 of that text, so vault, Hindsight and graph agree on what "the same relation" is.
 ``import_dump`` loads the ``entity_graph.py all`` format from the old Kuzu store once.
+
+M1a: beside a vault, once ``vault/relations.md`` exists it is the truth and the
+``relations`` table is a mirror kept for older versions until M3: written, never read, so a
+line removed by hand does not come back through it. Until the file exists the table is read as
+before, and the first file starts with the table's rows (``VaultStore.append_relations``).
+``migrate_relations`` copies the table into the file behind a backup (`brain graph migrate`).
 """
 
 from __future__ import annotations
 
+import hashlib
+import os
 import re
 import sqlite3
-from datetime import date
+from collections.abc import Iterable
+from datetime import UTC, date, datetime
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from brain_core.storage.db import Database
 from brain_core.stores.base import Kind, Record, WriteResult, record_id
 
+if TYPE_CHECKING:
+    from brain_core.stores.vault import VaultStore
+
 _LINE = re.compile(r"^\s*(.+?) —\[(.+?)\]→ (.+?)\s+\((\d{4}-\d{2}-\d{2})\)\s*$")
 _ARROW = re.compile(r"^(.+?)\s+—\[(.+?)\]→\s+(.+)$")
 _WORD = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
+# a line of vault/relations.md. `recorded` is when brain-core first stored the relation (the
+# table's created_at, kept verbatim): provenance only, never the day the relation became true
+RELATION_LINE = re.compile(
+    r"^- \[\[(.+?)\]\] —\[(.+?)\]→ \[\[(.+?)\]\](?: \(recorded: ([^)]+)\))?\s*$"
+)
 
 
 def relation_text(s: str, p: str, o: str) -> str:
     return f"{s} —[{p}]→ {o}"
 
 
+def relation_line(s: str, p: str, o: str, recorded: str) -> str:
+    return f"- [[{s}]] —[{p}]→ [[{o}]] (recorded: {recorded})"
+
+
+def split_relation(text: str, extra: dict[str, str]) -> tuple[str, str, str] | None:
+    """Subject, predicate and object from the fields, or from ``S —[p]→ O`` text."""
+    s, p, o = extra.get("subject"), extra.get("predicate"), extra.get("object")
+    if s and p and o:
+        return s, p, o
+    m = _ARROW.match(text.strip())
+    return (m.group(1).strip(), m.group(2).strip(), m.group(3).strip()) if m else None
+
+
+def unsafe_relation(s: str, p: str, o: str) -> str:
+    """Why a relations.md line could not give this relation back exactly, or "". A ``:`` in a
+    predicate is kept free for the role M3 adds (``—[p: role]→``)."""
+    for name, v, bad in (
+        ("subject", s, "[[ ]] |"),
+        ("object", o, "[[ ]] |"),
+        ("predicate", p, "] :"),
+    ):
+        if v != v.strip() or "\n" in v or "\r" in v:
+            return f"the {name} {v!r} has a line break or spaces at an end"
+        if hit := next((b for b in bad.split() if b in v), None):
+            return f"the {name} {v!r} holds {hit!r}"
+    return ""
+
+
+def mirror(db: Database, records: Iterable[Record]) -> None:
+    """Bring the legacy table up to the file: rows it lacks are added, none is changed or
+    removed, so an older version reads every relation the file holds."""
+    for r in records:
+        if r.kind == "relation":
+            db.execute(
+                "INSERT OR IGNORE INTO relations (id, subject, predicate, object, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (
+                    r.id,
+                    r.extra["subject"],
+                    r.extra["predicate"],
+                    r.extra["object"],
+                    r.extra.get("recorded") or r.date.isoformat(),
+                ),
+            )
+
+
 class GraphStore:
     name = "graph"
 
-    def __init__(self, db: Database) -> None:
+    def __init__(self, db: Database, relations_md: Path | None = None) -> None:
         self.db = db
+        self.relations_md = relations_md  # the vault's relations.md, when there is a vault
+
+    @property
+    def mirror(self) -> bool:
+        """The file holds the relations: the table is written for older versions, never read."""
+        return self.relations_md is not None and self.relations_md.exists()
 
     def read(self, kind: Kind, query: str | None = None, limit: int = 50) -> list[Record]:
         if kind != "relation":
@@ -42,8 +113,17 @@ class GraphStore:
                 clauses.append("(subject LIKE ? OR predicate LIKE ? OR object LIKE ?)")
                 params += [f"%{w}%"] * 3
             sql += " WHERE " + " OR ".join(clauses)
-        sql += " ORDER BY created_at DESC LIMIT ?"
-        rows = self.db.fetchall(sql, (*params, limit))
+        sql += " ORDER BY created_at DESC"
+        if self.mirror:
+            # beside relations.md only a row no line could hold is read here: a row removed by
+            # hand from the file must not come back through the table
+            rows = [
+                r
+                for r in self.db.fetchall(sql, tuple(params))
+                if unsafe_relation(r["subject"], r["predicate"], r["object"])
+            ][:limit]
+        else:
+            rows = self.db.fetchall(sql + " LIMIT ?", (*params, limit))
         return [
             Record(
                 r["id"],
@@ -93,7 +173,8 @@ class GraphStore:
             n = self.db.fetchone("SELECT COUNT(*) AS n FROM relations")
         except sqlite3.Error as e:
             return (False, f"graph: {e}")
-        return (True, f"graph relations={n['n'] if n else 0}")
+        note = " (mirror of relations.md)" if self.mirror else ""
+        return (True, f"graph relations={n['n'] if n else 0}{note}")
 
     def import_dump(self, text: str) -> dict[str, int]:
         """Load lines in the ``entity_graph.py all`` format: ``S —[p]→ O  (YYYY-MM-DD)``."""
@@ -108,3 +189,56 @@ class GraphStore:
             r = self.add(s.strip(), p.strip(), o.strip(), date.fromisoformat(d))
             counts[r.status if r.status in counts else "skipped"] += 1
         return counts
+
+
+def _private(path: Path, data: bytes = b"") -> Path:
+    """A new file only the owner can read, never an existing one overwritten."""
+    fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    with os.fdopen(fd, "wb") as f:
+        f.write(data)
+    return path
+
+
+def migrate_relations(db: Database, vault: VaultStore, backup_dir: Path) -> dict[str, Any]:
+    """`brain graph migrate` (M1a): copy the legacy ``relations`` table into relations.md.
+
+    First a backup: ``brain.db`` through SQLite's backup API, checked with ``integrity_check``,
+    and relations.md as it was, both readable by the owner only. Then a row the line cannot
+    hold is refused and named, only the ids the file lacks are appended (in one atomic write;
+    no line is ever dropped), and the file is checked to hold every other row. Run again, it
+    adds nothing."""
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    os.chmod(backup_dir, 0o700)
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+    copy = _private(backup_dir / f"brain-{stamp}.db")
+    with sqlite3.connect(copy) as dst:
+        db.backup(dst)
+        ok = dst.execute("PRAGMA integrity_check").fetchone()[0]
+    dst.close()
+    if ok != "ok":
+        raise RuntimeError(f"the backup {copy} failed its integrity check ({ok}): nothing migrated")
+    saved, before = [copy], ""
+    path = vault.root / "relations.md"
+    if path.exists():
+        data = path.read_bytes()
+        before = hashlib.sha256(data).hexdigest()
+        saved.append(_private(backup_dir / f"relations-{stamp}.md", data))
+    rows = db.fetchall("SELECT id, subject, predicate, object, created_at FROM relations")
+    refused, items, ids = [], [], []
+    for r in rows:
+        s, p, o = r["subject"], r["predicate"], r["object"]
+        if why := unsafe_relation(s, p, o):
+            refused.append(f"{relation_text(s, p, o)}: {why}")
+            continue
+        items.append((s, p, o, str(r["created_at"])))
+        ids.append(r["id"])
+    appended = vault.append_relations(items)
+    held = {r.id for r in vault.read("relation", limit=10**9)}
+    return {
+        "rows": len(rows),
+        "appended": len(appended),
+        "refused": refused,
+        "backup": [str(p) for p in saved],
+        "relations_md_sha256_before": before,
+        "verified": all(i in held for i in ids),
+    }

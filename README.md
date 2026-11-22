@@ -113,7 +113,7 @@ Every miss that gets repaired is a miss that does not happen again, and the repa
 - That blend returned a changed value ahead of its replacement. For a memory, serving the old value is the worst kind of error.
 - Search keys closed the wording gap instead: reworded questions went from 13 of 75 found to 51 of 75, at no cost at query time.
 - Hindsight on the recall path found the same 50 of 75 at about 2 s a query against about 45 ms.
-- A keyword index needs nothing installed or kept alive, so the lite install takes about a minute and the index can be deleted and rebuilt from the files.
+- A keyword index needs nothing installed or kept alive, so the lite install takes about a minute and the index can be deleted and rebuilt from the files (the event log and tool metrics, which only `brain.db` keeps, are lost; `brain doctor` counts them).
 
 The limit is real: about a third of reworded questions still miss, and a vector database is the better tool for a large body of documents nobody has written keys for. Hindsight stays available as an optional second store for anyone who wants one. The full table and method are in [Does it work?](#does-it-work)
 
@@ -390,12 +390,12 @@ Say "thanks, we're done" and it runs `brain_session('end')`. Tomorrow at 06:07 `
 │                             compaction, recall of past sessions when a command fails
 ├── .mcp.json                 brain serve . + Hindsight
 ├── brain.yaml                stores, session files, cron schedule
-├── vault/                    facts.md patterns.md decisions_log.md corrections.md
+├── vault/                    facts.md patterns.md decisions_log.md corrections.md relations.md
 │   ├── record_meta.md        search keys, source and replaced values, by record id
 │   ├── sessions/             one file per day (HSAM)
 │   ├── knowledge/ raw/       the LLM-wiki: immutable sources, compiled pages
 │   └── executive_state.md    objective, missions, pending decisions
-└── data/brain.db             SQLite: the FTS5 index of every record, relations, transcript index, event log
+└── data/brain.db             SQLite: the FTS5 index of every record, transcript index, event log, relations mirror
 ```
 
 Everything is markdown or SQLite. Open the vault in Obsidian, grep it, commit it, delete a line. The agent will not mind.
@@ -500,11 +500,11 @@ A trait never gets one number. It gets signals, each with a sample size and a ve
 | decision | `vault/decisions_log.md` | `## date — title` + Decision / Reason / Classification / Confidence |
 | correction | `vault/corrections.md` | `### [date] title` + Error / Correction / Implied rule / Theme |
 | note | `vault/sessions/YYYY-MM-DD.md` | a bullet under an HSAM section |
-| relation | `data/brain.db` | subject —[predicate]→ object |
+| relation | `vault/relations.md` (mirrored in `data/brain.db` for older versions) | `- [[subject]] —[predicate]→ [[object]] (recorded: date)` |
 | raw | `vault/raw/` | immutable source with sha256; the agent compiles `vault/knowledge/` |
 | key | `vault/record_meta.md` | `- <record id> \| keys: … \| source: … \| supersedes: …`, one append-only line per record |
 
-Rules: idempotent by content hash, append-only, nothing deleted. Text that looks like a common secret (API tokens, private keys, JWTs) is refused before any store sees it; the filter knows formats, so an unusual key can pass and is yours to keep out. The SQLite index is a cache: delete it and it is rebuilt from the files. Details in [`docs/VAULT_SCHEMA.md`](docs/VAULT_SCHEMA.md).
+Rules: idempotent by content hash, append-only, nothing deleted. Text that looks like a common secret (API tokens, private keys, JWTs) is refused before any store sees it; the filter knows formats, so an unusual key can pass and is yours to keep out. The SQLite index is a cache: delete it and it is rebuilt from the files, except the event log and tool metrics, which only `brain.db` keeps (`brain doctor` counts them). An agent whose relations are still only in `brain.db` (0.9.1 and before) moves them into `relations.md` with `brain graph migrate`, behind a checked backup; until then recall reads them where they are. Details in [`docs/VAULT_SCHEMA.md`](docs/VAULT_SCHEMA.md).
 
 ## Requirements
 
