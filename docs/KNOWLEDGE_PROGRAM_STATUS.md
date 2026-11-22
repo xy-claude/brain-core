@@ -11,7 +11,7 @@ The plan is `docs/KNOWLEDGE_ARCHITECTURE_AUDIT.md`, revision 2.3; the decisions 
 | M2: entity registry | 0.13.0 | live on all three agents |
 | M3: claims and time | 0.14.0 | live on all three agents |
 | M4: graph retrieval | 0.15.0 | built and checked on two copies; eval labels AI-written and AI-checked (the owner's decision), not human-validated |
-| M7: conflict checks | — | after M3 |
+| M7: conflict checks | 0.16.0 | built and tested; THREAT_MODEL gates 1 to 3 built for claims |
 | M5, M6 | — | not in scope (the owner's decision): no outside LLM calls, no Neo4j download |
 
 ## Live cutovers of 2026-11-23
@@ -26,6 +26,14 @@ Each followed the same procedure: no brain server running, a read-only inventory
   - On the main agent the journal grew by exactly the 83 lines of `relations.md`, the one change 0.13.0 makes, and no row closed. The other two have no relations, and their journals did not change.
   - `brain entities propose` staged 77 names in the main agent's inbox and wrote no note.
   - `brain doctor` shows only what it showed before.
+
+## M7: conflict checks (2026-11-23)
+
+- **At write time.** `brain_remember(kind='relation')` checks the new claim against those already held on its functional predicate and role. A conflict that holds is returned as `contradiction`: an interval one, or a current one when today is inside its window. A window that has closed is not.
+- **In recall.** The `claims` block carries `disputed_with` for a disputed claim. This is the conflict slice of audit O.2, tested on a fixture: two accepted claims of one functional predicate overlap; then an `ack:` line is written and the mark goes.
+- **Gate 1.** A notes-folder line is a provisional `candidate` until a person states the relation in `relations.md`.
+- **Gate 3.** A reflection line needs `(parents: …)` naming claims held from other evidence, or it stays a candidate and is reported.
+- **Not built:** the weekly reflection writer does not emit parent ids itself. Hindsight's reflect gives none, so a reflection relation can only count when a person or the agent writes its parents.
 
 ## M4 on isolated copies of the main agent (2026-11-23)
 

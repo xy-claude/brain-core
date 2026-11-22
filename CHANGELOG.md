@@ -4,6 +4,15 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+### Added
+- **Contradictions are said when a relation is saved (M7).** A relation saved on a functional predicate is checked against the claims already held: `PART_OF`, `LISTENS_ON`, `VERSION`, and `USES` with a role. If both are true on the same days, `brain_remember`'s reply carries `contradiction`, as a changed fact's does. It names the claim it cannot hold beside and says how to end one (`until:` in `record_meta.md`) or mark both true (`ack:` in `claim_reviews.md`).
+- **`disputed_with`** in recall's `claims` block names each claim a disputed one conflicts with on the day asked.
+- **Reflections name their parents.** A relation line in `knowledge/_reflections.md` is evidence of origin `reflection`. It counts only when its `(parents: <claim ids>)` names claims held from other evidence; otherwise it stays a candidate and `brain claims check` reports it.
+- **THREAT_MODEL:** gates 1 to 3 are built for claims.
+
+### Changed
+- A relation line found in a notes folder, which brain-core reads but does not write, gives a provisional claim: origin `external`, a candidate until the same relation is stated in `relations.md`. The graph net walks only accepted claims.
+
 ## [0.15.0] - 2026-11-23
 
 ### Added
