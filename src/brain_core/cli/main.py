@@ -360,6 +360,47 @@ def graph_cmd(
         typer.echo(f"import: {g.import_dump(text)}")
 
 
+@app.command("journal")
+def journal_cmd(
+    action: Annotated[str, typer.Argument(help="status | backup | restore")],
+    target: Annotated[
+        str | None,
+        typer.Argument(help="restore: the backup file; otherwise the agent directory."),
+    ] = None,
+    path: Annotated[Path, typer.Argument(help="Agent directory (for restore).")] = Path(),
+) -> None:
+    """data/journal.db, the history brain.db cannot rebuild (M1c). `status` reports it,
+    `backup` writes today's checked copy, `restore FILE` merges a backup and records the gap."""
+    if action not in ("status", "backup", "restore"):
+        typer.echo("action must be status | backup | restore", err=True)
+        raise typer.Exit(code=1)
+    if action == "restore" and not target:
+        typer.echo(
+            "ERROR: restore takes the backup file: brain journal restore FILE [DIR]", err=True
+        )
+        raise typer.Exit(code=1)
+    agent_dir = path if action == "restore" else Path(target or ".")
+    with _open(agent_dir) as agent:
+        if action == "status":
+            st = agent.journal.status()
+            typer.echo(
+                f"journal: {st['rows']} rows, {st['open']} open, generation {st['generation']}, "
+                f"since {st['started']}, integrity {st['integrity']}"
+            )
+            return
+        if action == "backup":
+            from brain_core.cron import journal_backup
+
+            typer.echo(journal_backup(agent))
+            return
+        try:
+            r = agent.journal.restore(Path(str(target)).expanduser())
+        except ValueError as e:
+            typer.echo(f"ERROR: {e}", err=True)
+            raise typer.Exit(code=1) from e
+    typer.echo(f"restored: merged {r['merged']} rows; gap {r['gap'][0]} to {r['gap'][1]}")
+
+
 @app.command("index")
 def index_cmd(
     path: Annotated[
@@ -752,6 +793,11 @@ def doctor_cmd(
             "  rebuild    brain.db alone holds "
             + ", ".join(f"{v} {k}" for k, v in lost.items())
             + ": deleting it to rebuild the index loses them"
+        )
+    if j := st.get("journal"):
+        typer.echo(
+            f"  journal    {j.get('rows', 0)} rows, {j.get('open', 0)} open, since "
+            f"{j.get('started', '-')}, integrity {j.get('integrity')}"
         )
     for line in st.get("attention", []):
         typer.echo(f"  attention  {line}")

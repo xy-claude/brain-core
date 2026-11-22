@@ -112,6 +112,15 @@ def brain_status(agent: Agent) -> dict[str, Any]:
                 "that is gone"
             )
     out["not_rebuilt"] = rebuild_loss(agent.db)
+    try:
+        out["journal"] = agent.journal.status()  # M1c: the history brain.db cannot rebuild
+    except (OSError, sqlite3.Error) as e:
+        out["journal"] = {"integrity": f"unreadable: {type(e).__name__}"}
+    if out["journal"].get("integrity") != "ok":
+        attention.append(
+            f"data/journal.db: {out['journal']['integrity']}; `brain journal restore` merges "
+            "the newest backup"
+        )
     if agent.vectors is not None:
         out["vectors"] = agent.vectors.stats()  # model, rows, rows waiting, worker up or down
     if agent.config.recall.judge == "model":

@@ -182,6 +182,8 @@ class BackupConfig(BaseModel):
     dir: str = "~/Backups/hindsight"
     keep: int = 14
     database_url: str = "pg0://hindsight"
+    # data/journal.db's daily copy (M1c): <journal_dir>/<agent>/journal-YYYY-MM-DD.db, `keep` kept
+    journal_dir: str = "~/Backups/brain-core"
 
 
 class CronConfig(BaseModel):

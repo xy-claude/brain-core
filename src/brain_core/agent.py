@@ -129,6 +129,12 @@ class Agent:
         base = self.config_path.parent if self.config_path else Path.cwd()
         return _resolve_dir(base, Path(p).expanduser())
 
+    @property
+    def journal(self) -> Journal:
+        """data/journal.db (M1c), opened with the stores."""
+        _ = self.stores
+        return self._journal
+
     def _root(self, p: Path | RootConfig) -> tuple[Path, str | None]:
         """A notes or archive folder from brain.yaml, resolved, with its configured name."""
         if isinstance(p, RootConfig):

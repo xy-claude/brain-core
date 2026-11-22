@@ -43,6 +43,15 @@ def _no_real_backup(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("brain_core.cron._admin", lambda: None)
 
 
+@pytest.fixture(autouse=True)
+def _no_real_journal_backup(
+    tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No test writes a journal backup into the developer's ~/Backups (M1c)."""
+    root = tmp_path_factory.getbasetemp() / "journal-backups"
+    monkeypatch.setattr("brain_core.cron._journal_root", lambda agent: root / agent.name)
+
+
 @pytest.fixture
 def db(tmp_path: Path) -> Iterator[Database]:
     """A freshly-migrated Database in a tmp dir. Closes after each test."""

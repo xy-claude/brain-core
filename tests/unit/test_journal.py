@@ -342,3 +342,56 @@ def test_a_corrupt_backup_is_refused(tmp_path: Path) -> None:
     bad.write_bytes(b"SQLite format 3\x00" + b"\x00" * 200)
     with pytest.raises(ValueError, match="not a sound journal"):
         j.restore(bad)
+
+
+def _agent(tmp_path: Path) -> Path:
+    (tmp_path / "vault").mkdir()
+    facts(tmp_path / "vault", "Port is 8888")
+    (tmp_path / "brain.yaml").write_text(f"name: T\nstores:\n  vault: {tmp_path / 'vault'}\n")
+    return tmp_path / "brain.yaml"
+
+
+def test_brain_daily_backs_up_the_journal(tmp_path: Path) -> None:
+    from brain_core import cron
+    from brain_core.agent import Agent
+
+    with Agent.from_config(_agent(tmp_path)) as a:
+        a.brain_sync()
+        out = cron.journal_backup(a, date(2026, 11, 23))
+        folder = cron._journal_root(a)
+    assert (
+        out.startswith("ok: journal-2026-11-23.db") and (folder / "journal-2026-11-23.db").exists()
+    )
+
+
+def test_brain_journal_restore_merges_a_backup(tmp_path: Path) -> None:
+    from typer.testing import CliRunner
+
+    from brain_core import cron
+    from brain_core.agent import Agent
+    from brain_core.cli.main import app
+
+    cfg = _agent(tmp_path)
+    with Agent.from_config(cfg) as a:
+        a.brain_sync()
+        cron.journal_backup(a, date(2026, 11, 23))
+        backup = cron._journal_root(a) / "journal-2026-11-23.db"
+        journal = a.data_dir / "journal.db"
+    journal.unlink()  # the journal is lost; the next open starts a new one
+    for extra in ("-wal", "-shm"):
+        journal.with_name(journal.name + extra).unlink(missing_ok=True)
+    time.sleep(0.01)
+    out = CliRunner().invoke(app, ["journal", "restore", str(backup), str(tmp_path)])
+    assert out.exit_code == 0, out.output
+    assert "merged 1" in out.output and "gap" in out.output
+    status = CliRunner().invoke(app, ["journal", "status", str(tmp_path)])
+    assert "integrity ok" in status.output
+
+
+def test_brain_status_reports_the_journal(tmp_path: Path) -> None:
+    from brain_core.agent import Agent
+
+    with Agent.from_config(_agent(tmp_path)) as a:
+        a.brain_sync()
+        st = a.brain_status()
+    assert st["journal"]["integrity"] == "ok" and st["journal"]["rows"] == 1

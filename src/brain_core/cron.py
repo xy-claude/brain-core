@@ -111,6 +111,7 @@ def daily(agent: Agent, today: date | None = None, shadow: bool = False) -> dict
         "health": line[2:],
     }
     out["backup"] = backup(agent, today) if cfg.cron.backup.enabled else "disabled"
+    out["journal_backup"] = journal_backup(agent, today)
     out["update"] = status.get("update") or (
         "up to date" if cfg.cron.update_check else "check disabled (cron.update_check: false)"
     )
@@ -476,6 +477,21 @@ def _warmup(sdir: Path, n: int = 3, lines: int = 6) -> str:
 
 
 # ── backup ────────────────────────────────────────────────────────────────────
+
+
+def _journal_root(agent: Agent) -> Path:
+    """Where the journal's daily copies go: <cron.backup.journal_dir>/<agent>/ (decision 3)."""
+    return Path(agent.config.cron.backup.journal_dir).expanduser() / agent.name
+
+
+def journal_backup(agent: Agent, today: date | None = None) -> str:
+    """A checked copy of data/journal.db, the history nothing else can rebuild (M1c)."""
+    keep = agent.config.cron.backup.keep
+    try:
+        target = agent.journal.backup(_journal_root(agent), keep=keep, today=today)
+    except (OSError, RuntimeError) as e:
+        return f"failed: {type(e).__name__}: {str(e)[:160]}"
+    return f"ok: {target.name} ({target.stat().st_size // 1024} KB), kept {keep}"
 
 
 def backup(agent: Agent, today: date | None = None) -> str:
