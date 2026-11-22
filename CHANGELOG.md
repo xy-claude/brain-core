@@ -4,6 +4,32 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+### Added
+- **Claims, evidence and time (M3).** A claim is what a relation asserts: subject, predicate, role and object, and its id hashes exactly those. Each occurrence that supports it is one piece of evidence. Valid time comes from the text, and the time brain-core first held each piece comes from the journal, never from the text.
+  - **Where claims come from**, without a model:
+    - `relations.md` lines, which now take a role (`—[USES: graph-database]→`), a literal object (`—[LISTENS_ON]→ 7687`) and a stated date (`(2026-11-22)`)
+    - the same lines in notes folders
+    - a decision whose **Decision:** names exactly one wikilink
+    - Session files are never read, so hook captures never become claims.
+  - **Validity is three-valued.** Every piece of evidence votes on a day. Silence or disagreement is unknown, never true.
+    - `record_meta.md` can time a record: `valid:`, `valid: always`, `until:` and `event:`.
+    - A per-copy line, `<id16>@<source>#<k>`, times one copy. It is not applied, and is reported, once the copies changed after it was written.
+    - `supersedes` ends a claim on the day the superseding record starts.
+  - **Lifecycle and reviews.** Stated and rule-derived claims are accepted. `claim_reviews.md` holds `reject:`, `retract:` (`retracted_at` is that line's journal time), `restore:` and `ack:`, applied in the order brain-core first saw them.
+  - **Conflicts.** Two claims of one functional predicate (`PART_OF`, `LISTENS_ON`, `VERSION`, `USES` with a role) that are true on the same days are a conflict. An `ack:` marks it as both true.
+  - **Names and merges.** A name with no entity note waits as a name. When a note later holds it, the claim re-keys, and every id the claim had redirects to the new one (`identity_redirects`). So do merges, ontology renames and M1b's `was:` lines.
+  - **History.** `data/journal.db` gains `derivation_journal`: every version of every row claims are computed from, with the syncs it existed in. A rebuild adds no version.
+- **`brain claims list [--as-of DAY] [--known-at TIME]`** and **`brain claims check`**. `--known-at` answers from the journal alone, and says unknown before the journal held anything or inside a gap.
+- **`brain index --check`** compares the claims with a rebuild from the files (into a temporary `brain.db`, beside a copy of the journal) and the raw rows with the journal's. Exit 1 if they differ.
+- **`brain_status` and `brain doctor`** report claims by lifecycle, open conflicts, and names waiting for an entity note. A conflict no person acknowledged is raised under attention.
+
+### Changed
+- Index format 6: the first sync after the upgrade reads every file once (about 4 s on an agent of 6,000 records), so each source's claim rows exist. The texts are unchanged, so the journal's ledger closes nothing.
+- `record_meta.md` lines that time, link or review a record are recorded in the journal's ledger, because a review is ordered by its line's journal time. On the main agent that is about 600 lines, once. A save that only adds search keys costs nothing more.
+
+### Fixed
+- After the vault folder moved, every sync failed (0.12.0 and later): the old paths of its files could not be named against the new root.
+
 ## [0.13.0] - 2026-11-23
 
 ### Added

@@ -144,6 +144,7 @@ The owner asked for the whole plan to be finished, with housekeeping, without st
 | **Rollback** | Revert the code and **keep** `data/journal.db` and its backups. 0.9.1 ignores them, and reinstalling M1c later continues the history with a recorded gap. Deleting `journal.db` destroys history that nothing can rebuild, so it is never part of a rollback; it would be a separate, explicit owner decision. `brain.db` and the vault are unaffected |
 | **Implementation (2026-11-22)** | <ul><li>**Code:**<ul><li>`brain_core/journal.py`</li><li>`record_ledger`, `ledger_gaps`, and `ledger_occurrences` (beside the audit's schema: which source an occurrence belongs to)</li><li>`synchronous=FULL`, the unique open index, the per-agent lock across both commits, journal first</li><li>the `generation`/`sync_seq` marker (`brain.db` migration 007) with a rule for every state</li><li>a file edited mid-sync is left for the next one, and a save is recorded as `write`</li><li>a checked daily backup, `brain journal status|backup|restore`, doctor and status lines</li><li>21 tests; the suite passes (625, 3 skipped)</li></ul></li><li>**On an isolated copy of the migrated live agent:**<ul><li>the first open read every file once in 3.1 s and recorded 6,127 versions; the journal is 3.5 MB</li><li>recall identical to 0.11.0 for 200 of 200 queries</li><li>timing, the two run alternately: recall p95 99.9 and 102.0 ms against 103.3 and 100.6 ms; no-change sync about 4.5 ms for both</li><li>a backup restored into a lost journal merged all 6,127 rows and recorded the gap</li><li>rollback to 0.11.0 recalls identically for 200 of 200</li></ul></li><li>**Rollback:** reinstall 0.11.0 and keep `journal.db`. If `cron.backup.journal_dir` was set in brain.yaml, remove it first: 0.11.0 refuses keys it does not know</li></ul> |
 | **Approve** | [x] **M1c approved** by the owner's program decision of 2026-11-22 |
+| **Live cutover (2026-11-23)** | 0.12.0 installed on all three agents with no brain server running, behind a checked backup of each `brain.db`. Each first open started the journal's epoch. Ledger rows equal records on each agent (6,127, 1,375 and 70); records, keys and vectors match the inventory. The first `brain journal backup` of each passed `integrity_check` |
 
 ## 3. The other decisions in section R
 
@@ -165,7 +166,9 @@ None of these is needed for M1. Each has a recommended default in the audit (sec
 | 17 | the margin that justifies a JVM service | set before the benchmark | M6 |
 | 18 | leave the line number out of journal versions | yes | M3 |
 | 20 | per-copy meta after the copies changed | report it, do not apply it until re-anchored | M3 |
-| 22 | start M3 only with evidence of need (a class of eval misses that typed claims would fix) | yes (suggested by the second-model review); **open, your call** | M3 |
+| 22 | start M3 only with evidence of need (a class of eval misses that typed claims would fix) | yes (suggested by the second-model review); **overridden by the owner's decision to finish the plan** | M3 |
+
+M3 (2026-11-23) applies items 5 to 10, 12, 18 and 20 with the defaults above. Where M3 departs from the audit is listed in `docs/KNOWLEDGE_PROGRAM_STATUS.md`.
 
 ## 4. Readiness
 
