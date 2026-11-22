@@ -395,7 +395,8 @@ Say "thanks, we're done" and it runs `brain_session('end')`. Tomorrow at 06:07 `
 │   ├── sessions/             one file per day (HSAM)
 │   ├── knowledge/ raw/       the LLM-wiki: immutable sources, compiled pages
 │   └── executive_state.md    objective, missions, pending decisions
-└── data/brain.db             SQLite: the FTS5 index of every record, transcript index, event log, relations mirror
+├── data/brain.db             SQLite: the FTS5 index of every record, transcript index, event log, relations mirror
+└── data/journal.db           SQLite: when the vault held each version of each record; backed up daily, never rebuilt
 ```
 
 Everything is markdown or SQLite. Open the vault in Obsidian, grep it, commit it, delete a line. The agent will not mind.
@@ -504,7 +505,7 @@ A trait never gets one number. It gets signals, each with a sample size and a ve
 | raw | `vault/raw/` | immutable source with sha256; the agent compiles `vault/knowledge/` |
 | key | `vault/record_meta.md` | `- <record id> \| keys: … \| source: … \| supersedes: …`, one append-only line per record |
 
-Rules: idempotent by content hash, append-only, nothing deleted. Text that looks like a common secret (API tokens, private keys, JWTs) is refused before any store sees it; the filter knows formats, so an unusual key can pass and is yours to keep out. The SQLite index is a cache: delete it and it is rebuilt from the files, except the event log and tool metrics, which only `brain.db` keeps (`brain doctor` counts them). An agent whose relations are still only in `brain.db` (0.9.1 and before) moves them into `relations.md` with `brain graph migrate`, behind a checked backup; until then recall reads them where they are, and a new relation is refused with that instruction. Details in [`docs/VAULT_SCHEMA.md`](docs/VAULT_SCHEMA.md).
+Rules: idempotent by content hash, append-only, nothing deleted. Text that looks like a common secret (API tokens, private keys, JWTs) is refused before any store sees it; the filter knows formats, so an unusual key can pass and is yours to keep out. The SQLite index is a cache: delete it and it is rebuilt from the files, except the event log and tool metrics, which only `brain.db` keeps (`brain doctor` counts them). `data/journal.db` is not a cache: it holds when the vault held each record, which no file can give back. Never delete it to rebuild; `brain daily` backs it up and `brain journal restore` merges a backup. An agent whose relations are still only in `brain.db` (0.9.1 and before) moves them into `relations.md` with `brain graph migrate`, behind a checked backup; until then recall reads them where they are, and a new relation is refused with that instruction. Details in [`docs/VAULT_SCHEMA.md`](docs/VAULT_SCHEMA.md).
 
 ## Requirements
 

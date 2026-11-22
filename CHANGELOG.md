@@ -4,6 +4,21 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+### Added
+- **`data/journal.db`: the history no Markdown file holds (M1c).**
+  - **What it records:** one row per version of a record at an occurrence (a source, a record, the k-th copy of it there), with when the vault held it. The time comes from the clock, never from the text. A move keeps its recording time only when it is unambiguous: one copy left and one arrived.
+  - **Durability:** it is its own file. Deleting or rebuilding `brain.db` never touches it. It commits durably (WAL, `synchronous=FULL`) and allows one open version per occurrence.
+  - **Write order:** a per-agent lock spans each sync, which writes the journal first and then `brain.db`.
+  - **Marker:** a generation and sequence marker in both files detects a journal that lost commits, was restored from an older copy or was replaced. Then every file is read again and the gap is recorded. A new journal starts an epoch: every version present is recorded at that moment, late, never early.
+  - **Edge cases:** a file edited while a sync reads it is left for the next sync. A save made by `brain_remember` is recorded as a write.
+- **`brain daily` backs the journal up** to `~/Backups/brain-core/<agent>/journal-YYYY-MM-DD.db` (`cron.backup.journal_dir`), checked and readable by the owner only, keeping `cron.backup.keep` copies.
+- **`brain journal status | backup | restore FILE`.** A restore merges a backup, closes its open rows at the backup's time, and records the gap. It refuses a corrupt file.
+- **`brain doctor` and `brain_status`** report the journal; an unsound one is raised under attention.
+
+### Changed
+- The first sync after the upgrade reads every file once (about 3 s on an agent of 6,000 records) to start the journal's epoch.
+
+
 ## [0.11.0] - 2026-11-22
 
 ### Changed
