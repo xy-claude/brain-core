@@ -674,3 +674,26 @@ def test_index_check_rebuilds_from_the_files(tmp_path: Path) -> None:
     db.close()
     out = run(app, ["index", str(tmp_path), "--check"])
     assert out.exit_code == 1 and "differ from a rebuild from the files" in out.output, out.output
+
+
+def test_load_gives_back_what_derive_gave(a: Agent) -> None:
+    a.write("decisions_log.md", DECISIONS)
+    a.relations(f"{USES_NEO} (2026-11-22)", f"{USES_KUZU} (2026-12-10)", f"{USES_NEO} (2027-03-01)")
+    a.meta(f"{rel_id('- ' + USES_KUZU)} | supersedes: {rel_id('- ' + USES_NEO)}")
+    a.reviews(f"ack: {USES_NEO} & {USES_KUZU}")
+    full = a.now()
+    loaded = a.claims.load(list(full))
+    for cid, c in full.items():
+        got = loaded[cid]
+        assert got.key == c.key and got.lifecycle == c.lifecycle
+        assert sorted(e.occurrence.id() for e in got.evidence) == sorted(
+            e.occurrence.id() for e in c.evidence
+        )
+        assert [(p.true_from, p.true_to, p.link_end) for p in got.periods] == [
+            (p.true_from, p.true_to, p.link_end) for p in c.periods
+        ]
+        assert sorted(x.model_dump_json() for x in got.conflicts) == sorted(
+            x.model_dump_json() for x in c.conflicts
+        )
+        for d in ("2026-11-01", "2026-12-01", "2027-01-01", "2027-04-01"):
+            assert got.at(D(d), TODAY) == c.at(D(d), TODAY)

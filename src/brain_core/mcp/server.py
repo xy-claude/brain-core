@@ -20,6 +20,7 @@ import json
 import time
 import uuid
 from collections.abc import Callable
+from datetime import date
 from pathlib import Path
 from typing import Annotated, Any, cast
 
@@ -73,6 +74,14 @@ def build_server(agent: Agent) -> FastMCP:
         offset: Annotated[
             int, Field(description="Skip this many ranked results; use the reply's `next_offset`.")
         ] = 0,
+        as_of: Annotated[
+            str | None,
+            Field(
+                description="YYYY-MM-DD: the day the question is about ('what did we use on "
+                "2026-10-20?'). Claims are those true that day; a value replaced later is not "
+                "marked superseded."
+            ),
+        ] = None,
     ) -> dict[str, Any]:
         """Search the agent's long-term memory: facts, patterns, decisions, corrections,
         session notes, raw sources, entity relations and the Claude Code session transcripts
@@ -99,7 +108,11 @@ def build_server(agent: Agent) -> FastMCP:
         On a result: `found_by` names what put it forward (keyword, vector, date, exact,
         judge, replaces); `superseded` marks an old value a newer record replaced; an empty
         `date` or `undated` means the line has no date of its own, so never state when it
-        was written.
+        was written. With `recall.graph` on, `claims` lists the relations around the
+        entities the question names, each with `validity` on the day asked (true, false or
+        unknown: never state an unknown one as fact) and `disputed` when two of them cannot
+        both hold; a result it found carries `path`. `graph.note` says when that list was
+        cut short.
 
         Writes no memory. `stores` lists hits per store and names any that could not be
         reached, instead of failing the call. With `recall.judge: model` in brain.yaml the
@@ -109,7 +122,14 @@ def build_server(agent: Agent) -> FastMCP:
         return _timed(
             agent,
             "brain_recall",
-            lambda: agent.brain_recall(query, scope=scope, fmt=format, limit=limit, offset=offset),
+            lambda: agent.brain_recall(
+                query,
+                scope=scope,
+                fmt=format,
+                limit=limit,
+                offset=offset,
+                as_of=date.fromisoformat(as_of) if as_of else None,
+            ),
         )
 
     @server.tool(

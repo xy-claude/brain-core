@@ -21,10 +21,11 @@ from typing import TYPE_CHECKING, Any
 from brain_core.entities import normalize_alias, ontology
 from brain_core.journal import Journal
 from brain_core.knowledge import rules
-from brain_core.knowledge.derive import canonical, derive
+from brain_core.knowledge.derive import build_periods, canonical, derive
 from brain_core.knowledge.model import (
     Claim,
     ClaimKey,
+    Conflict,
     Evidence,
     Lifecycle,
     Link,
@@ -538,6 +539,91 @@ class ClaimIndex:
         self.settle()
         raws, lines = self._raws()
         return self._compute(raws, self._now(), lines)[0]
+
+    def load(self, ids: Sequence[str]) -> dict[str, Claim]:
+        """These claims as brain.db holds them, without deriving the rest: what recall
+        needs for the few a walk reached. Periods are split again from the stored evidence
+        at the stored link ends, which is exactly how they were split."""
+        out: dict[str, Claim] = {}
+        for cid in dict.fromkeys(ids):
+            row = self.db.fetchone("SELECT * FROM claims WHERE id = ?", (cid,))
+            if row is None:
+                continue
+            evs = [
+                Evidence(
+                    occurrence=Occurrence(
+                        source_id=e["source_id"], record_id=e["record_id"], ordinal=e["ordinal"]
+                    ),
+                    rule=e["rule"],
+                    line=e["line"],
+                    content_hash=e["content_hash"],
+                    subject_name=e["subject_name"],
+                    object_name=e["object_name"],
+                    stated_date=_day(e["stated_date"]),
+                    event_date=_day(e["event_date"]),
+                    valid_from=_day(e["valid_from"]),
+                    valid_to=_day(e["valid_to"]),
+                    timeless=bool(e["timeless"]),
+                    recorded_at=datetime.fromisoformat(e["recorded_at"].replace("Z", "+00:00")),
+                    recorded_by=e["recorded_by"],
+                    origin=e["origin"],
+                    verification=e["verification"],
+                    confidence=e["confidence"],
+                    quote=e["quote"],
+                )
+                for e in self.db.fetchall(
+                    "SELECT * FROM claim_evidence WHERE claim_id = ? ORDER BY occ_id, rule", (cid,)
+                )
+            ]
+            ends = [
+                d
+                for (x,) in self.db.fetchall(
+                    "SELECT link_end FROM claim_periods WHERE claim_id = ? AND link_end IS NOT "
+                    "NULL",
+                    (cid,),
+                )
+                if (d := _day(x))
+            ]
+            conflicts = [
+                Conflict(
+                    other=r["claim_b"] if r["claim_a"] == cid else r["claim_a"],
+                    kind=r["kind"],
+                    scope=r["scope"],
+                    overlap_from=_day(r["overlap_from"]),
+                    overlap_to=_day(r["overlap_to"]),
+                    acknowledged=bool(r["acknowledged"]),
+                )
+                for r in self.db.fetchall(
+                    "SELECT * FROM claim_conflicts WHERE claim_a = ? OR claim_b = ? ORDER BY seq",
+                    (cid, cid),
+                )
+            ]
+            if not evs:
+                continue
+            out[cid] = Claim(
+                id=cid,
+                key=ClaimKey(
+                    subject=row["subject"],
+                    predicate=row["predicate"],
+                    role=row["role"],
+                    object_entity=row["object_entity"],
+                    object_literal=row["object_literal"],
+                    datatype=row["datatype"],
+                ),
+                lifecycle=row["lifecycle"],
+                verification=row["verification"],
+                origins=frozenset(e.origin for e in evs),
+                confidence=row["confidence"],
+                evidence=evs,
+                periods=build_periods(evs, ends),
+                conflicts=conflicts,
+                retracted_at=(
+                    datetime.fromisoformat(row["retracted_at"].replace("Z", "+00:00"))
+                    if row["retracted_at"]
+                    else None
+                ),
+            )
+        return out
 
     def known_at(self, when: datetime) -> dict[str, Claim] | None:
         """What brain-core held at ``when`` (transaction time), from the journal alone: the raw

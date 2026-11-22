@@ -27,7 +27,7 @@ import re
 from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from datetime import date
-from typing import Any, get_args
+from typing import TYPE_CHECKING, Any, get_args
 
 from brain_core import judge as judging
 from brain_core.embed import EmbedUnavailable
@@ -35,6 +35,9 @@ from brain_core.stores.base import Kind, Record, Store, full_text, holds, normal
 from brain_core.stores.index import RecordIndex, days_asked
 from brain_core.stores.vault import redact
 from brain_core.stores.vectors import VectorIndex
+
+if TYPE_CHECKING:
+    from brain_core.knowledge.net import GraphNet
 
 KINDS: tuple[Kind, ...] = get_args(Kind)
 DEFAULT_TOKENS = 6_000
@@ -139,10 +142,14 @@ def brain_recall(
     judge: judging.Runner | None = None,
     judge_candidates: int = 50,
     picked: Mapping[str, Any] | None = None,
+    graph: GraphNet | None = None,
+    as_of: date | None = None,
 ) -> dict[str, Any]:
     """``picked``: the ``judgement`` an earlier call of the same question returned. A later
     page (``offset`` > 0) passes it so the page continues the judged order; the judge itself
-    is only ever asked for the first page."""
+    is only ever asked for the first page. ``graph`` (M4): the claims around the entities
+    the question names, as one more net. ``as_of``: the day the question is about, for the
+    claims and for which replacement already stood then."""
     today = today or date.today()
     names = [s.name for s in stores]
     asked = [s for s in stores if getattr(s, "recall", True)]  # a store can opt out of recall
@@ -271,11 +278,22 @@ def brain_recall(
         if (k := normalize(r.text[:WAS_CHARS]).lower()) in cut and r.id not in cut[k]
     )
     # a record another one names in `supersedes` (record_meta.md) is retired the same way
+    index = next(
+        (i for s in chosen if isinstance(i := getattr(s, "index", None), RecordIndex)), None
+    )
     replaced: dict[str, str] = {}
     for store in stores:  # the links live in the vault whatever the scope
         if hasattr(store, "replaced"):
             with contextlib.suppress(OSError):  # a folder that cannot be read has no links
                 replaced |= store.replaced()
+    if as_of is not None and index is not None:
+        # a value replaced after the day asked about was still the value that day (H.4)
+        later = {
+            new
+            for new in set(replaced.values())
+            if (got := index.get(new)) and not got[0].undated and got[0].date > as_of
+        }
+        replaced = {old: new for old, new in replaced.items() if new not in later}
     retired = set(replaced)
 
     def quoted(r: Record) -> bool:
@@ -306,13 +324,20 @@ def brain_recall(
         key=lambda h: (h[2], _when(h[0])),
         reverse=True,
     )
-    index = next(
-        (i for s in chosen if isinstance(i := getattr(s, "index", None), RecordIndex)), None
-    )
     # whether the question is answered is read off the keyword list alone: a vector search
     # returns its nearest records for any question, so it cannot say "not in memory"
     lead = [r.id for r, _s, _sc in ordered[:3] if r.score > 0]
     found_by: dict[str, list[str]] = {}
+    walked: list[Hit] = []
+    graph_info: dict[str, Any] = {}
+    if graph is not None and scope not in ("transcript", "transcripts"):
+        try:
+            walked, graph_info = graph.search(query, as_of, today, in_scope, candidates)
+        except Exception as e:  # a broken graph net must not kill recall
+            report["graph"] = f"error: {type(e).__name__}: {str(e)[:120]}"
+        else:
+            if graph_info:
+                report["graph"] = len(walked)
     # a transcript line or a graph relation has no vector, so those scopes skip the net
     if (
         vectors is not None
@@ -349,8 +374,13 @@ def brain_recall(
                 on_day.sort(key=lambda h: seen.get(h[0].id, len(seen)))
                 nets["date"] = on_day
                 report["date"] = len(on_day)
+            if walked:
+                nets["graph"] = walked
             ordered = _join(nets, found_by)
             ordered = _pin(ordered, query, index, found_by, in_scope)
+            walked = []  # joined
+    if walked:  # keywords alone: the graph net joins them the same way
+        ordered = _join({"keyword": ordered[:candidates], "graph": walked}, found_by)
     ordered = _current(ordered, replaced, index, found_by, in_scope)
     # what the judge said: its status, the ids it picked, how many it read of those gathered
     judgement = dict(picked) if picked is not None else None
@@ -381,8 +411,9 @@ def brain_recall(
         ordered = front + [h for h in ordered if h[0].id not in judgement["picks"]]
         ordered = _current(ordered, replaced, index, found_by, in_scope)  # for the judge too
     total = len(ordered)
+    paths = graph_info.pop("paths", {})
     results = [
-        _item(r, s, sc, fmt, stale(r), found_by.get(r.id))
+        _item(r, s, sc, fmt, stale(r), found_by.get(r.id), paths.get(r.id))
         for r, s, sc in ordered[offset : offset + limit]
     ]
     if index and q_tok and lead:
@@ -396,6 +427,15 @@ def brain_recall(
         "total": total,
         "results": results,
     }
+    if graph_info:
+        out["claims"] = graph_info.pop("claims")
+        out["graph"] = graph_info
+        if why := graph_info.get("truncated"):
+            out["graph"]["note"] = f"graph expansion truncated ({', '.join(why)}) at " + ", ".join(
+                graph_info.get("hubs") or graph_info["seeds"]
+            )
+    if as_of is not None:
+        out["as_of"] = as_of.isoformat()
     if asked_chars > _QUERY_CHARS:
         out["query_cut"] = (
             f"the question was cut to its first {_QUERY_CHARS} of {asked_chars} characters"
@@ -545,6 +585,7 @@ def _item(
     fmt: str,
     stale: bool = False,
     found_by: list[str] | None = None,
+    path: str | None = None,
 ) -> dict[str, Any]:
     # masked again on the way out, behind the index's own masking: a credential-shaped run
     # never leaves in a reply, whatever the stored row holds
@@ -565,6 +606,8 @@ def _item(
         item["superseded"] = True  # a newer record replaced this value; kept for its history
     if found_by:
         item["found_by"] = found_by  # keyword, vector, exact, judge: what put it forward
+    if path:
+        item["path"] = path  # the claim the graph net reached it by (M4)
     if fmt == "detailed":
         item.update(
             id=r.id,

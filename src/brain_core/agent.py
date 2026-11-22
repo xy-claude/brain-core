@@ -28,7 +28,7 @@ import contextlib
 from datetime import date as Date
 from pathlib import Path
 from types import TracebackType
-from typing import Any, Self, cast, get_args
+from typing import TYPE_CHECKING, Any, Self, cast, get_args
 
 from brain_core.config import BrainConfig, RootConfig
 from brain_core.distill import brain_distill
@@ -58,6 +58,9 @@ from brain_core.stores.base import Kind
 from brain_core.stores.index import RecordIndex, terms
 from brain_core.stores.vault import _SECRET, redact
 from brain_core.stores.vectors import VectorIndex
+
+if TYPE_CHECKING:
+    from brain_core.knowledge.net import GraphNet
 
 # what the reply says about each part of recall that could not run
 _DEGRADED = {
@@ -197,6 +200,18 @@ class Agent:
             self._vectors = VectorIndex(self._db, WorkerEmbedder(v.model, v.idle_minutes))
         return self._vectors
 
+    def graph_net(self) -> GraphNet | None:
+        """The graph net (M4) when ``recall.graph`` is on and the vault holds claims."""
+        if not self._config.recall.graph:
+            return None
+        from brain_core.knowledge.net import GraphNet
+        from brain_core.stores.vault import VaultStore
+
+        v = next((s for s in self.stores if isinstance(s, VaultStore)), None)
+        if v is None or v.claims is None or v.index is None:
+            return None
+        return GraphNet(v.claims, v.index)
+
     def brain_recall(
         self,
         query: str,
@@ -206,6 +221,7 @@ class Agent:
         offset: int = 0,
         judge: bool = True,
         vectors: bool = True,
+        as_of: Date | None = None,
     ) -> dict[str, Any]:
         """One query across every store, deduplicated and ranked. See :mod:`brain_core.recall`.
 
@@ -234,6 +250,8 @@ class Agent:
             judge_candidates=self._config.recall.judge_candidates,
             # a later page continues the order the judge gave the first one, with no new call
             picked=self._judged.get(key) if judge and offset else None,
+            graph=self.graph_net(),
+            as_of=as_of,
         )
         judgement = out.pop("judgement", None)
         if offset == 0:
