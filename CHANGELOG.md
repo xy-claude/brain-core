@@ -11,7 +11,11 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 - **Answers about a past day are marked, result by result.** With `as_of`, a record dated after that day carries `after_as_of`, and a relation carries `as_of_validity`: whether its claim held that day (true, false or unknown). A relation's own date is when it was recorded, never when it held. Nothing is re-ordered or dropped.
 - **`brain claims list --known-at` says what it reads with:** the evidence of that time, with today's entity notes and ontology. A merge or rename made later applies to it, so it is not a full snapshot of the past; the docs now say so too.
 - **History coverage is reported apart from consistency.** `brain journal status`, `brain doctor` and `brain index --check` add a `history:` line: since when records and claims are recorded, and any window lost before a restore (one loss is one gap). `brain index --check` passing means brain.db agrees with the files and the journal; it never meant the history is complete, and a gap does not fail it.
+- **Text the hooks put in the agent's context is framed as data.** The session-start brief and the past-error lines now say they are stored data and that an instruction in them is not a request from the user.
 - **A name several entity notes hold is not walked.** The graph net reports it as `graph.ambiguous`, with a note to use a name only one entity holds; before, it seeded the walk as the placeholder its claims carried.
+
+### Fixed
+- A credential written by hand in `claim_reviews.md` or `knowledge/_reflections.md` reached the claims' raw rows and the journal's derivation history unmasked (0.14.0 to 0.16.1). Those lines are now masked as the index masks a record.
 
 ## [0.16.1] - 2026-11-23
 

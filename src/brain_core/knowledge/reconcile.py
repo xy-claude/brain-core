@@ -35,6 +35,7 @@ from brain_core.knowledge.model import (
 )
 from brain_core.knowledge.rules import META, REFLECTIONS, REVIEWS, Raw
 from brain_core.storage.db import Database
+from brain_core.stores.vault import redact
 
 if TYPE_CHECKING:
     from brain_core.stores.base import Record
@@ -148,6 +149,9 @@ class ClaimIndex:
                 if row is not None and str(row[0]).rpartition(":")[0] == sig:
                     continue  # the file's stamp is the one its rows were read at
                 text = path.read_text(encoding="utf-8", errors="replace") if st else ""
+                # masked as the index masks a record: these lines reach raw rows, the journal
+                # (never rebuilt) and replies, and a hand-written line can hold a credential
+                text = redact(text)
                 self.unread.pop(name, None)
             except OSError as e:
                 self.unread[name] = type(e).__name__  # its rows stay as they were
