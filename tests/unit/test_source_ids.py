@@ -131,6 +131,8 @@ def test_after_the_migration_keys_links_and_vectors_survive_a_move(
     assert report["verified"] and report["was_lines"] == 1 and report["vectors_remapped"] == 1
     new = record_id("notes:shared/tips.md#Deploy")
     assert db.fetchone("SELECT record_id FROM record_vectors")[0] == new  # type: ignore[index]
+    # the keys once, as before: twice would weigh the record's words double in ranking
+    assert db.fetchone("SELECT keys FROM records_fts WHERE rid = ?", (new,))[0] == "zanzibar"  # type: ignore[index]
     # the folder moves: the path id is gone, and the `was:` line still carries the keys
     (tmp_path / "new").mkdir()
     shutil.move(tmp_path / "old" / "shared", tmp_path / "new" / "shared")
@@ -197,3 +199,14 @@ def test_an_old_location_maps_keys_written_there(tmp_path: Path, db: Database) -
     )
     vault.read("fact", "sync")
     assert report["was_lines"] == 1 and found(notes, "zanzibar") and f.exists()
+
+
+def test_a_reply_does_not_carry_the_old_id(tmp_path: Path, db: Database) -> None:
+    """`was` is bookkeeping: in a reply it would cost the token budget a result (M1b)."""
+    from brain_core.recall import brain_recall
+
+    page(tmp_path / "shared")
+    vault = VaultStore(tmp_path / "vault", index=RecordIndex(db))
+    notes = NotesStore([tmp_path / "shared"], vault.index)
+    (hit,) = brain_recall([vault, notes], "rsync the build", fmt="detailed")["results"]
+    assert hit["store"] == "notes" and "was" not in hit["extra"]

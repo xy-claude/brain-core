@@ -203,7 +203,9 @@ class RecordIndex:
         n = len(next(iter(self.keys), ""))
         if not n:
             return ""
-        return "; ".join(k for k in (self.keys.get(rid[:n], ""), self.keys.get(was[:n], "")) if k)
+        # once each: after the migration the new id's keys already hold the old id's (`was:`)
+        parts = (self.keys.get(rid[:n], ""), self.keys.get(was[:n], ""))
+        return "; ".join(dict.fromkeys(k for p in parts for k in p.split("; ") if k))
 
     def under(self, store: str, folder: Path) -> bool:
         """Whether ``store`` has indexed a file under ``folder``."""

@@ -572,7 +572,10 @@ def _item(
             score=round(score, 3),
             domain=redact(r.domain),
             # a store may hand over a value that is not text (a timestamp): it passes as it is
-            extra={k: redact(v) if isinstance(v, str) else v for k, v in r.extra.items()},
+            # `was` (M1b: the id a notes record had before) is bookkeeping, not for the reader
+            extra={
+                k: redact(v) if isinstance(v, str) else v for k, v in r.extra.items() if k != "was"
+            },
         )
         if r.undated:
             item["undated"] = True
