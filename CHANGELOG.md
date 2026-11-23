@@ -4,6 +4,8 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+## [0.18.1] - 2026-11-23
+
 ### Changed
 - **A write refuses an unquoted password after its label.** `password: <value>`, `the password is <value>`, `passwd`, `passcode` and `pwd` labels, with no quotes round the value, were caught only when the value had 16 characters or more and no symbol, so a typical password was saved, indexed in clear and returned by recall, and the capture hook filed it from a prompt. `brain_remember`, the capture hook, `brain_session('end')` and miss repair now refuse such a value of 8 characters or more holding a letter and a digit or a symbol other than `.` `_` `-`. A path or URL, a placeholder (`$`, `%`, `{`, `<`, `[`, `(`), an env var name in capitals and `1Password` are not refused. Masking is unchanged: such a value in a file written by hand is still not masked.
 
