@@ -165,12 +165,13 @@ class Agent:
             md = self.resolve(s.vault) / "relations.md" if s.vault else None
             self._stores.append(GraphStore(self._db, md))
             if s.transcripts and self.config_path:
-                cwd = (
-                    self.resolve(s.transcripts_cwd)
-                    if s.transcripts_cwd
-                    else self.config_path.parent
+                cwds = (
+                    s.transcripts_cwd
+                    if isinstance(s.transcripts_cwd, list)
+                    else [s.transcripts_cwd]
                 )
-                self._stores.append(TranscriptStore(self._db, s.transcripts, cwd))
+                roots = [self.resolve(c) for c in cwds if c] or [self.config_path.parent]
+                self._stores.append(TranscriptStore(self._db, s.transcripts, roots))
             if s.notes:
                 self._stores.append(NotesStore([self._root(p) for p in s.notes], index))
             if s.archive:

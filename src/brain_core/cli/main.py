@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import os
 import re
 import sys
 from pathlib import Path
@@ -227,10 +228,39 @@ def cron_cmd(
             raise typer.Exit(code=1)
 
 
-def _open(path: Path) -> Agent:
-    cfg = path if path.is_file() else path / "brain.yaml"
-    if not cfg.exists():
-        typer.echo(f"ERROR: no brain.yaml at {cfg}", err=True)
+def _find(path: Path) -> Path | None:
+    """The brain.yaml for ``path``: the file itself, or <dir>/brain.yaml. For the default path
+    (.) with none there, the nearest brain.yaml in a folder above $CLAUDE_PROJECT_DIR (else the
+    working directory), stopping below the home folder: a session opened in a repo inside a
+    workspace finds the workspace's memory. None when there is none."""
+    if path.is_file():
+        return path
+    if path != Path():
+        cfg = path / "brain.yaml"
+        return cfg if cfg.is_file() else None
+    start = Path(os.environ.get("CLAUDE_PROJECT_DIR") or Path.cwd()).expanduser().resolve()
+    home = Path.home().resolve()
+    for d in (start, *start.parents):
+        if d == home or d == Path(d.anchor):
+            break  # never a brain.yaml in the home folder or the root for every folder below
+        if (d / "brain.yaml").is_file():
+            return d / "brain.yaml"
+        if home not in d.parents:
+            break  # outside the home folder only the start folder itself counts
+    return None
+
+
+def _open(path: Path, quiet: bool = False) -> Agent:
+    """The agent for ``path`` (see _find). With ``quiet`` (a hook) a folder with no memory
+    exits 0 and prints nothing: one user-level hook can run in every project."""
+    cfg = _find(path)
+    if cfg is None:
+        if quiet:
+            raise typer.Exit(code=0)
+        if path != Path():
+            typer.echo(f"ERROR: no brain.yaml at {path}", err=True)
+        else:
+            typer.echo(f"ERROR: no brain.yaml at {Path.cwd()} or in a folder above it", err=True)
         raise typer.Exit(code=1)
     return Agent.from_config(cfg)
 
@@ -726,7 +756,7 @@ def brief_cmd(
     resume = ""
     if payload.get("source") == "compact" and payload.get("transcript_path"):
         resume = checkpoint(Path(str(payload["transcript_path"])).expanduser())
-    with _open(path) as agent:
+    with _open(path, quiet=hook) as agent:
         vault = next((s for s in agent.stores if isinstance(s, VaultStore)), None)
         brief = (vault.root / agent.config.session.brief) if vault else None
         # masked: a brief written before the pattern knew a format still holds it in clear
@@ -793,7 +823,7 @@ def capture_cmd(
         if payload.get("stop_hook_active") or not payload.get("transcript_path"):
             return
         transcript, sid = Path(str(payload["transcript_path"])), str(payload.get("session_id", ""))
-        with _open(path) as agent:
+        with _open(path, quiet=True) as agent:
             capture(agent, transcript.expanduser(), sid)
         return  # a hook prints nothing; plain stdout would be ignored anyway
     with _open(path) as agent:
@@ -832,7 +862,7 @@ def lessons_cmd(
     sid = str(payload.get("session_id", ""))
     if hook:
         prompt = str(payload.get("prompt", ""))
-    with _open(path) as agent:
+    with _open(path, quiet=hook) as agent:
         vault = next((s for s in agent.stores if isinstance(s, VaultStore)), None)
         source = (vault.root / FILES["correction"]) if vault else None
         text = source.read_text(encoding="utf-8") if source and source.exists() else ""
@@ -1095,7 +1125,7 @@ def recall_cmd(
             return
         typer.echo("ERROR: query is empty", err=True)
         raise typer.Exit(code=1)
-    with _open(path) as agent:
+    with _open(path, quiet=hook) as agent:
         if hook:
             # the plain search: an error line is not a question, so no judge, no vectors (a
             # failed command must never start a model) and no entry in the miss log
@@ -1143,14 +1173,18 @@ def serve_cmd(
         typer.Argument(help="Path to agent directory (contains brain.yaml)."),
     ] = Path(),
 ) -> None:
-    """Run the MCP server for the agent at ``path``."""
-    config_path = path if path.is_file() else path / "brain.yaml"  # a dir, or a yaml file
-    if not config_path.exists():
-        typer.echo(f"ERROR: no brain.yaml at {config_path}", err=True)
-        raise typer.Exit(code=1)
+    """Run the MCP server for the agent at ``path``. With no path, the nearest brain.yaml at or
+    above the project folder; a folder with none gets a server with no tools (one user-level
+    entry can stay on everywhere). An explicit path with no brain.yaml is an error."""
+    from brain_core.mcp.server import run_empty, run_server
 
-    from brain_core.mcp.server import run_server
-
+    config_path = _find(path)
+    if config_path is None:
+        if path != Path():
+            typer.echo(f"ERROR: no brain.yaml at {path}", err=True)
+            raise typer.Exit(code=1)
+        run_empty()
+        return
     run_server(config_path)
 
 

@@ -4,6 +4,16 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+## [0.18.2] - 2026-11-24
+
+### Added
+- **A session opened in a repo inside a workspace finds the workspace's memory.** With no path (or `.`), every command, `brain serve` and the hooks look for `brain.yaml` in the project folder (`$CLAUDE_PROJECT_DIR`, else the working directory) and then in each folder above it, stopping below the home folder: `~/brain.yaml` and the root never count, and outside the home folder only the start folder does. An explicit path is used as given and never walks up.
+- **A quiet no-memory mode, so one user-level entry can stay on in every project.** In a folder with no `brain.yaml` at or above it, `brain serve` runs a server with no tools (no error, no tool list), and `brief --hook`, `capture`, `recall --hook` and `lessons --hook` exit 0 and print nothing. A command run by hand still says there is no brain.yaml. `brain serve <path>` with a missing brain.yaml stays an error.
+- **`stores.transcripts_cwd` takes a list.** Each folder Claude Code runs in for one memory (a workspace root and the repos inside it, or an old folder the agent moved from) is indexed into the one transcript table and searched together. A single path works as before.
+
+### Changed
+- **A peer is labelled by its own name.** Session start labelled each peer's sync file by its folder, so workspaces that keep their vault in `<workspace>/.brain/notes` all read "notes". The label is now the `name` of the brain.yaml, up to three folders above the file, whose vault holds it; else the folder name as before.
+
 ## [0.18.1] - 2026-11-23
 
 ### Changed

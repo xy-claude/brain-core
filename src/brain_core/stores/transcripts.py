@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+from collections.abc import Sequence
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -150,15 +151,23 @@ class TranscriptStore:
     ranked = True  # FTS5 bm25 order
     whole = True  # one read covers the only kind it has
 
-    def __init__(self, db: Database, projects_root: Path, agent_root: Path) -> None:
+    def __init__(
+        self, db: Database, projects_root: Path, agent_root: Path | Sequence[Path]
+    ) -> None:
         self.db = db
         self.projects_root = projects_root
-        self.agent_root = agent_root
+        # every folder Claude Code runs in for this agent; one table holds them all
+        self.agent_roots = [agent_root] if isinstance(agent_root, Path) else list(agent_root)
+        self.agent_root = self.agent_roots[0]
         self._indexed = False
 
     def index(self) -> dict[str, int]:
         self._indexed = True
-        return index(self.db, self.projects_root, self.agent_root)
+        out = {"files": 0, "added": 0}
+        for root in self.agent_roots:
+            for k, v in index(self.db, self.projects_root, root).items():
+                out[k] += v
+        return out
 
     def read(self, kind: Kind, query: str | None = None, limit: int = 50) -> list[Record]:
         # `whole`: recall asks once with any kind and drops records whose kind it did not want
@@ -211,9 +220,9 @@ class TranscriptStore:
             f = self.db.fetchone("SELECT COUNT(*) AS n FROM transcript_files")
         except sqlite3.Error as e:
             return (False, f"transcripts: {e}")
-        folder = project_dir(self.projects_root, self.agent_root)
-        if not folder.is_dir():
-            return (True, f"transcripts: no sessions yet at {folder}")
+        folders = [project_dir(self.projects_root, r) for r in self.agent_roots]
+        if not any(f.is_dir() for f in folders):
+            return (True, f"transcripts: no sessions yet at {folders[0]}")
         return (True, f"transcripts rows={n['n'] if n else 0} files={f['n'] if f else 0}")
 
 

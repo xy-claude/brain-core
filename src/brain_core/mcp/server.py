@@ -356,6 +356,12 @@ def _timed(agent: Agent, name: str, fn: Callable[[], dict[str, Any]]) -> dict[st
             )
 
 
+def run_empty() -> None:
+    """``brain serve`` in a folder with no memory: a server with no tools, so a user-level entry
+    neither fails nor adds a tool list where there is nothing to remember."""
+    FastMCP(name="brain-core (no memory in this folder)").run()
+
+
 def run_server(config_path: Path) -> None:
     """Entry point for ``brain serve``: open the agent, run on stdio, close on exit."""
     agent = Agent.from_config(config_path)

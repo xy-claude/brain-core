@@ -288,6 +288,25 @@ def _minutes_ago(when: datetime) -> float:
     return (now - when).total_seconds() / 60
 
 
+def _peer_name(p: Path) -> str:
+    """A peer's label: the ``name`` of the brain.yaml, up to three folders above its sync file,
+    whose vault is the folder that holds it (a workspace keeps its vault in
+    <workspace>/.brain/notes, a folder name every workspace shares); else that folder's name."""
+    import yaml
+
+    folder = p.parent.resolve()
+    for d in list(p.parents)[:3]:
+        cfg = d / "brain.yaml"
+        if not cfg.is_file():
+            continue
+        with contextlib.suppress(yaml.YAMLError, OSError, AttributeError, TypeError):
+            data = yaml.safe_load(_read(cfg)) or {}
+            vault = Path(os.path.expanduser(str((data.get("stores") or {}).get("vault") or "")))
+            if str(vault) not in ("", ".") and (d / vault).resolve() == folder and data.get("name"):
+                return str(data["name"])
+    return p.parent.name
+
+
 def _peers(vault: VaultStore, cfg: SessionConfig) -> str:
     """Other agents' sync files (session.peers globs), newest first, own file skipped."""
     own = (vault.root / cfg.sync).resolve()
@@ -304,7 +323,7 @@ def _peers(vault: VaultStore, cfg: SessionConfig) -> str:
     for when, p in sorted(found, reverse=True):
         age = (date.today() - when).days
         body = redact("\n".join(_read(p).splitlines()[:15]))
-        out.append(f"### {p.parent.name} ({when}, {age}d{', idle' if age > 7 else ''})\n{body}")
+        out.append(f"### {_peer_name(p)} ({when}, {age}d{', idle' if age > 7 else ''})\n{body}")
     return "\n\n".join(out)
 
 

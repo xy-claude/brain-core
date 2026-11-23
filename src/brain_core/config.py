@@ -67,7 +67,9 @@ class StoresConfig(BaseModel):
     vault: Path | None = None
     hindsight: HindsightConfig | None = None
     transcripts: Path | None = None  # Claude Code projects root, e.g. ~/.claude/projects
-    transcripts_cwd: Path | None = None  # the folder Claude Code runs in; default: brain.yaml's
+    # the folder Claude Code runs in, or a list of them (a workspace root and the repos inside
+    # it, or an old folder the agent moved from); default: brain.yaml's
+    transcripts_cwd: Path | list[Path] | None = None
     graph: GraphConfig | None = None
     # read-only markdown folders recall searches: a path, or {path, name} (M1b: the name the
     # record ids use instead of the folder's own, so a rename keeps them)
