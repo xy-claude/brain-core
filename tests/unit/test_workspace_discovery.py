@@ -23,6 +23,7 @@ def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     h = tmp_path / "home"
     h.mkdir()
     monkeypatch.setenv("HOME", str(h))
+    monkeypatch.setenv("USERPROFILE", str(h))  # Path.home() on Windows
     monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
     return h
 
