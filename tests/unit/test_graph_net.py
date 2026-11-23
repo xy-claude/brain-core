@@ -196,3 +196,17 @@ def test_a_claims_block_that_fits_is_not_marked_cut(tmp_path: Path) -> None:
     v = setup(tmp_path, *LINES)
     g = brain_recall([v], "what does the ride app use?", today=TODAY, graph=net(v))["graph"]
     assert "claims_truncated" not in g and "claims_total" not in g
+
+
+def test_the_graph_net_is_opt_in(tmp_path: Path) -> None:
+    from brain_core.agent import Agent
+
+    setup(tmp_path, *LINES)
+    (tmp_path / "off.yaml").write_text(f"name: T\nstores:\n  vault: {tmp_path / 'vault'}\n")
+    (tmp_path / "on.yaml").write_text(
+        f"name: T\nstores:\n  vault: {tmp_path / 'vault'}\nrecall: {{graph: true}}\n"
+    )
+    with Agent.from_config(tmp_path / "off.yaml") as a:
+        assert a.graph_net() is None
+    with Agent.from_config(tmp_path / "on.yaml") as a:
+        assert isinstance(a.graph_net(), GraphNet)

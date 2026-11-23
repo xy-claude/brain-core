@@ -36,5 +36,6 @@
 | 31 | M3 (0.14.0): claims, evidence and time: three-valued validity, reviews, conflicts, `brain claims --as-of / --known-at`, `brain index --check` | ✅ |
 | 32 | M4 (0.15.0): the graph net in recall, `brain_recall(as_of)`; eval gate on AI-written labels | ✅ |
 | 33 | M7 (0.16.0): contradictions said when a relation is saved; provisional and reflection claims; THREAT_MODEL gates 1 to 3 built for claims | ✅ |
+| 34 | Validation (0.17.1, 0.18.0): frozen copies, net by net and with full vectors; cross-layer tests; a blind review made the graph net opt-in | ✅ |
 
 Rows 10 and 14 record what was measured at the time: a substring judge on questions written in the notes' own words. Row 23 is the measure that replaced it.

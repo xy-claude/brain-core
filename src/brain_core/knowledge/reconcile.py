@@ -568,6 +568,20 @@ class ClaimIndex:
         raws, lines = self._raws()
         return self._compute(raws, self._now(), lines)[0]
 
+    def validity(self, rid: str, day: date, today: date) -> str:
+        """Whether the claim a relation record supports held on ``day``: true, false or
+        unknown (no claim, or no row that speaks to that day). Recall marks relations with
+        it whether or not the graph net ranks them."""
+        self.settle()
+        ids = [
+            r[0]
+            for r in self.db.fetchall(
+                "SELECT DISTINCT claim_id FROM claim_evidence WHERE record_id = ?", (rid,)
+            )
+        ]
+        got = {c.at(day, today) for c in self.load(ids).values()}
+        return "true" if "true" in got else "false" if got == {"false"} else "unknown"
+
     def load(self, ids: Sequence[str]) -> dict[str, Claim]:
         """These claims as brain.db holds them, without deriving the rest: what recall
         needs for the few a walk reached. Periods are split again from the stored evidence

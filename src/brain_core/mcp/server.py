@@ -111,7 +111,7 @@ def build_server(agent: Agent) -> FastMCP:
         On a result: `found_by` names what put it forward (keyword, vector, date, exact,
         judge, replaces); `superseded` marks an old value a newer record replaced; an empty
         `date` or `undated` means the line has no date of its own, so never state when it
-        was written. With `recall.graph` on, `claims` lists the relations around the
+        was written. With `recall.graph` on (opt-in), `claims` lists the relations around the
         entities the question names, each with `validity` on the day asked (true, false or
         unknown: never state an unknown one as fact). `undated: true` means no line gives
         that claim a date: it is held as a standing line, never checked against later

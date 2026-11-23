@@ -436,11 +436,15 @@ def brain_recall(
     ]
     if as_of is not None:
         # asked about a day, every result says how it stands to that day; none is dropped,
-        # for a record about another time can still be the answer (H.4)
+        # for a record about another time can still be the answer (H.4). The claims say it
+        # whether or not the graph net is on: it only ranks
+        claims = next((c for s in stores if (c := getattr(s, "claims", None)) is not None), None)
         for (r, _s, _sc), item in zip(ordered[offset : offset + limit], results, strict=True):
             if r.kind == "relation":
                 # its date is when it was recorded, not when it held: its claim says that
-                item["as_of_validity"] = graph.validity(r.id, as_of, today) if graph else "unknown"
+                item["as_of_validity"] = (
+                    claims.validity(r.id, as_of, today) if claims is not None else "unknown"
+                )
             elif not r.undated and r.date > as_of:
                 item["after_as_of"] = True
     if index and q_tok and lead:

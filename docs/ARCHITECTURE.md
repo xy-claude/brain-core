@@ -1,4 +1,4 @@
-# Architecture (0.17.0)
+# Architecture (0.18.0)
 
 How brain-core is built today: three tiers per agent, the sync that keeps them in step, and the write and recall paths. The design reasoning is in `KNOWLEDGE_ARCHITECTURE_AUDIT.md`. What shipped when, and how it was measured, is in `KNOWLEDGE_PROGRAM_STATUS.md`. M5 (model extraction) and M6 (a Neo4j bench) were left out by the owner's decision; nothing here depends on them.
 
@@ -90,7 +90,7 @@ flowchart TB
   cap --> out["results: source, date, found_by, path,<br/>after_as_of / as_of_validity<br/>+ claims block (≤ 10: validity, undated, disputed_with)<br/>+ graph note, weak_match"]
 ```
 
-With `recall.graph: false` the graph net is off and recall is 0.14.0's.
+The graph net is opt-in since 0.18.0 (`recall.graph: true`). Off, recall is 0.14.0's: with vectors the net solved few multi-hop questions, and a blind review of real questions preferred recall without it (`KNOWLEDGE_PROGRAM_STATUS.md`). Either way, a relation asked about a past day carries its claim's `as_of_validity`.
 
 ## Storage and durability
 

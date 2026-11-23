@@ -4,6 +4,15 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-11-23
+
+### Changed
+- **The graph net is opt-in.** `recall.graph` now defaults to false; set `recall: {graph: true}` in brain.yaml to turn it on. With vectors it solved 1 of 20 held-out multi-hop questions, and a blind pairwise review of 46 real questions preferred recall without it, 16 to 0. Its relation lines pushed relevant records out of the top 5. The net, the claims tier and `brain claims` are unchanged. Off, recall is exactly as in 0.14.
+- The program status doc records the validation and the blind review (`docs/KNOWLEDGE_PROGRAM_STATUS.md`).
+
+### Fixed
+- **A relation asked about a past day says whether its claim held, with the graph net off too.** `as_of_validity` came from the graph net, so with the net off every relation was marked `unknown`. The claims index now answers it (`ClaimIndex.validity`), and the net only ranks. A test pins true, false and unknown on two days, the same with the net on and off.
+
 ## [0.17.1] - 2026-11-23
 
 ### Fixed

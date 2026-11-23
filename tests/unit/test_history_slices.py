@@ -106,3 +106,32 @@ def test_decision_history_keeps_what_ended(tmp_path: Path) -> None:
         "Brain-Core —USES(graph-database)→ Neo4j": "false",  # ended 12-01, kept and marked
         "Brain-Core —USES(graph-database)→ Kuzu": "true",
     }
+
+
+def test_a_relations_validity_does_not_need_the_graph_net(tmp_path: Path) -> None:
+    # the net only ranks; whether a relation held on the day asked is its claim's, either way
+    stores, net = agent(
+        tmp_path,
+        ["[[Brain-Core]] —[USES: graph-database]→ [[Neo4j]] (2026-11-01)",
+         "[[Brain-Core]] —[USES: graph-database]→ [[Kuzu]] (2026-12-01)"],
+    )  # fmt: skip
+    v = stores[0]
+    ids = {r.extra["object"]: r.id[:16] for r in v.read("relation", None, 10)}
+    (v.root / "record_meta.md").write_text(
+        f"# Meta\n\n- {ids['Kuzu']} | supersedes: {ids['Neo4j']}\n"
+    )
+    v.read("fact", "sync")
+    q = "which graph database does Brain-Core use?"
+
+    def marks(day: date, graph: GraphNet | None) -> dict[str, str]:
+        out = brain_recall(stores, q, fmt="detailed", today=TODAY, graph=graph, as_of=day)
+        return {
+            r["text"].rsplit(" ", 1)[-1]: r["as_of_validity"]
+            for r in out["results"]
+            if r["kind"] == "relation"
+        }
+
+    assert marks(date(2026, 11, 15), None) == {"Neo4j": "true", "Kuzu": "unknown"}
+    assert marks(TODAY, None) == {"Neo4j": "false", "Kuzu": "true"}
+    for day in (date(2026, 11, 15), TODAY):
+        assert marks(day, None) == marks(day, net)

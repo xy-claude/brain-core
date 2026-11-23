@@ -60,7 +60,7 @@ Each followed the same procedure: no brain server running, a read-only inventory
 - **The earlier M4 "with vectors" figures were measured at 17% coverage.** The old result files match the 17% copy question by question (59/59, 20/20, 443/443).
 - **The graph net with vectors adds little.** At full coverage it solves 2 of 40 and 1 of 20 multi-hop questions that recall alone missed, and breaks none.
   - Paired over 5 repeats, it adds 2.3 ms at the median and 7.5 ms at p95.
-  - It stays on by default, on a no-regression basis. A blind pairwise review by the owner decides whether it stays on.
+  - A blind pairwise review then preferred recall without it (below), so it is opt-in since 0.18.0.
 - **The miss flag is weak, and nothing here moved it:**
   - 20 of 57 questions with no answer in memory come back without a miss flag.
   - 95 of 386 answerable questions are flagged as misses.
@@ -76,12 +76,21 @@ Each followed the same procedure: no brain server running, a read-only inventory
   - A cut claims block did not say so in words.
 - **Not covered:** the model judge, answer correctness judged by a model, and transcripts in the ranking.
 
+**Blind pairwise review of the graph net** (by the owner's delegation, AI-judged, not owner-validated).
+- **The questions:** 60 real questions from the main agent's sessions and recall misses that name something its relations know. With full vectors, the net changes the top 5 for 46 of them.
+- **The judging:** two fresh agents, each shown only the questions and the two top-5 lists in a hidden order, picked the list that better lets someone answer. The rules for combining them and for the decision were fixed beforehand.
+- **Agreement:** the judges matched on 42 of 46 and never picked opposite lists.
+- **Result:** recall without the net better on 16, with it on 0, the same on 30 (sign test p < 0.001). Over all 60: 0 better, 16 worse, 44 tied.
+- **The reason each time:** the net's relation lines push a relevant record out of the top 5. They stay in the top 10, which is why the scored sets saw no break.
+- **A limit:** only the lists with the net show relation lines, so the kind of record could tell the sides apart, even though the judges' reasons are about relevance.
+- **Decision:** the net is off on the main agent, and opt-in for everyone since 0.18.0. The code, the claims tier and `brain claims` are unchanged.
+
 ## Where the program stands
 
 - **Every milestone in scope is built, released and live:** M0, M1a to M1c, M2, M3, M4 and M7. M5 and M6 were left out by the owner's decision.
 - **The claims wait for entity notes.** All 83 claims on the main agent still name their entities by name: no entity note exists yet. 77 proposals sit in its inbox (`brain entities propose`); a person makes each note, and the claims then re-key onto it.
 - **Every live claim is undated.** The relation lines say when brain-core stored them, not when they became true, so a past `as_of` finds no claim true yet, and the graph net's claims are marked `undated`.
-- **The graph net is on by default on a no-regression basis.** With vectors it solved 2 of 20 independently written multi-hop questions at 17% coverage, and 1 of 20 with every record embedded (neither is significant). With keywords alone it solved 9 of 20. `recall.graph: false` turns it off and gives 0.14.0's recall.
+- **The graph net is opt-in since 0.18.0** (`recall.graph: true`). With vectors it solved 2 of 20 independently written multi-hop questions at 17% coverage, and 1 of 20 with every record embedded (neither is significant). With keywords alone it solved 9 of 20. A blind review of 46 real questions preferred recall without it, 16 to 0. Off, recall is 0.14.0's.
 - **Labels are AI-written and AI-checked**, as the owner decided for M0 and M4; no person has checked them.
 - **Decision 22** (start M3 only with evidence of need) was overridden by the owner's decision to finish the plan.
 - **The Graphify check** was still pending at every release; it is a third-party check, and the project's own CI (tests on Linux and Windows, the installer, Hindsight) passed each time.
