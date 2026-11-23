@@ -181,3 +181,18 @@ def test_a_name_two_notes_share_is_reported_not_walked(tmp_path: Path) -> None:
     out = brain_recall([v], "what does atlas use?", today=TODAY, graph=net(v))
     assert out["claims"] == [] and out["graph"]["ambiguous"] == ["atlas"]
     assert "ambiguous" in out["graph"]["note"]
+
+
+def test_a_cut_claims_block_says_how_many_it_shows_and_where_the_rest_are(tmp_path: Path) -> None:
+    v = setup(tmp_path, *(f"[[Hub]] —[OWNS]→ [[Part {n}]] (2026-10-01)" for n in range(12)))
+    out = brain_recall([v], "what does hub own?", today=TODAY, graph=net(v))
+    g = out["graph"]
+    assert len(out["claims"]) == 10
+    assert (g["claims_shown"], g["claims_total"], g["claims_truncated"]) == (10, 12, True)
+    assert "showing 10 of 12 claims" in g["note"] and "brain claims list" in g["note"]
+
+
+def test_a_claims_block_that_fits_is_not_marked_cut(tmp_path: Path) -> None:
+    v = setup(tmp_path, *LINES)
+    g = brain_recall([v], "what does the ride app use?", today=TODAY, graph=net(v))["graph"]
+    assert "claims_truncated" not in g and "claims_total" not in g

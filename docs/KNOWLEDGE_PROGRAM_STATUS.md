@@ -38,12 +38,50 @@ Each followed the same procedure: no brain server running, a read-only inventory
 - **Recall:** for 200 eval questions asked of the main agent before (0.14.0) and after, keywords only, 190 top-10 lists are identical. The 10 that changed each carry a result the graph net found, so the net is on and nothing else moved.
 - **Not verified live:** the write-time contradiction. It needs a new relation that conflicts with one held, and none was written on the owner's agent to test it; the unit tests cover it.
 
+## Validation on frozen copies of the main agent (2026-11-23)
+
+**Setup.**
+- **Two copies of the main agent at 0.17.0**, with the same vault snapshot and the same 6,016 record ids, differ only in vector coverage:
+  - 17%: 1,043 records embedded, as the live agent ran until the gap was found and filled that morning
+  - 100%: every record
+- **Scoring:** keywords, the vector net, the graph net and `as_of` were scored on the existing question sets (443 regression, 59 builder, 20 held-out). The model judge was off and nothing was sent to any model.
+- **Noise floor:** the same run twice differs on 0 of 443 questions.
+
+**Results.**
+
+| | 443 regression | builder multi-hop /40 | as-of /19 | held-out multi-hop /20 |
+|---|---|---|---|---|
+| keywords | 293 | 0 | 17 | 0 |
+| keywords + graph net | 293 | 12 | 17 | 9 |
+| vectors at 17% (+ graph net) | 325 (325) | 0 (1) | 16 (16) | 0 (2) |
+| vectors at 100% (+ graph net) | 342 (342) | 0 (2) | 16 (16) | 0 (1) |
+
+- **Filling the vectors is a net gain:** on the 443, 29 questions fixed and 12 broken (sign test p = 0.012). About 10 of the 12 are ranking displacements. Two of those are an older value outranking the current one where no `supersedes` line links them.
+- **The earlier M4 "with vectors" figures were measured at 17% coverage.** The old result files match the 17% copy question by question (59/59, 20/20, 443/443).
+- **The graph net with vectors adds little.** At full coverage it solves 2 of 40 and 1 of 20 multi-hop questions that recall alone missed, and breaks none.
+  - Paired over 5 repeats, it adds 2.3 ms at the median and 7.5 ms at p95.
+  - It stays on by default, on a no-regression basis. A blind pairwise review by the owner decides whether it stays on.
+- **The miss flag is weak, and nothing here moved it:**
+  - 20 of 57 questions with no answer in memory come back without a miss flag.
+  - 95 of 386 answerable questions are flagged as misses.
+- **Cross-layer tests:** 23 of 24 checks passed on a third copy:
+  - save then recall
+  - a changed fact
+  - dated evidence and a conflict
+  - entity notes: re-keying, an alias, `merged_into`, a shared alias
+  - crash windows and a journal restore
+  - untrusted text, the MCP server, and the four hooks
+- **0.17.1 fixed two defects these tests found:**
+  - The failed check: `brain claims check` exited 0 with an open conflict.
+  - A cut claims block did not say so in words.
+- **Not covered:** the model judge, answer correctness judged by a model, and transcripts in the ranking.
+
 ## Where the program stands
 
 - **Every milestone in scope is built, released and live:** M0, M1a to M1c, M2, M3, M4 and M7. M5 and M6 were left out by the owner's decision.
 - **The claims wait for entity notes.** All 83 claims on the main agent still name their entities by name: no entity note exists yet. 77 proposals sit in its inbox (`brain entities propose`); a person makes each note, and the claims then re-key onto it.
 - **Every live claim is undated.** The relation lines say when brain-core stored them, not when they became true, so a past `as_of` finds no claim true yet, and the graph net's claims are marked `undated`.
-- **The graph net is on by default on a no-regression basis.** With vectors, as the agents run, it solved 2 of 20 independently written multi-hop questions (not significant); with keywords alone, 9 of 20. `recall.graph: false` turns it off and gives 0.14.0's recall.
+- **The graph net is on by default on a no-regression basis.** With vectors it solved 2 of 20 independently written multi-hop questions at 17% coverage, and 1 of 20 with every record embedded (neither is significant). With keywords alone it solved 9 of 20. `recall.graph: false` turns it off and gives 0.14.0's recall.
 - **Labels are AI-written and AI-checked**, as the owner decided for M0 and M4; no person has checked them.
 - **Decision 22** (start M3 only with evidence of need) was overridden by the owner's decision to finish the plan.
 - **The Graphify check** was still pending at every release; it is a third-party check, and the project's own CI (tests on Linux and Windows, the installer, Hindsight) passed each time.

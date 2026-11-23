@@ -4,6 +4,10 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+### Fixed
+- **`brain claims check` names every open conflict and fails on it.** It used to count an unacknowledged conflict ("1 open conflict") but list nothing and exit 0, though its help says it exits 1 when anything needs a person. A script reading the exit code took that as nothing to review. Each open conflict is now an item (`conflict: A & B`), with how to settle it. The check exits 1 until an `until:` ends one or an `ack:` says both hold. `brain doctor` already flagged them.
+- **A cut claims block says so.** The block holds at most 10 claims. When the walk finds more, `graph` now carries `claims_truncated: true`, `claims_shown` and `claims_total`. `graph.note` reads "showing 10 of N claims; the rest are not in this reply", and names `brain claims list` as the way to see them all. `brain_recall`'s description says the block is not every claim and that the tool cannot list the rest. Before, only `claims_total` was there, and its description was ambiguous.
+
 ## [0.17.0] - 2026-11-23
 
 ### Changed

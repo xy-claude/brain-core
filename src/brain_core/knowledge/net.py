@@ -169,7 +169,16 @@ class GraphNet:
         if shared:
             info |= _ambiguous(shared)
         if len(shown) > len(block):
-            info["claims_total"] = len(shown)
+            info |= {
+                "claims_total": len(shown),
+                "claims_shown": len(block),
+                "claims_truncated": True,
+            }
+            cut = (
+                f"showing {len(block)} of {len(shown)} claims; the rest are not in this reply "
+                "(`brain claims list` on the command line lists every claim)"
+            )
+            info["note"] = f"{info['note']}; {cut}" if info.get("note") else cut
         if history:
             info["history"] = True
         if w.truncated:

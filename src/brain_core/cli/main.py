@@ -418,7 +418,7 @@ def claims_cmd(
 ) -> None:
     """Claims (M3): what relations.md, notes and decisions assert, from which evidence, true
     when (`--as-of DAY`, default today) and held since when (`--known-at TIME`). `check`
-    lists what a person should look at, exit 1 if anything."""
+    lists what a person should look at, open conflicts included, exit 1 if anything."""
     from datetime import UTC, date, datetime
 
     if action not in ("list", "check"):
@@ -431,10 +431,27 @@ def claims_cmd(
             raise typer.Exit(code=1)
         agent.brain_sync()
         if action == "check":
+            from brain_core.knowledge.net import display
+
             st = vault.claims.summary()
             items = st["report"] + [f"{k}: {v}" for k, v in st["unread"].items()]
+            # an open conflict waits for a person (an `until:` or an `ack:`), so it is an item
+            pairs = vault.claims.db.fetchall(
+                "SELECT DISTINCT claim_a, claim_b FROM claim_conflicts WHERE acknowledged = 0"
+            )
+            held = vault.claims.load(sorted({x for p in pairs for x in p}))
+            items += [
+                "conflict: " + " & ".join(sorted(display(held[x], vault.claims) for x in p))
+                for p in pairs
+                if all(x in held for x in p)
+            ]
             for x in items:
                 typer.echo(f"  {x}")
+            if pairs:
+                typer.echo(
+                    "  (an `until:` in record_meta.md ends one; an `ack:` line in "
+                    "claim_reviews.md says both hold)"
+                )
             typer.echo(f"{len(items)} item(s); {st['open_conflicts']} open conflict(s)")
             if items:
                 raise typer.Exit(code=1)

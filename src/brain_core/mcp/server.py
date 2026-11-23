@@ -116,9 +116,12 @@ def build_server(agent: Agent) -> FastMCP:
         unknown: never state an unknown one as fact). `undated: true` means no line gives
         that claim a date: it is held as a standing line, never checked against later
         records, so say it is what memory records, not that it still holds. `disputed_with`
-        names the claims a disputed one cannot hold beside; `claims_total` counts the
-        claims walked beyond the ones shown; a result the walk found carries `path`.
-        `graph.note` says when the walk was cut short.
+        names the claims a disputed one cannot hold beside. The block holds at most 10:
+        when the walk found more, `graph.claims_truncated` is true, `claims_shown` and
+        `claims_total` say how many of how many, and `graph.note` says so. The rest are not in
+        the reply and this tool cannot list them (`brain claims list` on the command line
+        does), so never present the block as every claim. A result the walk found carries
+        `path`. `graph.note` also says when the walk was cut short.
 
         Writes no memory. `stores` lists hits per store and names any that could not be
         reached, instead of failing the call. With `recall.judge: model` in brain.yaml the

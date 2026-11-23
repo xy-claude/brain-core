@@ -598,7 +598,20 @@ def test_the_cli_lists_checks_and_reports(tmp_path: Path) -> None:
     assert "claims     2 (2 accepted), 1 open conflict(s), 2 waiting" in doctor.output, (
         doctor.output
     )
-    assert run(app, ["claims", "check", str(tmp_path)]).exit_code == 0
+    # an open conflict is for a person to settle: `check` names it and fails, as doctor flags it
+    checked = run(app, ["claims", "check", str(tmp_path)])
+    assert checked.exit_code == 1, checked.output
+    assert (
+        "conflict: Brain-Core —USES(graph-database)→ Kuzu & "
+        "Brain-Core —USES(graph-database)→ Neo4j" in checked.output
+    ), checked.output
+    assert "1 item(s); 1 open conflict(s)" in checked.output
+    (vault / "claim_reviews.md").write_text(
+        f"# Claim reviews\n\n- ack: {USES_NEO} & {USES_KUZU} | both ran\n"
+    )
+    acked = run(app, ["claims", "check", str(tmp_path)])
+    assert acked.exit_code == 0 and "0 item(s); 0 open conflict(s)" in acked.output, acked.output
+    assert "0 open conflict(s)" in run(app, ["doctor", str(tmp_path)]).output
 
 
 def test_an_impossible_date_is_reported_not_fatal(a: Agent) -> None:
