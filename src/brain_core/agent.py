@@ -56,8 +56,8 @@ from brain_core.stores import (
 )
 from brain_core.stores.base import Kind
 from brain_core.stores.index import RecordIndex, terms
-from brain_core.stores.vault import _SECRET, redact
-from brain_core.stores.vectors import VectorIndex
+from brain_core.stores.vault import redact, refuses_write
+from brain_core.stores.vectors import RECALL_FILL, VectorIndex
 
 if TYPE_CHECKING:
     from brain_core.knowledge.net import GraphNet
@@ -236,7 +236,7 @@ class Agent:
             # the worker is about to be asked anyway: give recent saves their vectors first.
             # If it cannot be reached, recall reports that and answers from keywords
             with contextlib.suppress(EmbedUnavailable):
-                index.fill(limit=16)
+                index.fill(limit=RECALL_FILL)
         out = brain_recall(
             self.stores,
             query,
@@ -316,7 +316,7 @@ class Agent:
         words = terms(missed)[:12]
         if not vault or not vault.index:
             raise ValueError("kind='key' needs a vault: the learned words are kept there")
-        if not words or _SECRET.search(missed):
+        if not words or refuses_write(missed):
             raise ValueError("text must be the question that missed, in plain words")
         rid = vault.index.find(source)
         if not rid:
@@ -438,7 +438,7 @@ class Agent:
         assert self.vectors is not None
         try:
             self.brain_sync()
-            done = self.vectors.fill(limit=16, start=False)
+            done = self.vectors.fill(limit=RECALL_FILL, start=False)
         except EmbedUnavailable as e:
             return {"status": "pending", "detail": str(e)[:120]}
         left = len(self.vectors.pending())

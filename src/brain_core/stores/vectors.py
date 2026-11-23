@@ -22,6 +22,7 @@ from brain_core.stores.base import Record, full_text
 from brain_core.stores.index import stored
 
 BATCH = 16
+RECALL_FILL = 16  # records a recall, or a save while the worker is up, embeds first
 
 
 def _hash(text: str) -> str:
@@ -37,6 +38,7 @@ class VectorIndex:
         self._sig: list[tuple[Any, ...]] | None = None  # the index state `_todo` was built from
         self._todo: list[tuple[str, str, str]] = []  # (record id, text, text hash) with no vector
         self._gone = False  # some vector's record has left the index
+        self._total = 0  # records with text to embed, counted with `_todo`
         self._matrix: Any = None
         self._ids: list[str] = []
         self._have: list[tuple[Any, ...]] | None = None  # the vectors `_matrix` was built from
@@ -71,6 +73,7 @@ class VectorIndex:
                 if text.strip() and have.get(rid) != (self.model, h := _hash(text))
             ]
             self._gone = any(rid not in recs for rid in have)
+            self._total = sum(1 for text, _store in recs.values() if text.strip())
             self._sig = sig
         return self._todo
 
@@ -187,6 +190,7 @@ class VectorIndex:
             "model": self.model,
             "rows": int(row["n"]) if row else 0,
             "pending": len(self.pending()),
+            "records": self._total,  # read after pending(), which counts it
             "worker": "up" if self.embedder.running() else "down",
             # vectors the last search skipped for their length; absent until one was
             **({"bad": self.bad} if self.bad else {}),

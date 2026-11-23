@@ -315,6 +315,14 @@ class Journal:
                     self.db.execute(
                         "INSERT OR IGNORE INTO ledger_gaps VALUES (?, ?, 'restore')", (last, now)
                     )
+        elif row["generation"] != gen:
+            # a new journal beside a brain.db another journal marked: its epoch gap reads like a
+            # first start, so the loss is kept, and said, until a backup is merged (2026-11-23)
+            with self._tx():
+                self.db.execute(
+                    "INSERT OR REPLACE INTO journal_meta VALUES ('replaced', ?)",
+                    (f"{self.stamp(self.clock())}, after generation {row['generation'][:8]}",),
+                )
         return True
 
     def mark(self, db: Database, seq: int) -> None:
@@ -425,6 +433,8 @@ class Journal:
                     (min(began[0], mine_began or began[0]),),
                 )
             self.db.execute("DELETE FROM ledger_gaps WHERE cause = 'epoch'")
+            # the restore gap says what is missing now
+            self.db.execute("DELETE FROM journal_meta WHERE key = 'replaced'")
             self.db.execute(
                 "INSERT OR IGNORE INTO ledger_gaps VALUES (?, ?, 'epoch')", (EPOCH, started[0])
             )
@@ -445,6 +455,7 @@ class Journal:
             "generation": (self._meta("generation") or "")[:8],
             "started": self._meta("started"),
             "integrity": str(self.db.fetchone("PRAGMA quick_check")[0]),  # type: ignore[index]
+            **({"replaced": r} if (r := self._meta("replaced")) else {}),
             **self.coverage(),
         }
 

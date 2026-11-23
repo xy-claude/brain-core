@@ -23,6 +23,7 @@ from brain_core.storage.db import Database
 from brain_core.stores.index import RecordIndex
 from brain_core.stores.vault import VaultStore, has_secret, redact
 from brain_core.stores.vault import read_safe as _read
+from brain_core.stores.vectors import RECALL_FILL
 
 if TYPE_CHECKING:
     from brain_core.agent import Agent
@@ -144,6 +145,11 @@ def brain_status(agent: Agent) -> dict[str, Any]:
             f"data/journal.db: {out['journal']['integrity']}; `brain journal restore` merges "
             "the newest backup"
         )
+    if replaced := out["journal"].get("replaced"):
+        attention.append(
+            f"data/journal.db was replaced ({replaced}): the history from before it is not in "
+            "it. `brain journal restore FILE` merges a journal backup"
+        )
     if agent.vectors is not None:
         out["vectors"] = agent.vectors.stats()  # model, rows, rows waiting, worker up or down
     if agent.config.recall.judge == "model":
@@ -168,6 +174,17 @@ def brain_status(agent: Agent) -> dict[str, Any]:
         attention.append(
             f"no record has a vector from {v['model']} and {v['pending']} wait, so recall "
             "answers from keywords alone: run `brain index`, and check the model name"
+        )
+    elif (
+        (n := v.get("records", 0))
+        and v["pending"] > RECALL_FILL
+        and v["pending"] > n * (1 - VECTOR_COVERAGE)
+    ):
+        # a backlog the next recall cannot clear: 17% covered read as OK before (2026-11-23)
+        attention.append(
+            f"{v['pending']} of {n} records have no vector from {v['model']} "
+            f"({100 * (n - v['pending']) // n}% covered), so a search by meaning cannot find "
+            f"them and a recall embeds only {RECALL_FILL} at a time: run `brain index`"
         )
     out["context"] = _context(agent)
     if agent.config.models is not None:
@@ -225,6 +242,37 @@ def recall_misses(agent: Agent, days: int = 30) -> dict[str, Any]:
 
 # the journal events that keep what was asked or saved, and the field that holds it
 _LOGGED = {"recall_miss": "query", "recall_repair": "query", "brain_remember": "text"}
+VECTOR_COVERAGE = 0.95  # below this share of records with a vector, health says so
+
+
+def backups_unmasked(agent: Agent) -> list[tuple[str, int | None]]:
+    """The copies of brain.db a migration left in ``data/backups``, each with how many
+    transcript rows and journal events in it the mask would hide today (None: unreadable).
+    Read only: ``--remask`` never edits a backup, and deleting one is the owner's call."""
+    out: list[tuple[str, int | None]] = []
+    marks = ",".join("?" * len(_LOGGED))
+    for f in sorted((agent.data_dir / "backups").glob("brain-*.db")):
+        try:
+            c = sqlite3.connect(f"file:{f}?mode=ro", uri=True)
+            try:
+                n = sum(
+                    1
+                    for (t,) in c.execute("SELECT text FROM transcripts")
+                    if t and has_secret(t) and redact(t) != t
+                )
+                for kind, payload in c.execute(
+                    f"SELECT event_type, payload FROM events WHERE event_type IN ({marks})",
+                    tuple(_LOGGED),
+                ):
+                    said = str(json.loads(payload or "{}").get(_LOGGED[kind], ""))
+                    n += redact(said) != said
+            finally:
+                c.close()
+        except (sqlite3.Error, ValueError):
+            out.append((f.name, None))
+            continue
+        out.append((f.name, n))
+    return out
 
 
 def unmasked(agent: Agent, remask: bool = False) -> dict[str, int]:

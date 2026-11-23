@@ -4,6 +4,16 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com). Ver
 
 ## [Unreleased]
 
+### Changed
+- **A write refuses an unquoted password after its label.** `password: <value>`, `the password is <value>`, `passwd`, `passcode` and `pwd` labels, with no quotes round the value, were caught only when the value had 16 characters or more and no symbol, so a typical password was saved, indexed in clear and returned by recall, and the capture hook filed it from a prompt. `brain_remember`, the capture hook, `brain_session('end')` and miss repair now refuse such a value of 8 characters or more holding a letter and a digit or a symbol other than `.` `_` `-`. A path or URL, a placeholder (`$`, `%`, `{`, `<`, `[`, `(`), an env var name in capitals and `1Password` are not refused. Masking is unchanged: such a value in a file written by hand is still not masked.
+
+### Fixed
+- **Vector coverage below 95% is said.** Health raised nothing while 83% of an agent's records had no vector: an existing vector and an idle worker read as fine, and a recall embeds only 16 records at a time. `brain_status` and `brain doctor` now raise attention when more than 16 records wait and under 95% have one, with the share and `brain index`. `stats()` adds `records`.
+- **A replaced journal is said.** When `data/journal.db` was lost and a new one started beside a `brain.db` another journal had marked, the new journal wrote only the epoch gap a first start writes and status said OK. The loss is now kept as `replaced` in the journal and raised under attention until `brain journal restore` merges a backup.
+- **`brain doctor` names the brain.db backups that hold what the mask would hide.** The checked copies that `brain graph migrate` and `brain index --migrate-ids --apply` leave in `data/backups/` kept transcript rows and journal events from before a pattern knew them, after `--remask` had cleaned `brain.db`. Doctor reads each backup and names those that hold such text, with a count. It never edits or deletes one.
+- **`brain_session('start')` counts staged items under the template's empty banner.** The template's `inbox_staged.md` says "Status: **Empty**", and `brain entities propose` appends its proposals below that line, which stays. Any file holding the word reported `inbox: 0`, so an agent with 77 staged proposals was told it had none. Now every item line counts and only the banner line is skipped.
+- README: the `brain_recall` row says the relation walk needs `recall: {graph: true}`, off by default since 0.18.0.
+
 ## [0.18.0] - 2026-11-23
 
 ### Changed

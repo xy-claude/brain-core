@@ -443,3 +443,42 @@ def test_brief_hook_caps_what_it_injects(tmp_path: Path) -> None:
     assert len(ctx) // 4 < 3100 and "brief cut at 3000 tokens" in ctx and str(brief) in ctx
     plain = runner.invoke(app, ["brief", "--path", str(tmp_path)])
     assert len(plain.stdout) > 40_000, "the file and the plain command are never cut"
+
+
+def test_doctor_names_a_backup_that_holds_text_the_mask_would_hide(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`--remask` rewrote brain.db while the migration backups kept the old rows, and nothing
+    said so (audit 2026-11-23, F1). Doctor names each such backup and never edits one."""
+    import json
+
+    from brain_core import Agent
+    from brain_core.backup import backup_db, stamp
+    from brain_core.stores import transcripts
+
+    out = tmp_path / "agent"
+    runner.invoke(app, ["init", "Atlas", "--path", str(out), "--lite"])
+    yaml = out / "brain.yaml"
+    yaml.write_text(
+        yaml.read_text().replace("transcripts: ~/.claude/projects", f"transcripts: {tmp_path}/p")
+    )
+    assert "  backups    " not in runner.invoke(app, ["doctor", str(out)]).stdout, "none yet"
+    folder = transcripts.project_dir(tmp_path / "p", out)
+    folder.mkdir(parents=True)
+    key = "ghp_" + "a1B2" * 9
+    row = {"type": "user", "uuid": "u1", "sessionId": "old", "timestamp": "2026-10-03T10:00:00Z"}
+    said = {**row, "message": {"content": f"key {key}"}}
+    (folder / "old.jsonl").write_text(json.dumps(said) + "\n")
+    with Agent.from_config(yaml) as agent:
+        with monkeypatch.context() as m:
+            m.setattr(transcripts, "redact", lambda text: text)
+            assert transcripts.index(agent.db, tmp_path / "p", out)["added"] == 1
+        kept = backup_db(agent.db, agent.data_dir / "backups", stamp())
+    was = kept.read_bytes()
+    fixed = runner.invoke(app, ["doctor", str(out), "--remask"]).stdout
+    assert "  remasked   1 transcript index row(s)" in fixed, fixed
+    report = runner.invoke(app, ["doctor", str(out)]).stdout
+    assert "  unmasked   0 transcript index row(s)" in report, report
+    line = next(ln for ln in report.splitlines() if ln.startswith("  backups    "))
+    assert f"{kept.name} (1)" in line and "never edits a backup" in line, line
+    assert kept.read_bytes() == was, "a backup is never rewritten"

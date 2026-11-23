@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Any
 
 from brain_core import recall
 from brain_core.stores.hindsight import HindsightStore, document_id
-from brain_core.stores.vault import _SECRET, VaultStore, _Lock, read_safe, redact
+from brain_core.stores.vault import _SECRET, VaultStore, _Lock, read_safe, redact, refuses_write
 from brain_core.stores.vault import read_text as _read
 
 if TYPE_CHECKING:
@@ -75,10 +75,10 @@ def session_start(agent: Agent, session_id: str | None = None) -> dict[str, Any]
         exec_text, cfg.executive
     )
     inbox = read_safe(vault.root / cfg.inbox)
-    out["inbox"] = (
-        0
-        if "**Empty**" in inbox
-        else sum(1 for ln in inbox.splitlines() if ln.startswith(("- ", "### ")))
+    # an item counts, the template's "Status: **Empty**" banner does not: it stays when
+    # `brain entities propose` appends below it
+    out["inbox"] = sum(
+        1 for ln in inbox.splitlines() if ln.startswith(("- ", "### ")) and "**Empty**" not in ln
     )
     out["peers"] = _peers(vault, cfg)
     out["mental_models"] = _mental_models(agent, cfg.mental_models)
@@ -403,7 +403,7 @@ def _put(
     (``None``: as .replaced.md, when .prev.md must not be written over)."""
     if body is None or not body.strip():  # an empty body would blank the file
         return unchanged
-    if _SECRET.search(body):
+    if refuses_write(body):
         return "refused: looks like it contains a secret"
     fm = (
         f"---\ntype: log\nowner: {vault.owner}\ndomain: system\nstatus: active\n"

@@ -7,6 +7,7 @@ import textwrap
 from pathlib import Path
 from typing import Any
 
+import brain_core
 from brain_core import Agent
 from brain_core.stores.hindsight import HindsightStore
 
@@ -221,3 +222,19 @@ def test_sections_match_headings_regardless_of_case() -> None:
     text = "## Apply next session\n- a\n\n## WHAT TO IMPROVE\n- b\n\n## Other\n- c\n"
     out = _sections(text, ("Apply Next Session", "What To Improve"))
     assert "- a" in out and "- b" in out and "- c" not in out
+
+
+def test_inbox_counts_items_below_the_templates_empty_banner(tmp_path: Path) -> None:
+    """`brain entities propose` appends under the template's "Status: **Empty**" line,
+    which stays: the items count, the banner does not."""
+    agent, vault, _ = make(tmp_path)
+    template = Path(brain_core.__file__).parent / "templates/agent/vault/inbox_staged.md"
+    staged = vault / "inbox_staged.md"
+    staged.write_text(template.read_text())
+    with agent:
+        assert agent.brain_session("start", "s1")["inbox"] == 0
+        staged.write_text(
+            template.read_text()
+            + "\n## Entity proposals\n- [ ] [[A]] — proposed\n- [ ] [[B]] — proposed\n"
+        )
+        assert agent.brain_session("start", "s2")["inbox"] == 2

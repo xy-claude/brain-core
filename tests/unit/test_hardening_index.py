@@ -206,6 +206,7 @@ def test_a_model_that_cannot_load_deletes_no_vector_and_says_so(tmp_path: Path) 
             "model": "no-such-model",
             "rows": 0,
             "pending": 4,
+            "records": 4,
             "worker": "down",
         }
         with pytest.raises(EmbedUnavailable):

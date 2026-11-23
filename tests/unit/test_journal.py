@@ -471,3 +471,34 @@ def test_coverage_is_reported_apart_from_consistency(tmp_path: Path) -> None:
     check = run(app, ["index", str(tmp_path), "--check"])
     assert check.exit_code == 0, check.output  # a gap is lost history, not an inconsistency
     assert "1 gap" in check.output, check.output
+
+
+def test_a_replaced_journal_is_said_until_a_backup_is_merged(tmp_path: Path) -> None:
+    """A journal lost and started again wrote only the epoch gap a first start writes, and
+    status said OK (audit 2026-11-23, F4). The loss is said until a backup is merged."""
+    from brain_core import Agent
+
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    (vault / "facts.md").write_text(
+        "# Facts\n\n## system\n- The build server runs on port 8081 (2026-05-01)\n"
+    )
+    (tmp_path / "brain.yaml").write_text("name: T\nstores:\n  vault: ./vault\n")
+
+    def said() -> list[str]:
+        with Agent.from_config(tmp_path / "brain.yaml") as agent:
+            agent.brain_sync()
+            out = agent.brain_status().get("attention", [])
+        return [a for a in out if "journal.db was replaced" in a]
+
+    assert said() == [], "a first start is not a loss"
+    with Agent.from_config(tmp_path / "brain.yaml") as agent:
+        backup = agent.journal.backup(tmp_path / "backups")
+    for f in (tmp_path / "data").glob("journal.db*"):
+        f.unlink()
+    assert said() and "brain journal restore" in said()[0], "the loss is said"
+    assert said(), "and again on the next start, not once"
+    with Agent.from_config(tmp_path / "brain.yaml") as agent:
+        agent.journal.restore(backup)
+        assert "replaced" not in agent.journal.status()
+    assert said() == [], "merged: the restore gap says what is missing now"

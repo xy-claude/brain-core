@@ -796,3 +796,69 @@ def test_a_duplicate_of_an_undated_line_is_not_given_its_files_date(tmp_path: Pa
     assert out["status"] == "duplicate" and out["duplicate_of"]["date"] == ""
     dated = brain_remember([v], "Hindsight bank: atlas-brain self-hosted", "fact", when=DAY)
     assert dated["duplicate_of"]["date"] == "2026-11-01"
+
+
+# an unquoted password after its label: masking leaves it (it would change ordinary text that
+# is read back), a write refuses it, where a false match costs one refused save (audit
+# 2026-11-23, F2). The values are put together here so no scanner reads a password in this file
+PW = "Qm7" + "xK2" + "!pL9"
+UNQUOTED = [
+    "password: " + PW,
+    "Password = " + PW,
+    "the staging password is " + PW,
+    "the admin password is now " + PW,
+    "**Password:** " + PW,
+    "db passwd: " + "hunt" + "er2!x",
+    "passcode: " + "4821" + "abcd",
+    "the wifi password was " + "Hunt" + "er2024",
+    # .env and shell lines: the label after an underscore or a capital (audit follow-up)
+    "DB_PASSWORD=" + PW,
+    "db_password: " + PW,
+    "export PGPASSWORD=" + PW,
+    "MYSQL_ROOT_PASSWORD=" + "root" + "123x",
+]
+STILL_SAVED = [
+    *UNSAID,
+    "password reset flow uses email",
+    "pwd-protected zip from the client",
+    "password_reset_token rotated weekly",
+    "password: changeme",
+    "password: 12345678",
+    "Password: app.db-staging (Keychain)",
+    "the DB password is in Keychain app.db-staging",
+    "passwords must be 12+ chars",
+    "password: correct-horse-battery",
+    "password: DB_PASSWORD",
+    "password=${DB_PASSWORD}",
+    "Password: 1Password vault, item Staging",
+    "pwd: /Users/alice/Projects/my-app",
+    "POSTGRES_PASSWORD=postgres",
+    "OLDPWD=/home/alice/app",
+    "set DB_PASSWORD in the Keychain first",
+    "DB_PASSWORD=${{ secrets.DB_PASSWORD }}",
+    # a value on another line is not the label's: one heading must not refuse a whole body
+    "## Rotate the password:\n" + "Server" + "2026 box first",
+]
+
+
+@pytest.mark.parametrize("text", UNQUOTED)
+def test_an_unquoted_password_after_its_label_is_refused_on_write(
+    tmp_path: Path, text: str
+) -> None:
+    from brain_core.stores.vault import refuses_write
+
+    assert refuses_write(text), text
+    v = VaultStore(tmp_path)
+    with pytest.raises(ValueError, match="secret"):
+        brain_remember([v], text, "note")
+    assert v.write("fact", text).status == "refused"
+    assert not (tmp_path / "facts.md").exists()
+
+
+def test_ordinary_sentences_about_passwords_are_still_saved(tmp_path: Path) -> None:
+    from brain_core.stores.vault import refuses_write
+
+    assert [t for t in STILL_SAVED if refuses_write(t)] == []
+    v = VaultStore(tmp_path)
+    for text in STILL_SAVED:
+        assert brain_remember([v], text, "note")["status"] in ("written", "duplicate"), text

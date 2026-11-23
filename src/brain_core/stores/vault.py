@@ -152,6 +152,27 @@ def has_secret(text: str) -> bool:
     return bool(_SECRET.search(text))
 
 
+# Write side only: a password after its label with no quotes round it. Masking stays with
+# _SECRET: this would also change ordinary text that is read back, while at a write a false
+# match costs one refused save (audit 2026-11-23). The value: 8+ characters holding a letter and
+# a digit or a symbol other than . _ -, never a path or URL (a /), a placeholder ($ % { < [ (),
+# an env var name in capitals, or 1Password. The label may follow _ or a capital (DB_PASSWORD,
+# PGPASSWORD), never a small letter or a digit (bypass, 1Password); label and value share a line
+_PASSWORD_WRITE = re.compile(
+    r"(?<![a-z0-9])(?i:pass(?:word|wd|phrase|code)|pwd)s?(?![A-Za-z0-9_])"
+    r"[\"'`*]*(?:[ \t]+(?i:is|was)(?:[ \t]+(?i:now))?[ \t]*:?|[ \t]*[:=])[ \t*\"'`]*"
+    r"(?![$%{<\[(])(?![A-Z0-9_]+(?![^\s\"'`,;]))(?!1Password\b)"
+    r"(?=[^\s\"'`,;]*[A-Za-z])(?=[^\s\"'`,;]*[0-9!@#$%^&*?~+=])(?![^\s\"'`,;]*/)"
+    r"[^\s\"'`,;]{8,}"
+)
+
+
+def refuses_write(text: str) -> bool:
+    """True when a write must refuse ``text``: a credential the mask knows, or a password
+    after its label with no quotes round it (write side only, see ``_PASSWORD_WRITE``)."""
+    return bool(_SECRET.search(text) or _PASSWORD_WRITE.search(text))
+
+
 def redact(text: str) -> str:
     """``text`` with every credential-shaped run replaced, for indexing and for replies.
     A label stays, so "the staging password" still finds the line that held one."""
@@ -520,7 +541,7 @@ class VaultStore:
     def _write(
         self, kind: Kind, text: str, *, domain: str = "", when: date | None = None, **extra: str
     ) -> WriteResult:
-        if _SECRET.search(text):
+        if refuses_write(text):
             return WriteResult(self.name, "", "refused", "text looks like it contains a secret")
         # new input must be valid text: `_save` passes a lone surrogate through as a raw byte,
         # which is meant only for a stray byte the file already had

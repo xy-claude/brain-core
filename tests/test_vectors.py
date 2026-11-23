@@ -50,7 +50,7 @@ def test_fill_then_nothing_pending_and_a_changed_file_is_embedded_again(tmp_path
         v = _index(agent)
         assert len(v.pending()) == 4
         assert v.fill() == 4 and v.pending() == [] and v.fill() == 0
-        assert v.stats() == {"model": "fake", "rows": 4, "pending": 0, "worker": "up"}
+        assert v.stats() == {"model": "fake", "rows": 4, "pending": 0, "records": 4, "worker": "up"}
         facts = tmp_path / "vault" / "facts.md"
         facts.write_text(
             facts.read_text().replace(
@@ -327,3 +327,32 @@ def test_a_day_in_the_question_adds_that_days_records(tmp_path: Path) -> None:
         # no day asked: no date net, and nothing is removed either way
         plain = brain_recall(agent.stores, "coffee machine", fmt="detailed", vectors=v)
         assert "date" not in plain["stores"] and len(plain["results"]) == 4
+
+
+def test_status_says_when_too_few_records_have_a_vector(tmp_path: Path) -> None:
+    """17% of records with a vector read as OK (audit 2026-11-23, F3): a recall embeds only a
+    few at a time, so a large backlog drains slowly while health said nothing."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    lines = "".join(f"- Topic {i} note number {i} about item {i} (2026-05-01)\n" for i in range(40))
+    (vault / "facts.md").write_text("# Facts\n\n## system\n" + lines)
+    (tmp_path / "brain.yaml").write_text(
+        "name: T\nstores:\n  vault: ./vault\n  vectors: {model: fake}\n"
+    )
+
+    def said(agent: Agent) -> list[str]:
+        return [a for a in agent.brain_status().get("attention", []) if "no vector" in a]
+
+    with Agent.from_config(tmp_path / "brain.yaml") as agent:
+        v = _index(agent)
+        v.fill(limit=7)
+        st = v.stats()
+        n, waiting = st["records"], st["pending"]
+        covered = 100 * (n - waiting) // n
+        assert n == 40 and waiting == 33 and covered == 17
+        assert said(agent) and f"{waiting} of {n} records have no vector" in said(agent)[0]
+        assert f"{covered}% covered" in said(agent)[0] and "brain index" in said(agent)[0]
+        v.fill(limit=17)  # 16 wait: the next recall embeds them, nothing to say
+        assert v.stats()["pending"] == 16 and said(agent) == []
+        v.fill()
+        assert v.stats()["pending"] == 0 and said(agent) == []

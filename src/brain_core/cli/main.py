@@ -15,7 +15,7 @@ from brain_core.agent import Agent
 from brain_core.cli.init import init_agent
 from brain_core.embed import EmbedUnavailable
 from brain_core.journal import Journal
-from brain_core.status import unmasked
+from brain_core.status import backups_unmasked, unmasked
 from brain_core.stores.vault import VaultStore, redact
 
 if (
@@ -921,6 +921,7 @@ def doctor_cmd(
         typer.echo(f"Agent: {agent.name}  config: {agent.config_path}")
         st = agent.brain_status()
         old = unmasked(agent, remask=remask)
+        kept = backups_unmasked(agent)
     for name, s in st["stores"].items():
         typer.echo(f"  store {name:9} {'OK  ' if s['ok'] else 'DOWN'} {s['detail'][:70]}")
     k = st.get("knowledge", {})
@@ -961,6 +962,13 @@ def doctor_cmd(
     else:
         fix = ": `brain doctor --remask` rewrites them in brain.db" if any(old.values()) else ""
         typer.echo(f"  unmasked   {found} hold text the mask would hide today{fix}")
+    if held := [(name, n) for name, n in kept if n != 0]:
+        typer.echo(
+            f"  backups    {len(held)} of {len(kept)} brain.db backup(s) in data/backups hold "
+            f"{sum(n or 0 for _name, n in held)} row(s) the mask would hide today: "
+            + ", ".join(f"{name} ({'unreadable' if n is None else n})" for name, n in held)
+            + ". `--remask` never edits a backup: delete one once no rollback needs it"
+        )
     if st.get("models"):
         typer.echo("  models     " + " · ".join(f"{n} {s}" for n, s in st["models"].items()))
     if st.get("update"):
